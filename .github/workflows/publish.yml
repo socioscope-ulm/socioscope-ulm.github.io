@@ -1,5 +1,5 @@
 name: Publish Socioscope ULM (automatic)
-# Publish Familles metiers under Emploi et effectifs with unchanged calculations.
+# Publish removal of the duplicate M3E averages panel in Familles metiers.
 
 on:
   workflow_dispatch:
