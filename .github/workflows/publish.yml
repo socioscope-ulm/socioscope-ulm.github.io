@@ -1,5 +1,5 @@
 name: Publish Socioscope ULM (automatic)
-# Publish removal of the duplicate M3E averages panel in Familles metiers.
+# Publish top-level payroll and adjacent GF/NR analysis navigation.
 
 on:
   workflow_dispatch:
