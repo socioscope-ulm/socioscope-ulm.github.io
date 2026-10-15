@@ -1,4 +1,5 @@
 name: Publish Socioscope ULM (automatic)
+# Rebuild to publish the centralized document import interface.
 
 on:
   workflow_dispatch:
