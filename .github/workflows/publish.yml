@@ -1,5 +1,5 @@
 name: Publish Socioscope ULM (automatic)
-# Publish shared source selection for payroll and individual agents.
+# Publish seniority calculation repair for selected historical snapshots.
 
 on:
   workflow_dispatch:
