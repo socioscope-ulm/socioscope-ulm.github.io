@@ -1,5 +1,5 @@
 name: Publish Socioscope ULM (automatic)
-# Rebuild to publish the centralized document import interface.
+# Rebuild to synchronize all analyses after validated document imports.
 
 on:
   workflow_dispatch:
