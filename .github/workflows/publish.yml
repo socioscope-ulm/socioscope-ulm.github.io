@@ -1,5 +1,5 @@
 name: Publish Socioscope ULM (automatic)
-# Publish corrected sidebar spacing and admin-only import navigation.
+# Publish compact multi-select for families employment trends.
 
 on:
   workflow_dispatch:
