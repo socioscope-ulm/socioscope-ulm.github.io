@@ -32,23 +32,24 @@ jobs:
         run: |
           sed -i "s@base:'/socioscope-ulm/'@base:'/'@" scripts/build.mjs
           sed -i "s@/functions/v1/socioscope-api'@/functions/v1/socioscope-bridge'@" src/session.ts
-          # Keep the top green account toolbar accessible from left to right.
+          # Align account toolbar actions on the far right on all screen sizes.
           cat >> src/auth.css <<'CSS'
 
           .account-bar {
-            justify-content: flex-start;
+            justify-content: flex-end;
             flex-wrap: wrap;
             height: auto;
             min-height: 44px;
           }
           .account-bar > div {
-            justify-content: flex-start;
+            margin-left: auto;
+            justify-content: flex-end;
             flex-wrap: wrap;
             max-width: 100%;
           }
           .account-bar button {
             white-space: normal;
-            text-align: left;
+            text-align: center;
           }
           CSS
           npm install --no-audit --no-fund
