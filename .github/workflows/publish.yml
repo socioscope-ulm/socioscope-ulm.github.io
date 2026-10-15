@@ -1,7 +1,11 @@
-name: Publish Socioscope ULM (manual)
+name: Publish Socioscope ULM (automatic)
 
 on:
   workflow_dispatch:
+  schedule:
+    - cron: '*/15 * * * *'
+  push:
+    branches: [main]
 
 permissions:
   contents: read
