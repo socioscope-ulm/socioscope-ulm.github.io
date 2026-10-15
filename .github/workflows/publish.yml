@@ -1,5 +1,5 @@
 name: Publish Socioscope ULM (automatic)
-# Publish centralized admin-only file imports and preserve linked analyses.
+# Publish corrected sidebar spacing and admin-only import navigation.
 
 on:
   workflow_dispatch:
