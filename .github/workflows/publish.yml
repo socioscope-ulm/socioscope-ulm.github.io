@@ -1,5 +1,5 @@
 name: Publish Socioscope ULM (automatic)
-# Publish compact multi-select for families employment trends.
+# Publish shared source selection for payroll and individual agents.
 
 on:
   workflow_dispatch:
