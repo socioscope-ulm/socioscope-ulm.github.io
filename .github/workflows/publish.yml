@@ -1,5 +1,5 @@
 name: Publish Socioscope ULM (automatic)
-# Publish top-level payroll and adjacent GF/NR analysis navigation.
+# Publish centralized admin-only file imports and preserve linked analyses.
 
 on:
   workflow_dispatch:
