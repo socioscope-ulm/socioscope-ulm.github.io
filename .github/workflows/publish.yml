@@ -1,4 +1,5 @@
 name: Publish Socioscope ULM (automatic)
+# Deploy historical seniority fallback and explicit payroll calculation exclusions.
 # Publish seniority calculation repair for selected historical snapshots.
 
 on:
