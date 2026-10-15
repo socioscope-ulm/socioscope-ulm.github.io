@@ -1,5 +1,5 @@
 name: Publish Socioscope ULM (automatic)
-# Rebuild to synchronize all analyses after validated document imports.
+# Publish Familles metiers under Emploi et effectifs with unchanged calculations.
 
 on:
   workflow_dispatch:
