@@ -1,4 +1,4 @@
-name: Deploy nouveau Socioscope ULM
+name: Deploy nouveau Socioscope ULM - mise a jour GF NR et ecart
 on:
   push:
     branches: [main]
