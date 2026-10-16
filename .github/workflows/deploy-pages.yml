@@ -1,4 +1,4 @@
-name: Deploy Socioscope ULM - recherche tarifs horaires et bandeau
+name: Deploy Socioscope ULM - variations chiffres 2025
 on:
   push:
     branches: [main]
