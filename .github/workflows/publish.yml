@@ -1,6 +1,6 @@
 name: Publish Socioscope ULM (automatic)
-# Publish matching individual career calculation with selected snapshot.
-# Publish seniority calculation repair for selected historical snapshots.
+# Publish the combined remuneration, INSEE and SNB comparison.
+# Source release: 10eecdb549d6605d1a02befdf660084c6d0d919d
 
 on:
   workflow_dispatch:
