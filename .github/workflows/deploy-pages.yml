@@ -1,4 +1,4 @@
-name: Deploy Socioscope ULM - tarifs horaires
+name: Deploy Socioscope ULM - recherche tarifs horaires et bandeau
 on:
   push:
     branches: [main]
