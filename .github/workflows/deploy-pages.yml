@@ -1,4 +1,4 @@
-name: Deploy nouveau Socioscope ULM - mise a jour GF NR et ecart
+name: Deploy Socioscope ULM - tarifs horaires
 on:
   push:
     branches: [main]
