@@ -1,4 +1,4 @@
-name: Deploy Socioscope ULM - variations chiffres 2025
+name: Deploy Socioscope ULM - variations fiabilisees
 on:
   push:
     branches: [main]
