@@ -29,7 +29,8 @@ jobs:
       - run: npm install --no-audit --no-fund
       - name: Build pour la racine du nouveau domaine
         run: |
-          node -e "const fs=require('fs'); const p='scripts/build.mjs'; let s=fs.readFileSync(p,'utf8'); if(!s.includes("base:'/socioscope-ulm/'")) throw Error('Base inattendue'); fs.writeFileSync(p,s.replace("base:'/socioscope-ulm/'","base:'/'"));"
+          sed -i "s|base:'/socioscope-ulm/'|base:'/'|" scripts/build.mjs
+          grep -q "base:'/'" scripts/build.mjs
           npm run build
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
