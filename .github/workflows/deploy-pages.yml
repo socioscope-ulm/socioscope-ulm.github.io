@@ -1,4 +1,4 @@
-name: Deploy Socioscope ULM - variations annuelles
+name: Deploy Socioscope ULM - optimisation GF NR
 on:
   push:
     branches: [main]
