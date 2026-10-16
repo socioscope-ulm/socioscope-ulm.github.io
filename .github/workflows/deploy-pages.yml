@@ -1,4 +1,4 @@
-name: Deploy Socioscope ULM - variations fiabilisees
+name: Deploy Socioscope ULM - variations annuelles
 on:
   push:
     branches: [main]
