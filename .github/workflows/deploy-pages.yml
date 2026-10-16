@@ -2,9 +2,9 @@ name: Deploy nouveau Socioscope ULM
 on:
   push:
     branches: [main]
-    paths:
-      - '.github/workflows/deploy-pages.yml'
   workflow_dispatch:
+  schedule:
+    - cron: '17 * * * *'
 permissions:
   contents: read
   pages: write
