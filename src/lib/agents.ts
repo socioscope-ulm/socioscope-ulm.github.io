@@ -4,6 +4,18 @@ export type AgentRecord={rupCareer?:RupCareer;id:string;agentId:string;nni?:stri
 export type AgentEvent={agentId:string;date:string;kind:string;motif:string;nrRaw?:string;gf?:number;legacyNR?:boolean;numberNR?:number;contextNR?:number;duration?:number;end?:string;openEnd?:boolean;evidence:{source:string;sheet:string;row:number;column?:number}[]};
 export type AgentData={rup?:RupData;sources:AgentSource[];records:AgentRecord[];events:AgentEvent[];issues:any[];updated:string};
 export const normalName=(v:unknown)=>String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().replace(/[^A-Z0-9]+/g,' ').trim();
+// Never infer an agent's sex from their name or identifier. If source rows
+// do not explicitly provide it, filtered statistics must remain unavailable.
+export function normalizeAgentSex(value:unknown):'hommes'|'femmes'|null{
+ const text=normalName(value);
+ if(['H','HOMME','HOMMES','M','MASCULIN','MASCULINS','MALE'].includes(text))return 'hommes';
+ if(['F','FEMME','FEMMES','FEMININ','FEMININS','FEMALE'].includes(text))return 'femmes';
+ return null;
+}
+export function matchesAgentCohort(agent:Pick<AgentRecord,'college'|'sex'>,college='',sex=''):boolean{
+ return (!college||agent.college===college)&&
+  (!['hommes','femmes'].includes(sex)||normalizeAgentSex(agent.sex)===sex);
+}
 export const normalizeNNI=(v:unknown)=>{const t=String(v||'').toUpperCase().replace(/[^A-Z0-9]/g,'');const m=t.match(/^([A-Z]\d{5})([A-Z0-9]{2})?$/);return m?.[1]||null;};
 export function careerSeniority(records:AgentRecord[],sources:AgentSource[],asof:string,selectedSourceId?:string){
  const utc=(date:string)=>new Date(date+'T00:00:00Z');
