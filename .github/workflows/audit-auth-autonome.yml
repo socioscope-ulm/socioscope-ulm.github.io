@@ -44,6 +44,26 @@ jobs:
             templates:templateRefs
           };
           console.log(JSON.stringify(result,null,2));
-          if(!newSiteAllowed)throw Error('Nouvelle adresse absente de la liste des redirections Auth : NE PAS RETIRER LES ANCIENS LIENS.');
+          if(!newSiteDefault||oldDefault)throw Error('La nouvelle adresse doit etre le Site URL principal de Supabase Auth.');
+          if(!newSiteAllowed)throw Error('Nouvelle adresse absente de la liste des redirections Auth.');
+          if(c.external_email_enabled!==true)throw Error('Authentification par email desactivee !');
+          if(c.disable_signup===true)throw Error('Premieres connexions bloquees !');
+          const base='https://socioscope-ulm.github.io/';
+          const page=await fetch(base,{signal:AbortSignal.timeout(20000)});
+          if(page.status!==200||!(await page.text()).includes('id="root"'))throw Error('Nouveau Socioscope non disponible');
+          const legacy=await fetch('https://fnme-pointage.github.io/socioscope-ulm/',{signal:AbortSignal.timeout(20000)});
+          if(legacy.status!==200)throw Error('Redirection historique indisponible');
+          const html=await legacy.text();
+          if(!html.includes('window.location.replace(destination.href)')||!html.includes('destination.hash = window.location.hash'))throw Error('Transfert des anciens liens de recuperation non garanti');
+          const api='https://ovssjbldmsowzojeftyr.supabase.co/functions/v1/socioscope-api';
+          const call=(path,origin)=>fetch(api+path,{headers:{Origin:origin},signal:AbortSignal.timeout(20000)});
+          const newSession=await call('/api/session','https://socioscope-ulm.github.io');
+          if(newSession.status!==401||newSession.headers.get('access-control-allow-origin')!=='https://socioscope-ulm.github.io')throw Error('Controle de session nouvelle adresse invalide');
+          const oldSession=await call('/api/session','https://fnme-pointage.github.io');
+          if(oldSession.status!==403)throw Error('Ancienne origine toujours autorisee sur API');
+          const unauthMembers=await call('/api/members','https://socioscope-ulm.github.io');
+          if(unauthMembers.status!==401)throw Error('Acces membres insuffisamment protege');
+          const unauthLink=await call('/api/members/link','https://socioscope-ulm.github.io');
+          if(unauthLink.status!==401)throw Error('Liens activation insuffisamment proteges');
           console.log('Nouvelle adresse autorisee pour les invitations et recuperations.');
           NODE
