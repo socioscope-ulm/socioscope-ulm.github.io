@@ -1,4 +1,5 @@
 import {createAccountLink} from './invite';
+import {parseDeploymentVersion} from './version';
 import * as route0 from '../src/app/api/agents/[id]/route';
 import * as route1 from '../src/app/api/agents/decision/route';
 import * as route2 from '../src/app/api/agents/files/[id]/route';
@@ -22,7 +23,7 @@ const CLIENT_ORIGIN='https://socioscope-ulm.github.io';
 const ALLOWED_ORIGINS=new Set([CLIENT_ORIGIN,'https://fnme-pointage.github.io']);
 // Supabase documents DENO_DEPLOYMENT_ID as: project_ref_function_id_version.
 // Read the deployed version at runtime rather than keeping a hard-coded number.
-const currentServerVersion=()=>{const match=Deno.env.get('DENO_DEPLOYMENT_ID')?.match(/_(\d+)$/);return match?Number(match[1]):null;};
+const currentServerVersion=()=>parseDeploymentVersion(Deno.env.get('DENO_DEPLOYMENT_ID'));
 const routes:any[]=[[new RegExp('^/api/agents/decision$'),route1],[new RegExp('^/api/agents/import$'),route4],[new RegExp('^/api/payroll/import$'),route11],[new RegExp('^/api/agents$'),route5],[new RegExp('^/api/data$'),route6],[new RegExp('^/api/import$'),route8],[new RegExp('^/api/payroll$'),route12],[new RegExp('^/api/rows$'),route14],[new RegExp('^/api/rup$'),route15],[new RegExp('^/api/agents/files/([^/]+)$'),route2],[new RegExp('^/api/agents/import/([^/]+)$'),route3],[new RegExp('^/api/payroll/files/([^/]+)$'),route9],[new RegExp('^/api/payroll/import/([^/]+)$'),route10],[new RegExp('^/api/agents/([^/]+)$'),route0],[new RegExp('^/api/files/([^/]+)$'),route7],[new RegExp('^/api/review/([^/]+)$'),route13]];
 const json=(body:any,status=200)=>Response.json(body,{status});
 export async function handler(req:Request){
