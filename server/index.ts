@@ -17,8 +17,9 @@ import * as route14 from '../src/app/api/rows/route';
 import * as route15 from '../src/app/api/rup/route';
 import {db,bucket,projectURL,serviceKey} from './storage';
 import {loadSeeds} from './seeds';import {initializeBase} from '../src/lib/store';
-const CLIENT_ORIGIN='https://fnme-pointage.github.io';
-const ALLOWED_ORIGINS=new Set([CLIENT_ORIGIN,'https://socioscope-ulm.github.io']);
+const CLIENT_ORIGIN='https://socioscope-ulm.github.io';
+// Accept the legacy address during the overlap, without contacting its website.
+const ALLOWED_ORIGINS=new Set([CLIENT_ORIGIN,'https://fnme-pointage.github.io']);
 const routes:any[]=[[new RegExp('^/api/agents/decision$'),route1],[new RegExp('^/api/agents/import$'),route4],[new RegExp('^/api/payroll/import$'),route11],[new RegExp('^/api/agents$'),route5],[new RegExp('^/api/data$'),route6],[new RegExp('^/api/import$'),route8],[new RegExp('^/api/payroll$'),route12],[new RegExp('^/api/rows$'),route14],[new RegExp('^/api/rup$'),route15],[new RegExp('^/api/agents/files/([^/]+)$'),route2],[new RegExp('^/api/agents/import/([^/]+)$'),route3],[new RegExp('^/api/payroll/files/([^/]+)$'),route9],[new RegExp('^/api/payroll/import/([^/]+)$'),route10],[new RegExp('^/api/agents/([^/]+)$'),route0],[new RegExp('^/api/files/([^/]+)$'),route7],[new RegExp('^/api/review/([^/]+)$'),route13]];
 const json=(body:any,status=200)=>Response.json(body,{status});
 export async function handler(req:Request){
