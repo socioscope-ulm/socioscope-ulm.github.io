@@ -70,3 +70,12 @@ Les trois fichiers de barèmes intégrés dans l'actuel serveur déployé ne son
 - Les années 2021, 2024 et 2025 sont déjà présentes dans la fonction `socioscope-api` en production : les récupérer telles quelles pour reconstruire l'historique et comparer les résultats, sans extrapoler à partir des années voisines.
 - Vérifier une recette de non-régression à majoration identique : couples (NR, échelon, agence/filtre) sur plusieurs années, et conserver les paramètres de calcul des taux horaires, primes RPC/RPEM et exclusions actuelles.
 - Pas de changement de règles de majoration en production lors de la migration des références : seuls les fichiers source et l'autonomie du déploiement sont concernés.
+
+## Réalisation contrôlée du 21 octobre 2026 — récupération et sauvegarde
+- Copie de précaution des sept tables métier dans le schéma privé `socioscope_backup`, sous noms suffixés `_20261021`. Vérification : 1 238 décisions, 5 comptes membres.
+- Inventaire daté des 29 objets du bucket `socioscope-private` dans `socioscope_backup.storage_inventory_20261021` ; inventaire de 5 comptes Supabase Auth dans `socioscope_backup.auth_inventory_20261021`. **Ce sont des inventaires, pas des copies des objets ni une sauvegarde complète d'Auth.**
+- Récupération exacte des trois jeux de références à partir du code déployé de la fonction `socioscope-api` version 20, préservée dans la table privée `socioscope_backup.salary_reference_recovery_20261021` : `salary-grid-2026.json` (3 majorations), `annual-bonuses-2025.json` (18 GF), `historical-salary-grids.json` (15 grilles). Ne jamais pousser ces contenus dans le dépôt public.
+- Redirection des invitations et récupérations corrigée vers `https://socioscope-ulm.github.io/` **uniquement dans la branche de préparation**.
+- **BLOQUANT** : les sauvegardes de tables résident sur le même projet Supabase que la production. Effectuer aussi un export PostgreSQL externe, une copie réelle des 29 fichiers privés et une vérification de restauration avant toute bascule.
+- **BLOQUANT** : la procédure de déploiement indépendante a encore besoin d'un canal sécurisé de provisionnement des références et d'un accès `SUPABASE_ACCESS_TOKEN` configuré dans les secrets du nouveau dépôt ; aucune publication du serveur depuis le nouveau dépôt n'a été validée.
+- Garder `main` et les deux adresses inchangées jusqu'aux tests fonctionnels authentifiés, et ne supprimer ni l'ancien site ni son dépôt.
