@@ -1,0 +1,41 @@
+name: Socioscope production smoke checks
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/smoke-production.yml'
+      - 'src/**'
+      - 'server/**'
+      - '.github/workflows/deploy-supabase.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check public site and API protection without credentials
+        run: |
+          node --input-type=module <<'NODE'
+          const origin='https://socioscope-ulm.github.io';
+          const old='https://fnme-pointage.github.io';
+          const api='https://ovssjbldmsowzojeftyr.supabase.co/functions/v1/socioscope-api';
+          async function call(url,options={}) {
+            const response=await fetch(url,{...options,signal:AbortSignal.timeout(18000)});
+            return response;
+          }
+          const page=await call(origin+'/');
+          if(page.status!==200)throw Error('Nouvelle adresse inaccessible: '+page.status);
+          const html=await page.text();
+          if(!html.includes('id="root"'))throw Error('Interface HTML attendue absente');
+          for(const allowed of [origin,old]){
+            const preflight=await call(api+'/api/agents',{method:'OPTIONS',headers:{Origin:allowed,'Access-Control-Request-Method':'POST'}});
+            if(preflight.status!==204)throw Error('CORS preflight incorrect: '+allowed+' '+preflight.status);
+            if(preflight.headers.get('access-control-allow-origin')!==allowed)throw Error('CORS non conforme '+allowed);
+            const noauth=await call(api+'/api/session',{headers:{Origin:allowed}});
+            if(noauth.status!==401)throw Error('Route session sans identifiants devrait retourner 401, reçu '+noauth.status);
+          }
+          const rejected=await call(api+'/api/session',{headers:{Origin:'https://example.org'}});
+          if(rejected.status!==403)throw Error('Origine inconnue devrait etre rejetee, reçu '+rejected.status);
+          console.log('Smoke OK: Pages root, both allowed origins, 401 auth gate, 403 unknown origin');
+          NODE
