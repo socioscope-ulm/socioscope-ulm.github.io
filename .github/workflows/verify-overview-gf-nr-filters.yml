@@ -1,0 +1,34 @@
+name: Verify overview GF NR cohort filters
+on:
+  push:
+    branches: [correctif-moyennes-gf-nr-filtres-20261021]
+    paths:
+      - '.github/workflows/verify-overview-gf-nr-filters.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Test GF NR cohorts, imports and other regression tests
+        run: node --experimental-strip-types --test tests/*.test.ts
+      - name: Build autonomous production and test frontends
+        run: |
+          npm run build
+          test -s docs/index.html
+          test -s docs/test/index.html
+      - name: Package Supabase API from autonomous sources
+        run: sh .github/scripts/package-autonomous-api.sh
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Check standalone API imports
+        working-directory: supabase/functions/socioscope-api
+        run: deno check --config deno.json index.ts
