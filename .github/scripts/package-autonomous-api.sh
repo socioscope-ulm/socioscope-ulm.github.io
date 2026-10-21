@@ -11,6 +11,7 @@ cp -R src "$destination/src"
 printf "import './server/index.ts';\n" > "$destination/index.ts"
 cat > "$destination/deno.json" <<'JSON'
 {
+  "nodeModulesDir": "auto",
   "imports": {
     "xlsx": "npm:xlsx@0.18.5",
     "pdfjs-dist": "npm:pdfjs-dist@5.4.624",
