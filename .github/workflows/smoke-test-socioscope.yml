@@ -1,0 +1,31 @@
+name: Verify published Socioscope TEST page
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/smoke-test-socioscope.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify TEST URL without signing in
+        run: |
+          node --input-type=module <<'NODE'
+          for(const [path,label,phrase] of [['/','Production','Socioscope'],['/test/','Test','Socioscope ULM TEST']]){
+            const url='https://socioscope-ulm.github.io'+path;
+            const r=await fetch(url,{headers:{'Cache-Control':'no-cache'},signal:AbortSignal.timeout(20000)});
+            if(r.status!==200)throw Error(label+' URL returned '+r.status);
+            const html=await r.text();
+            if(!html.includes('id="root"')||!html.includes(phrase))throw Error(label+' HTML not expected: '+html.slice(0,150));
+            const entry=[...html.matchAll(/<script[^>]+src="([^"]+)"/g)].map(m=>m[1]);
+            if(!entry.length)throw Error(label+' app JavaScript is missing');
+            for(const src of entry){
+              const js=await fetch(new URL(src,url),{signal:AbortSignal.timeout(20000)});
+              if(js.status!==200)throw Error(label+' JS asset returned '+js.status+': '+src);
+            }
+            console.log(label+' address verified: '+url);
+          }
+          NODE
