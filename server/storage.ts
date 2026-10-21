@@ -4,8 +4,8 @@ export const serviceKey=Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')||Object.values
 export const projectURL=Deno.env.get('SUPABASE_URL')!;
 function statement(sqlText:string,values:any[]=[],client:any=sql){
  let index=0;const query=sqlText.replace(/\?/g,()=>'$'+(++index));
- const run=async()=>{const result=await client.unsafe(query,values);return {results:Array.from(result),meta:{changes:result.count||0}};};
- return {sqlText,values,bind:(...args:any[])=>statement(sqlText,args,client),all:run,first:async<T>()=>((await run()).results[0]??null) as T|null,run};
+ const run=async<T=any>()=>{const result=await client.unsafe(query,values);return {results:Array.from(result) as T[],meta:{changes:result.count||0}};};
+ return {sqlText,values,bind:(...args:any[])=>statement(sqlText,args,client),all:<T=any>()=>run<T>(),first:async<T=any>():Promise<T|null>=>((await run<T>()).results[0]??null),run};
 }
 export const db={prepare:(s:string)=>statement(s),batch:async(items:any[])=>await sql.begin(async tx=>{const results=[];for(const item of items)results.push(await statement(item.sqlText,item.values,tx).run());return results;})};
 export async function storageFetch(key:string,init?:RequestInit){return await fetch(projectURL+'/storage/v1/object/socioscope-private/'+key.split('/').map(encodeURIComponent).join('/'),{...init,headers:{apikey:serviceKey,authorization:'Bearer '+serviceKey,...init?.headers}});}
