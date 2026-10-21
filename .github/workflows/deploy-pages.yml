@@ -1,4 +1,4 @@
-name: Deploy Socioscope ULM - export CSV absences
+name: Deploy Socioscope ULM - correction globale 546
 on:
   push:
     branches: [main]
