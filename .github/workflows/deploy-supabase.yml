@@ -8,20 +8,26 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Verify no private reference files are needed for compiling
+      - name: Verify source is independent from the historical repository
         run: |
           if grep -R -n 'private-data/references/' server src; then
-            echo "::error::Source still requires files from the historical repository"
+            echo "::error::Historical private references still imported"
             exit 1
           fi
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install pinned application dependencies
+        run: npm install --no-audit --no-fund
+      - name: Build standalone Supabase server package
+        run: |
+          node scripts/build-server.mjs
+          test -s server-dist/index.ts
+          mkdir -p supabase/functions/socioscope-api
+          cp server-dist/index.ts supabase/functions/socioscope-api/index.ts
       - uses: supabase/setup-cli@v1
         with:
           version: latest
-      - name: Prepare API from this repository only
-        run: |
-          mkdir -p supabase/functions/socioscope-api
-          printf "import '../../../server/index.ts';\n" > supabase/functions/socioscope-api/index.ts
-          python3 .github/scripts/prepare-edge.py
       - name: Deploy Socioscope API
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
