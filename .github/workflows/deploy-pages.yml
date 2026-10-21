@@ -1,4 +1,4 @@
-name: Deploy Socioscope ULM - absences confirmees
+name: Deploy Socioscope ULM - registre dirigeants
 on:
   push:
     branches: [main]
