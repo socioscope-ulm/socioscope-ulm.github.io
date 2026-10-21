@@ -19,8 +19,9 @@ import * as route15 from '../src/app/api/rup/route';
 import {db,bucket,projectURL,serviceKey} from './storage';
 import {loadSeeds} from './seeds';import {initializeBase} from '../src/lib/store';
 const CLIENT_ORIGIN='https://socioscope-ulm.github.io';
-// Accept the legacy address during the overlap, without contacting its website.
-const ALLOWED_ORIGINS=new Set([CLIENT_ORIGIN,'https://fnme-pointage.github.io']);
+// All authenticated app operations now originate from the autonomous site only.
+// The historical Pages site continues to redirect old email links to this origin.
+const ALLOWED_ORIGINS=new Set([CLIENT_ORIGIN]);
 // Supabase documents DENO_DEPLOYMENT_ID as: project_ref_function_id_version.
 // Read the deployed version at runtime rather than keeping a hard-coded number.
 const currentServerVersion=()=>parseDeploymentVersion(Deno.env.get('DENO_DEPLOYMENT_ID'));

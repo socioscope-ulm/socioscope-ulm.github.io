@@ -28,14 +28,16 @@ jobs:
           if(page.status!==200)throw Error('Nouvelle adresse inaccessible: '+page.status);
           const html=await page.text();
           if(!html.includes('id="root"'))throw Error('Interface HTML attendue absente');
-          for(const allowed of [origin,old]){
-            const preflight=await call(api+'/api/agents',{method:'OPTIONS',headers:{Origin:allowed,'Access-Control-Request-Method':'POST'}});
-            if(preflight.status!==204)throw Error('CORS preflight incorrect: '+allowed+' '+preflight.status);
-            if(preflight.headers.get('access-control-allow-origin')!==allowed)throw Error('CORS non conforme '+allowed);
-            const noauth=await call(api+'/api/session',{headers:{Origin:allowed}});
-            if(noauth.status!==401)throw Error('Route session sans identifiants devrait retourner 401, reçu '+noauth.status);
-          }
+          const preflight=await call(api+'/api/agents',{method:'OPTIONS',headers:{Origin:origin,'Access-Control-Request-Method':'POST'}});
+          if(preflight.status!==204)throw Error('New origin preflight incorrect: '+preflight.status);
+          if(preflight.headers.get('access-control-allow-origin')!==origin)throw Error('New CORS origin incorrect');
+          const noauth=await call(api+'/api/session',{headers:{Origin:origin}});
+          if(noauth.status!==401)throw Error('Session without authentication should return 401, received '+noauth.status);
+          const oldSession=await call(api+'/api/session',{headers:{Origin:old}});
+          if(![401,403].includes(oldSession.status))throw Error('Unexpected transitional old origin status '+oldSession.status);
+          if(oldSession.status===401&&oldSession.headers.get('access-control-allow-origin')!==old)throw Error('Old origin CORS incorrect before retirement');
+          if(oldSession.status===403&&oldSession.headers.get('access-control-allow-origin')===old)throw Error('Old origin CORS unexpectedly allowed after retirement');
           const rejected=await call(api+'/api/session',{headers:{Origin:'https://example.org'}});
           if(rejected.status!==403)throw Error('Origine inconnue devrait etre rejetee, reçu '+rejected.status);
-          console.log('Smoke OK: Pages root, both allowed origins, 401 auth gate, 403 unknown origin');
+          console.log('Smoke OK: Pages root, new allowed origin, legacy compatibility or retirement, 401 auth gate, 403 unknown origin');
           NODE
