@@ -1,0 +1,30 @@
+name: Verify isolated Socioscope TEST
+on:
+  push:
+    branches: [preparation-socioscope-test-20261021]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Build both app entrypoints
+        run: |
+          npm install --no-audit --no-fund
+          npm run build
+          test -s docs/index.html
+          test -s docs/test/index.html
+          grep -q 'Socioscope ULM TEST' docs/test/index.html
+      - name: Verify test imports cannot call production
+        run: |
+          if grep -E -n 'supabase.co|API_URL|apiFetch|/api/' src/test/main.tsx; then
+            echo "::error::Test application must have no production API routes"
+            exit 1
+          fi
+      - name: Run existing parser regression tests
+        run: node --experimental-strip-types --test tests/*.test.ts
