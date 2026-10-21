@@ -1,0 +1,30 @@
+name: One-time server publication for restored photograph decisions
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/dispatch-photographie-release-20261021.yml'
+permissions:
+  contents: read
+  actions: write
+jobs:
+  release:
+    if: github.event.head_commit.message == 'DECLENCHER_PUBLICATION_SERVEUR_PHOTOGRAPHIE_20261021'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger tested autonomous Supabase Edge Function deployment
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          status=$(curl -sS -o /dev/null -w '%{http_code}' -X POST \
+            -H 'Accept: application/vnd.github+json' \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H 'X-GitHub-Api-Version: 2022-11-28' \
+            "https://api.github.com/repos/$GH_REPO/actions/workflows/deploy-supabase.yml/dispatches" \
+            -d '{"ref":"main"}')
+          if [ "$status" != "204" ]; then
+            echo "::error::Failed to start manual API deployment (HTTP $status)"
+            exit 1
+          fi
+          echo "Requested deployment of the independent API for photograph classification; check downstream job."
