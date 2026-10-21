@@ -56,7 +56,8 @@ export async function handler(req:Request){
  await loadSeeds();initializeBase();
  for(const [pattern,route]of routes){const match=path.match(pattern);if(!match)continue;const fn=route[req.method];if(!fn)return finish(json({error:'Méthode non autorisée.'},405));
   const h=new Headers(req.headers);h.delete('oai-authenticated-user-id');h.delete('oai-authenticated-user-email');h.delete('x-socioscope-role');h.set('oai-authenticated-user-id',user.id);h.set('oai-authenticated-user-email',email);h.set('x-socioscope-role',member.role);
-  const internal=new Request(CLIENT_ORIGIN+path+u.search,{method:req.method,headers:h,...(!['GET','HEAD'].includes(req.method)?{body:await req.arrayBuffer()}:{})});
+  const trustedOrigin=origin&&ALLOWED_ORIGINS.has(origin)?origin:CLIENT_ORIGIN;
+  const internal=new Request(trustedOrigin+path+u.search,{method:req.method,headers:h,...(!['GET','HEAD'].includes(req.method)?{body:await req.arrayBuffer()}:{})});
   return finish(await fn(internal,{params:Promise.resolve({id:match[1]?decodeURIComponent(match[1]):''})}));
  }
  return finish(json({error:'Page introuvable.'},404));
