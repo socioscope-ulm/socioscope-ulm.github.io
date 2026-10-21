@@ -61,3 +61,12 @@ Le projet Supabase `Socioscope ULM` est en état `ACTIVE_HEALTHY` et identifié 
 
 ### Préparation du serveur encore bloquée
 Les trois fichiers de barèmes intégrés dans l'actuel serveur déployé ne sont pas disponibles dans le dépôt historique public, ni sous les objets de stockage nommés `references/` dans le bucket consulté. Les conserver hors Git est obligatoire, mais ils devront être restaurés depuis leur source fiable puis provisionnés en privé afin que la nouvelle organisation puisse reconstruire et déployer `socioscope-api` sans l'ancien dépôt. La recette devra confirmer les mêmes résultats numériques que la version en production, surtout pour rémunérations et coefficients.
+
+## Conservation des majorations et filtres — exigence obligatoire
+- Ne pas remplacer les règles existantes de `src/lib/agent-payroll.ts` (`agencyResidence`) ni les filtres de l'interface dans `src/app/agents.tsx`.
+- Affectation actuellement programmée : AMTC / AMT CENTRE / CENTRE -> `1.24`; AMTE / AMT EST / EST et AMTSO / AMT SUD-OUEST / SUD-OUEST -> `1.245`. Une agence non reconnue utilise `1.245` à titre **provisoire** et doit conserver ce signalement.
+- Le choix manuel de majoration du simulateur doit rester fonctionnel, en particulier `1.24`, `1.245` et `1.25` lorsque la grille propose la variante.
+- Les grilles 2020, 2022, 2023 et 2026 transmises contiennent les trois variantes `1.25`, `1.245`, `1.24`, avec les montants en centimes et par NR / échelon. Pour 2026, la grille SGE commence au NR 50 : ne pas créer artificiellement de NR 30 à 45.
+- Les années 2021, 2024 et 2025 sont déjà présentes dans la fonction `socioscope-api` en production : les récupérer telles quelles pour reconstruire l'historique et comparer les résultats, sans extrapoler à partir des années voisines.
+- Vérifier une recette de non-régression à majoration identique : couples (NR, échelon, agence/filtre) sur plusieurs années, et conserver les paramètres de calcul des taux horaires, primes RPC/RPEM et exclusions actuelles.
+- Pas de changement de règles de majoration en production lors de la migration des références : seuls les fichiers source et l'autonomie du déploiement sont concernés.
