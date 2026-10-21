@@ -1,4 +1,4 @@
-name: Deploy Socioscope ULM - tri et fiches dirigeants
+name: Deploy Socioscope ULM - refresh immediat
 on:
   push:
     branches: [main]
