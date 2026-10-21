@@ -24,3 +24,34 @@ La publication de la branche principale n'a pas été modifiée par cette opéra
 
 ## Retour arrière
 Revenir au commit GitHub Pages précédent sans modifier le projet Supabase.
+
+## Audit technique — 21 octobre 2026
+
+### Déjà préparé et vérifié
+- Copie autonome du code source dans cette branche du **nouveau** dépôt GitHub.
+- Compilation de l'interface depuis cette branche, sans checkout de l'ancien dépôt : **réussie** dans GitHub Actions.
+- Workflow de publication autonome préparé dans `.github/workflows/deploy-pages.yml`, inactif tant que la branche n'est pas fusionnée sur main.
+- Workflow de déploiement serveur indépendant préparé dans `.github/workflows/deploy-supabase.yml`, exclusivement manuel et explicitement bloqué en l'absence de références privées.
+- Origine de référence du futur serveur mise à `https://socioscope-ulm.github.io` ; l'ancien domaine reste temporairement autorisé pendant la cohabitation.
+- Suppression de l'ancien workflow concurrent de la branche main du nouveau dépôt : il reconstruisait toutes les 15 minutes depuis l'ancien dépôt et remplaçait l'API par `socioscope-bridge`. Un seul workflow de publication reste opérationnel en production.
+
+### Limitations à lever AVANT de rendre le dépôt historique supprimable
+- La fonction Supabase actuelle reste déployée à partir d'un ancien paquet construit à partir du dépôt historique. La nouvelle branche contient ses sources, mais les références `private-data/references/` nécessaires à un **nouveau** build backend ne figurent pas dans GitHub.
+- Stocker les références dans un support privé contrôlé (par exemple le bucket privé Supabase), ou les restaurer dans GitHub Actions depuis un système sécurisé ; ne jamais les ajouter au dépôt Git public.
+- Prévoir le secret de déploiement `SUPABASE_ACCESS_TOKEN` dans le nouveau dépôt, et un test du déploiement serveur complet avec sauvegarde/retour arrière.
+- Un build frontal réussi ne valide pas les connexions et écritures métier authentifiées ; réaliser une recette en conditions réelles avec un compte administrateur et un compte lecteur.
+- Ne pas modifier les URLs de redirection Supabase Auth sans vérifier les liens d'invitation et de récupération de compte.
+- Tant que la branche n'est pas fusionnée, `.github/workflows/deploy-pages.yml` sur main utilise encore l'ancien dépôt ; cette dépendance est conservée volontairement pour éviter une coupure.
+
+### Vérifications de non-régression des imports
+
+| Parcours | Stockage/traitement | À tester après bascule |
+|---|---|---|
+| Bilan social | `imports`, objets `imports/`, observations | Nouveau fichier, validation, rafraîchissement des tableaux et écarts annuels |
+| Fichier individuel | `agent_imports`, objets `agents/` | Nouvelle année, choix automatiquement du fichier précédent, mouvements et effectifs |
+| RUP | `agent_imports` et `agents/` | Mise à jour des dates, anciennetés et fiches individuelles |
+| Grilles et primes | `payroll_imports`, références validées | Actualisation des rémunérations, calculs horaires et comparatifs |
+| Décisions administrateur | `agent_decisions` | Départs, présences, rapprochements, corrections et cadres dirigeants manuels |
+| Exports | Données déjà validées | CSV des absents, exports des analyses et PDF |
+
+**Niveau de préparation :** copie du frontend et workflows autonome effectués ; sortie de dépendance backend et recette fonctionnelle encore requises. **Ne pas fusionner sur main.**
