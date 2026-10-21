@@ -1,4 +1,4 @@
-name: Deploy Socioscope ULM - derniere version
+name: Deploy Socioscope ULM - absences confirmees
 on:
   push:
     branches: [main]
