@@ -8,14 +8,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Stop if private reference provisioning is incomplete
+      - name: Verify no private reference files are needed for compiling
         run: |
-          for file in private-data/references/salary-grid-2026.json private-data/references/annual-bonuses-2025.json private-data/references/historical-salary-grids.json; do
-            if [ ! -s "$file" ]; then
-              echo "::error::Missing protected reference: $file. Configure secure provision before server deployment."
-              exit 1
-            fi
-          done
+          if grep -R -n 'private-data/references/' server src; then
+            echo "::error::Source still requires files from the historical repository"
+            exit 1
+          fi
       - uses: supabase/setup-cli@v1
         with:
           version: latest
