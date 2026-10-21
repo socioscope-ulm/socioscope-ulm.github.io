@@ -16,11 +16,15 @@
 ## Publication suivante du serveur
 Le workflow `.github/workflows/deploy-supabase.yml` est volontairement **manuel**. Il assemble dans GitHub Actions une copie complète du serveur et des routes nécessaires depuis ce dépôt, avec une configuration Deno locale et sans référence privée JSON, puis vérifie son code avant tout déploiement.
 
-Le dépôt GitHub **doit posséder** le secret d'action `SUPABASE_ACCESS_TOKEN`. La présence de ce secret n'a pas été vérifiée par ces opérations ; les tests de compilation ne prouvent pas que l'étape d'envoi à Supabase est autorisée. L'absence du secret bloque le workflow avant toute modification.
+Le dépôt GitHub **doit posséder** le secret d'action `SUPABASE_ACCESS_TOKEN`. **Le contrôle effectif, non destructif, du 21 octobre 2026 a démontré que ce secret est absent du NOUVEAU dépôt** : [GitHub Actions — vérification de l'autorisation](https://github.com/socioscope-ulm/socioscope-ulm.github.io/actions/runs/39648826329). Le contrôle a été arrêté avant toute commande Supabase.
+
+Pour terminer cette étape, créer un jeton d'accès personnel Supabase depuis le compte administrateur habilité, puis l'enregistrer en tant que secret Actions `SUPABASE_ACCESS_TOKEN` **uniquement** dans le nouveau dépôt, jamais dans les fichiers publics. Relancer ensuite le contrôle en lecture seule. Cela n'implique pas de modifier le code ni de supprimer l'ancienne adresse. Les tests de compilation du serveur sont déjà réussis.
 
 Le mode de déploiement n'agit que sur `socioscope-api` et conserve `--no-verify-jwt` ; l'application elle-même vérifie les JWT Supabase et les comptes autorisés. Les futures mises à jour doivent être testées avant déclenchement manuel.
 
 ## Compatibilité et limites restantes
+- **Sécurité du dépôt historique :** son workflow de déploiement Supabase exige désormais la confirmation manuelle `RESTAURER_ANCIEN_SERVEUR` avant toute réinstallation de l'ancien serveur, évitant une régression accidentelle. Le dépôt historique et le rollback restent accessibles. Une branche de secours du workflow a été créée : `secours-workflow-api-avant-verrouillage-20261021`.
+- **Activité des relais :** `socioscope-bridge` a eu des requêtes plus tôt le 21 octobre 2026 ; dernière trace observée à 13:47 UTC, aucune requête sur les deux heures précédant la vérification. Ne pas le supprimer sur cette seule base ; l'API principale `socioscope-api` est bien active en version 21.
 - Le serveur accepte provisoirement les origines `https://socioscope-ulm.github.io` **et** `https://fnme-pointage.github.io` pour préserver un retour arrière.
 - Le dépôt historique n'est plus sollicité par les workflows du nouveau site. Son workflow d'API est déjà manuel, pas automatique.
 - Le relais `socioscope-bridge` et la fonction `socioscope-transfer` restent présents dans Supabase. Leur suppression exigerait une étude d'usage indépendante : ils ne constituent pas une preuve que le nouveau site en dépend.
