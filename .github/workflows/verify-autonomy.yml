@@ -39,5 +39,5 @@ jobs:
         run: |
           node scripts/build-server.mjs
           test -s server-dist/index.ts
-      - name: Type-check standalone production server bundle
-        run: deno check --no-config server-dist/index.ts
+      - name: Check bundled JavaScript syntax (source TypeScript checked above)
+        run: node --check server-dist/index.ts
