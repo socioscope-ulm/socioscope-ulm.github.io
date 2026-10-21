@@ -22,7 +22,8 @@ jobs:
         with:
           deno-version: v2.x
       - name: Check independently deployable Edge Function
-        run: deno check supabase/functions/socioscope-api/index.ts
+        working-directory: supabase/functions/socioscope-api
+        run: deno check --config deno.json index.ts
       - name: Require an explicitly configured deployment token
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
