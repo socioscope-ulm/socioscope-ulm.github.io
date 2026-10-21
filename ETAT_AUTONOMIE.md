@@ -1,3 +1,14 @@
+## Ancienne adresse redirigée vers le nouveau Socioscope — 21 octobre 2026
+
+**Action réalisée** : le site `https://fnme-pointage.github.io/socioscope-ulm/` conserve son adresse, mais sert désormais une page HTML minimale qui renvoie automatiquement vers `https://socioscope-ulm.github.io/`. La nouvelle application et son API ne dépendent pas de l'ancien dépôt pour démarrer.
+
+- Tous les paramètres de requête et fragments d'URL sont conservés à l'identique lors de la redirection : protection notamment des anciens liens d'invitation et de récupération de mot de passe Supabase (`access_token`, `refresh_token`, `type=recovery`) et des liens d'erreur.
+- Un `404.html` redirige également les anciens liens profonds ; un lien manuel figure sur la page pour les navigateurs où le JavaScript serait désactivé.
+- La [vérification de compilation](https://github.com/fnme-pointage/socioscope-ulm/actions/runs/39667793361) et la [vérification des deux adresses publiques et de la page de redirection](https://github.com/fnme-pointage/socioscope-ulm/actions/runs/39668111729) sont réussies.
+- Copie du site d'origine conservée dans la branche GitHub `fnme-pointage/socioscope-ulm:secours-ancien-socioscope-avant-redirection-20261021`.
+- **Ni les fonctions Supabase historiques ni la compatibilité CORS n'ont été supprimées** : attendre une période de stabilité et une éventuelle autorisation de retrait.
+- Le projet Supabase `ovssjbldmsowzojeftyr`, sa base, ses utilisateurs, ses fichiers privés et l'API v22 demeurent inchangés par cette redirection.
+
 ## Validation des tests fonctionnels et vérification des anciens relais — 21 octobre 2026
 
 **Validation utilisateur** : les tests fonctionnels du nouveau site sont déclarés concluants, et le bandeau administrateur affiche bien `Version serveur v22`. L'utilisateur autorise la poursuite de l'audit de séparation ; aucune suppression de l'ancienne adresse ou des relais n'a été demandée explicitement à ce stade.
@@ -34,7 +45,7 @@
 ## Adresses
 - Production : https://socioscope-ulm.github.io/
 - Simulation hors production : https://socioscope-ulm.github.io/test/
-- Ancienne adresse conservée : https://fnme-pointage.github.io/socioscope-ulm/
+- Ancienne adresse maintenue comme redirection : https://fnme-pointage.github.io/socioscope-ulm/
 
 ## Acquis
 - Le nouveau site se construit et se publie depuis le seul dépôt `socioscope-ulm/socioscope-ulm.github.io`.
