@@ -19,9 +19,10 @@ export function agentPayroll(data:AgentData,sourceId:string,residence='agency',c
  // Filter the snapshot *before* salary calculation. Historical career
  // evidence remains complete so seniority/echelon are unchanged by filters.
  const fullSnapshot=snapshot(data,sourceId);
- const sexKnown=fullSnapshot.filter(r=>r.nni&&normalizeAgentSex(r.sex)!==null).length;
- const sexTotal=fullSnapshot.filter(r=>r.nni).length;
  const college=filters.college||'',sex=filters.sex||'';
+ const matchingCollege=fullSnapshot.filter(r=>matchesAgentCohort(r,college,''));
+ const sexKnown=matchingCollege.filter(r=>r.nni&&normalizeAgentSex(r.sex)!==null).length;
+ const sexTotal=matchingCollege.filter(r=>r.nni).length;
  const selectedSnapshot=fullSnapshot.filter(r=>matchesAgentCohort(r,college,sex));
  const rows=selectedSnapshot.map(r=>{
   const career=careerSeniority(histories.get(r.agentId)||[],data.sources,reference.date,sourceId);
