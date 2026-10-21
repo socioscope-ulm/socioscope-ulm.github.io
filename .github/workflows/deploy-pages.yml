@@ -1,4 +1,4 @@
-name: Deploy Socioscope ULM - registre dirigeants
+name: Deploy Socioscope ULM - tri et fiches dirigeants
 on:
   push:
     branches: [main]
