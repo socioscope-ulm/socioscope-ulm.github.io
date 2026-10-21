@@ -16,9 +16,9 @@
 ## Publication suivante du serveur
 Le workflow `.github/workflows/deploy-supabase.yml` est volontairement **manuel**. Il assemble dans GitHub Actions une copie complète du serveur et des routes nécessaires depuis ce dépôt, avec une configuration Deno locale et sans référence privée JSON, puis vérifie son code avant tout déploiement.
 
-Le dépôt GitHub **doit posséder** le secret d'action `SUPABASE_ACCESS_TOKEN`. **Le contrôle effectif, non destructif, du 21 octobre 2026 a démontré que ce secret est absent du NOUVEAU dépôt** : [GitHub Actions — vérification de l'autorisation](https://github.com/socioscope-ulm/socioscope-ulm.github.io/actions/runs/39648826329). Le contrôle a été arrêté avant toute commande Supabase.
+Le secret GitHub Actions `SUPABASE_ACCESS_TOKEN` a été ajouté au **nouveau dépôt**, puis validé le 21 octobre 2026 par [GitHub Actions — seconde exécution réussie du contrôle d'autorisation](https://github.com/socioscope-ulm/socioscope-ulm.github.io/actions/runs/39648826329). Le workflow a utilisé le jeton pour consulter en lecture seule la liste des Edge Functions du projet Supabase ; il n'a déployé aucun code et n'a modifié aucune donnée.
 
-Pour terminer cette étape, créer un jeton d'accès personnel Supabase depuis le compte administrateur habilité, puis l'enregistrer en tant que secret Actions `SUPABASE_ACCESS_TOKEN` **uniquement** dans le nouveau dépôt, jamais dans les fichiers publics. Relancer ensuite le contrôle en lecture seule. Cela n'implique pas de modifier le code ni de supprimer l'ancienne adresse. Les tests de compilation du serveur sont déjà réussis.
+L'autorisation nécessaire au futur déploiement est ainsi vérifiée. La compilation complète du serveur a également réussi. **Un véritable redéploiement depuis le nouveau workflow n'a pas encore été exécuté** : il devra rester volontaire et accompagné des contrôles de régression et d'un retour arrière.
 
 Le mode de déploiement n'agit que sur `socioscope-api` et conserve `--no-verify-jwt` ; l'application elle-même vérifie les JWT Supabase et les comptes autorisés. Les futures mises à jour doivent être testées avant déclenchement manuel.
 
