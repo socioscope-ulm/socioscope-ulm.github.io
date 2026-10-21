@@ -13,12 +13,12 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - name: Install application dependencies
+        run: npm install --no-audit --no-fund
       - name: Validate version parser and isolation by role
         run: node --experimental-strip-types --test tests/*.test.ts
       - name: Build production and test frontends
-        run: |
-          npm install --no-audit --no-fund
-          npm run build
+        run: npm run build
           test -s docs/index.html
           test -s docs/test/index.html
       - name: Package new API from autonomous repository
