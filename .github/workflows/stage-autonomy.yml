@@ -1,0 +1,127 @@
+name: Prepare autonomous source branch (one-time migration)
+on:
+  push:
+    paths:
+      - '.github/workflows/stage-autonomy.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout isolated migration branch
+        uses: actions/checkout@v4
+        with:
+          ref: preparation-autonomie
+          persist-credentials: true
+      - name: One-time copy of public application source
+        run: |
+          git clone --depth 1 https://github.com/fnme-pointage/socioscope-ulm.git "$RUNNER_TEMP/source"
+          rsync -a --exclude='.git/' --exclude='docs/' --exclude='.github/workflows/' --exclude='private-data/' --exclude='node_modules/' --exclude='server-dist/' "$RUNNER_TEMP/source/" ./
+          rm -f .github/workflows/publish.yml
+          sed -i "s|base:'/socioscope-ulm/'|base:'/'|" scripts/build.mjs
+          grep -q "base:'/'" scripts/build.mjs
+      - name: Install standalone GitHub Pages workflow
+        run: |
+          cat > .github/workflows/deploy-pages.yml <<'PAGES'
+          name: Deploy autonomous Socioscope ULM
+          on:
+            push:
+              branches: [main]
+              paths:
+                - 'src/**'
+                - 'public/**'
+                - 'index.html'
+                - 'package.json'
+                - 'scripts/build.mjs'
+                - '.github/workflows/deploy-pages.yml'
+            workflow_dispatch:
+          permissions:
+            contents: read
+            pages: write
+            id-token: write
+          concurrency:
+            group: socioscope-pages
+            cancel-in-progress: true
+          jobs:
+            deploy:
+              runs-on: ubuntu-latest
+              environment:
+                name: github-pages
+                url: ${{ steps.deployment.outputs.page_url }}
+              steps:
+                - uses: actions/checkout@v4
+                - uses: actions/setup-node@v4
+                  with:
+                    node-version: '22'
+                - run: npm install --no-audit --no-fund
+                - run: npm run build
+                - uses: actions/configure-pages@v5
+                - uses: actions/upload-pages-artifact@v3
+                  with:
+                    path: docs
+                - id: deployment
+                  uses: actions/deploy-pages@v4
+          PAGES
+      - name: Prepare gated server deployment (does not deploy)
+        run: |
+          cp "$RUNNER_TEMP/source/.github/workflows/deploy-supabase.yml" .github/workflows/deploy-supabase.yml
+          python3 - <<'PY'
+          from pathlib import Path
+          path=Path('.github/workflows/deploy-supabase.yml')
+          data=path.read_text()
+          data=data.replace('      - name: Install Supabase CLI', """      - name: Block incomplete server packaging
+                run: |
+                  test -s private-data/references/salary-grid-2026.json
+                  test -s private-data/references/annual-bonuses-2025.json
+                  test -s private-data/references/historical-salary-grids.json
+              - name: Install Supabase CLI""")
+          path.write_text(data)
+          PY
+      - name: Create cutover checklist
+        run: |
+          cat > MIGRATION_AUTONOMIE.md <<'DOC'
+          # Passage à une source autonome pour Socioscope ULM
+
+          **Statut : branche de préparation seulement. Ne pas supprimer l'ancien dépôt.**
+          Les fichiers du client et du serveur ont été copiés dans l'organisation socioscope-ulm.
+          La publication de la branche principale n'a pas été modifiée par cette opération.
+
+          ## Dépendances permanentes à conserver
+          - Auth et comptes Supabase (membres, rôles et sessions).
+          - Base PostgreSQL du projet Supabase : imports, décisions, calculs et validations.
+          - Bucket privé socioscope-private : graines, fichiers originaux, RUP, extractions.
+          - Edge Function socioscope-api : version en production jusqu'à validation d'un déploiement depuis ce dépôt.
+
+          ## Prérequis avant fusion sur main
+          1. Vérifier qu'un build GitHub Pages se réalise depuis ce dépôt, sans checkout de fnme-pointage.
+          2. Protéger et reconstituer hors Git les trois références privées attendues sous private-data/references/. Elles sont absentes du dépôt public. Ne pas déposer de données nominatives ou de secrets dans GitHub.
+          3. Configurer le secret SUPABASE_ACCESS_TOKEN sur le nouveau dépôt ; vérifier la possibilité de redéployer le serveur avant de supprimer l'ancien.
+          4. Vérifier l'URL de référence et les redirections Auth Supabase ; garder https://socioscope-ulm.github.io comme adresse principale.
+          5. Sauvegarder les tables, les utilisateurs et le stockage Supabase avant bascule.
+          6. Tester les imports nouveaux et leur validation pour bilans sociaux, fichiers individuels, RUP et références salariales ; vérifier tous les recalculs (évolutions, emplois, NR/GF, GF19, masse salariale, rémunération, CSV/PDF).
+          7. Tester les rôles admin/lecteur, les rapprochements, les départs confirmés, les cadres dirigeants et les fiches manuelles.
+          8. Effectuer la bascule du build et de l'API depuis le nouveau dépôt, puis observer une période de stabilité.
+          9. Ensuite seulement supprimer le relais socioscope-bridge et l'ancien dépôt.
+          10. Supprimer le workflow temporaire stage-autonomy.yml une fois la bascule terminée.
+
+          ## Retour arrière
+          Revenir au commit GitHub Pages précédent sans modifier le projet Supabase.
+          DOC
+      - name: Commit source snapshot to preparation branch only
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Prepare independent Socioscope source and migration checklist"
+          git push origin HEAD:preparation-autonomie
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify autonomous frontend build
+        run: |
+          npm install --no-audit --no-fund
+          npm run build
+          test -s docs/index.html
+          if grep -q 'fnme-pointage.github.io/socioscope-ulm' docs/index.html; then exit 1; fi
