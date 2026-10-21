@@ -1,4 +1,4 @@
-name: Deploy Socioscope ULM - correction globale 546
+name: Deploy Socioscope ULM - donnees cadres dirigeants
 on:
   push:
     branches: [main]
