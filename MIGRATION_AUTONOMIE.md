@@ -79,3 +79,13 @@ Les trois fichiers de barèmes intégrés dans l'actuel serveur déployé ne son
 - **BLOQUANT** : les sauvegardes de tables résident sur le même projet Supabase que la production. Effectuer aussi un export PostgreSQL externe, une copie réelle des 29 fichiers privés et une vérification de restauration avant toute bascule.
 - **BLOQUANT** : la procédure de déploiement indépendante a encore besoin d'un canal sécurisé de provisionnement des références et d'un accès `SUPABASE_ACCESS_TOKEN` configuré dans les secrets du nouveau dépôt ; aucune publication du serveur depuis le nouveau dépôt n'a été validée.
 - Garder `main` et les deux adresses inchangées jusqu'aux tests fonctionnels authentifiés, et ne supprimer ni l'ancien site ni son dépôt.
+
+## Avancement supplémentaire — reconstruction sans ancien dépôt
+- La table privée `socioscope.salary_references` a été créée dans la même base Supabase et alimentée à partir des trois références sauvées ; RLS activée, pas de droits directs `anon`/`authenticated`.
+- Contrôle d'intégrité effectué : les trois documents JSON sont rigoureusement identiques à ceux conservés dans `socioscope_backup.salary_reference_recovery_20261021`.
+- `server/references.ts` lit désormais les références historiques depuis la base privée, côté serveur ; il n'importe plus de fichiers `private-data/references/*.json`.
+- `src/lib/agent-payroll.ts` exige des références explicites validées et ne dépend plus des imports JSON privés embarqués ; les règles métier de majoration et d'échelon sont conservées.
+- `server/index.ts` préserve l'origine autorisée sur les requêtes internes pour éviter les 403 en écriture depuis la nouvelle adresse, sans relâcher la liste des origines autorisées.
+- La vérification GitHub Actions **Verify autonomous Socioscope source** : succès le 21 octobre 2026, run `39633946291` ; source sans checkout de l'ancien dépôt, compilation Pages réussie et tests de régression existants réussis.
+- Le workflow de déploiement du serveur est préparé pour utiliser uniquement le code de la nouvelle organisation ; le secret GitHub `SUPABASE_ACCESS_TOKEN` reste à configurer pour le déclencher.
+- **Aucune modification de la branche `main` et aucun redéploiement de `socioscope-api` en production : bascule réservée à la fin de la recette et de la sauvegarde externe.**
