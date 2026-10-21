@@ -1,0 +1,37 @@
+name: Verify autonomous Socioscope source
+on:
+  push:
+    branches: [preparation-autonomie]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Ensure no historical repository dependency
+        run: |
+          ! grep -R -n 'repository: fnme-pointage/socioscope-ulm' .github/workflows
+          ! grep -R -n 'private-data/references/' src server
+      - name: Build autonomous GitHub Pages
+        run: |
+          npm install --no-audit --no-fund
+          npm run build
+          test -s docs/index.html
+      - name: Run existing regression tests
+        run: |
+          node --experimental-strip-types --test tests/*.test.ts
+      - name: Prepare self-contained Supabase Edge Function
+        run: |
+          mkdir -p supabase/functions/socioscope-api
+          printf "import '../../../server/index.ts';\n" > supabase/functions/socioscope-api/index.ts
+          python3 .github/scripts/prepare-edge.py
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Type-check Edge Function without deployment
+        run: deno check --no-config supabase/functions/socioscope-api/index.ts

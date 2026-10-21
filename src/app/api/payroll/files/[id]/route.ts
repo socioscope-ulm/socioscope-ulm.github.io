@@ -1,0 +1,3 @@
+import {agentAuth,agentError} from '../../../../../lib/agents-store';
+import {resources} from '../../../../../lib/store';
+export async function GET(request:Request,{params}:{params:Promise<{id:string}>}){try{await agentAuth(request);const {id}=await params;const {db,bucket}=resources();const m=await db.prepare('SELECT name FROM payroll_imports WHERE id=?').bind(id).first<any>();const o=await bucket.get('payroll/'+id+'/original');if(!m||!o)return Response.json({error:'Fichier introuvable.'},{status:404});return new Response(o.body,{headers:{'Content-Type':'application/octet-stream','Content-Disposition':`attachment; filename*=UTF-8''${encodeURIComponent(m.name)}`,'Cache-Control':'no-store'}});}catch(e){return agentError(e);}}

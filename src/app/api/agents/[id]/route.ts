@@ -1,0 +1,3 @@
+import {agentAuth,agentData,agentError} from '../../../../lib/agents-store';
+import {agentProfile} from '../../../../lib/agents';
+export async function GET(request:Request,{params}:{params:Promise<{id:string}>}){try{await agentAuth(request);const {id}=await params;const {data,decisions}=await agentData(false,id);const profile=agentProfile(data,id);if(!profile.records.length&&!profile.events.length)return Response.json({error:'Agent introuvable.'},{status:404});return Response.json({...profile,decisions:decisions.filter(d=>d.agent===id||d.kind==='link'&&d.target===id)},{headers:{'Cache-Control':'no-store'}});}catch(e){return agentError(e);}}
