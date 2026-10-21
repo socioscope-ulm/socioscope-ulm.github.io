@@ -1,0 +1,32 @@
+name: Verify restored photograph classification actions
+on:
+  push:
+    branches: [restaurer-commandes-photographie-agents-20261021]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Test photograph decisions, salary, and simulation regression
+        run: node --experimental-strip-types --test tests/*.test.ts
+      - name: Build autonomous frontends
+        run: |
+          npm run build
+          test -s docs/index.html
+          test -s docs/test/index.html
+      - name: Package autonomous API
+        run: sh .github/scripts/package-autonomous-api.sh
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Verify Deno function source
+        working-directory: supabase/functions/socioscope-api
+        run: deno check --config deno.json index.ts
