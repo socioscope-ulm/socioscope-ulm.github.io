@@ -1,4 +1,4 @@
-name: Deploy Socioscope ULM - optimisation GF NR
+name: Deploy Socioscope ULM - derniere version
 on:
   push:
     branches: [main]
@@ -27,7 +27,7 @@ jobs:
         with:
           node-version: '22'
       - run: npm install --no-audit --no-fund
-      - name: Build pour la racine du nouveau domaine
+      - name: Build pour la racine du nouveau domaine et les chiffres 2025
         run: |
           sed -i "s|base:'/socioscope-ulm/'|base:'/'|" scripts/build.mjs
           grep -q "base:'/'" scripts/build.mjs
