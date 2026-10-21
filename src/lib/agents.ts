@@ -12,6 +12,10 @@ export function normalizeAgentSex(value:unknown):'hommes'|'femmes'|null{
  if(['F','FEMME','FEMMES','FEMININ','FEMININS','FEMALE'].includes(text))return 'femmes';
  return null;
 }
+export function matchesAgentCohort(agent:Pick<AgentRecord,'college'|'sex'>,college='',sex=''):boolean{
+ return (!college||agent.college===college)&&
+  (!['hommes','femmes'].includes(sex)||normalizeAgentSex(agent.sex)===sex);
+}
 export const normalizeNNI=(v:unknown)=>{const t=String(v||'').toUpperCase().replace(/[^A-Z0-9]/g,'');const m=t.match(/^([A-Z]\d{5})([A-Z0-9]{2})?$/);return m?.[1]||null;};
 export function careerSeniority(records:AgentRecord[],sources:AgentSource[],asof:string,selectedSourceId?:string){
  const utc=(date:string)=>new Date(date+'T00:00:00Z');
