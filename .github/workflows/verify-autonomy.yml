@@ -1,7 +1,7 @@
 name: Verify autonomous Socioscope source
 on:
   push:
-    branches: [preparation-autonomie]
+    branches: [main, preparation-autonomie]
   workflow_dispatch:
 permissions:
   contents: read
@@ -35,3 +35,9 @@ jobs:
           deno-version: v2.x
       - name: Type-check Edge Function without deployment
         run: deno check --no-config supabase/functions/socioscope-api/index.ts
+      - name: Build standalone production server bundle
+        run: |
+          node scripts/build-server.mjs
+          test -s server-dist/index.ts
+      - name: Type-check standalone production server bundle
+        run: deno check --no-config server-dist/index.ts
