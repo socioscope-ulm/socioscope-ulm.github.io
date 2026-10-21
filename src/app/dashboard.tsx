@@ -33,6 +33,11 @@ useEffect(()=>{const controller=new AbortController();
 (async()=>{try{const meta=await api('/api/agents?view=meta',{signal:controller.signal});await Promise.all([...new Set([to,to-1])].map(async year=>{const eligible=(meta.sources||[]).filter((s:any)=>s.status!=='review'&&String(s.date||s.label||'').includes(String(year)));const selected=eligible.find((s:any)=>s.primary)||eligible.find((s:any)=>s.status==='validated')||eligible.at(-1);if(!selected)return;const p=new URLSearchParams({source:selected.id,view:'list',archive:'0',offset:'0'});try{const result=await api('/api/agents?'+p,{signal:controller.signal});if(!controller.signal.aborted)setAgentAverages(v=>({...v,[year]:{year,nr:typeof result.stats?.nrMean==='number'?result.stats.nrMean:null,gf:typeof result.stats?.gfMean==='number'?result.stats.gfMean:null,source:selected.label||selected.name||String(year)}}));}catch(e){if(!controller.signal.aborted)console.error('Moyennes GF/NR indisponibles pour '+year,e);}}));}catch(e){if(!controller.signal.aborted)console.error('Moyennes NR/GF indisponibles',e);}})();return()=>controller.abort();},[to,agentsRevision]);
 const [emploiView,setEmploiView]=useState<'indicators'|'families'|'analysis'>('indicators');const [agentsVisited,setAgentsVisited]=useState(false);
 useEffect(()=>{if(tab==='agents')setAgentsVisited(true);},[tab]);
+// A previously selected salary or INSEE chart must not reappear if someone
+// returns to Parcours with a saved selection from another section.
+useEffect(()=>{if(tab==='parcours'&&data&&!parcoursMetricVisible(metric,data.metrics[metric]||{label:metric})){
+ setMetric('promotions_m3e');
+}},[tab,data,metric]);
 const reload=async()=>{try{const next:Dataset=await api('/api/data');const nextYears=next.observations.map(o=>o.year);if(nextYears.length){const last=Math.max(...nextYears);setTo(current=>!data||current===Math.max(...data.observations.map(o=>o.year))?last:current);if(!data)setFrom(Math.min(...nextYears));}setData(next);setError('');}catch(e){setError((e as Error).message);}};
 const refreshAfterImport=()=>{void reload();setAgentsRevision(r=>r+1);};
 useEffect(()=>{reload();},[]);
