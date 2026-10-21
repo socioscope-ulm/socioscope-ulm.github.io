@@ -1,7 +1,18 @@
 name: Validate independent API deployment package
 on:
   push:
-    branches: [preparation-deploiement-api-autonome-20261021]
+    branches: [main, preparation-deploiement-api-autonome-20261021]
+    paths:
+      - 'server/**'
+      - 'src/lib/**'
+      - 'src/app/api/**'
+      - '.github/scripts/package-autonomous-api.sh'
+      - '.github/scripts/prepare-edge.py'
+      - '.github/workflows/deploy-supabase.yml'
+      - '.github/workflows/verify-autonomous-api-package.yml'
+      - 'scripts/build.mjs'
+      - 'package.json'
+      - 'tests/**'
   workflow_dispatch:
 permissions:
   contents: read
