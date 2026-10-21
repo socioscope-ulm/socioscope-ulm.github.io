@@ -1,0 +1,49 @@
+name: Audit autonome des acces Supabase (lecture seule)
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/audit-auth-autonome.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  audit-auth:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate the current Supabase Auth redirect configuration safely
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          node --input-type=module <<'NODE'
+          const expected='https://socioscope-ulm.github.io/';
+          const oldDomain='fnme-pointage.github.io';
+          const token=process.env.SUPABASE_ACCESS_TOKEN;
+          if(!token)throw Error('Jeton Supabase absent');
+          const url='https://api.supabase.com/v1/projects/ovssjbldmsowzojeftyr/config/auth';
+          const r=await fetch(url,{headers:{Authorization:'Bearer '+token,'Accept':'application/json'},signal:AbortSignal.timeout(20000)});
+          if(!r.ok)throw Error('Lecture configuration Auth impossible (HTTP '+r.status+'); aucune modification effectuee.');
+          const c=await r.json();
+          const siteURL=String(c.site_url||'');
+          const redirects=String(c.uri_allow_list||'').split(',').map(x=>x.trim()).filter(Boolean);
+          const newSiteDefault=siteURL===expected||siteURL===expected.slice(0,-1);
+          const newSiteAllowed=newSiteDefault||redirects.some(x=>x===expected||x===expected.slice(0,-1)||x==='https://socioscope-ulm.github.io/**'||x==='https://socioscope-ulm.github.io/*'||x==='https://socioscope-ulm.github.io');
+          const oldDefault=siteURL.includes(oldDomain);
+          const oldAllowed=redirects.filter(x=>x.includes(oldDomain)).length;
+          const templateNames=['mailer_templates_invite_content','mailer_templates_recovery_content','mailer_templates_confirmation_content'];
+          const templateRefs=Object.fromEntries(templateNames.map(k=>[k,typeof c[k]==='string'?{
+            oldDomain:c[k].includes(oldDomain),
+            redirectTo:c[k].includes('{{ .RedirectTo }}'),
+            siteURL:c[k].includes('{{ .SiteURL }}')
+          }:null]));
+          const result={
+            siteURL, newSiteDefault,newSiteAllowed,oldDefault,oldAllowed,
+            emailProviderEnabled:c.external_email_enabled===true,
+            signupDisabled:c.disable_signup===true,
+            confirmationAutoconfirm:c.mailer_autoconfirm===true,
+            templates:templateRefs
+          };
+          console.log(JSON.stringify(result,null,2));
+          if(!newSiteAllowed)throw Error('Nouvelle adresse absente de la liste des redirections Auth : NE PAS RETIRER LES ANCIENS LIENS.');
+          console.log('Nouvelle adresse autorisee pour les invitations et recuperations.');
+          NODE
