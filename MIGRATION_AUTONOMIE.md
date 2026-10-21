@@ -114,3 +114,10 @@ Les trois fichiers de barèmes intégrés dans l'actuel serveur déployé ne son
 
 ## Validation autonome complète depuis la nouvelle organisation
 Le workflow GitHub Actions `Verify autonomous Socioscope source` a réussi intégralement sur `preparation-autonomie` le 21 octobre 2026 : https://github.com/socioscope-ulm/socioscope-ulm.github.io/actions/runs/39634743651 . Les étapes réussies couvrent : absence de référence à l'ancien dépôt, compilation statique Vite pour GitHub Pages, tests de régression, préparation de la fonction Edge, et vérification des types Deno du serveur. La fonction et l'interface sont donc **reconstructibles depuis le seul code du nouveau dépôt** ; ce succès ne prouve pas encore que les imports et calculs authentifiés fonctionnent après un nouveau déploiement, faute de test d'intégration live. 
+
+## Compatibilité des accès existants (21 octobre 2026)
+- Les quatre comptes de consultation restent actifs en base ; trois sont confirmés et disposent déjà d'un mot de passe, un n'a pas terminé l'inscription. Aucun compte n'a été modifié et aucun mot de passe n'a été forcé.
+- Les liens Supabase générés **désormais** depuis `server/invite.ts` portent la nouvelle URL comme `redirect_to`.
+- Pour les liens historiques encore valides pointant vers `https://fnme-pointage.github.io/socioscope-ulm/`, `src/session.ts` de l'ancien dépôt transfère uniquement les callbacks d'authentification (fragment Supabase + éventuelle erreur) vers `https://socioscope-ulm.github.io/`. La navigation classique sur l'ancien site et ses connexions usuelles restent en place pour le repli. Code de secours ancien : branche `secours-connexion-utilisateurs-20261021`.
+- Les liens **expirés ou déjà consommés ne peuvent pas être réparés** : générer un nouveau lien individuel depuis les accès administrateur ou utiliser Mot de passe oublié. Les comptes non confirmés doivent toujours terminer leur activation ; ne pas contourner la confirmation.
+- La liste des URL autorisées de Supabase Auth n'a pas pu être consultée/modifiée par connecteur dans ce contexte ; le relais historique évite que les liens restés sur l'ancien site empêchent d'utiliser le nouveau.
