@@ -1,2 +1,2 @@
 import {build} from 'vite';
-await build({configFile:false,base:'/',build:{outDir:'docs',emptyOutDir:true,target:'es2022'},esbuild:{jsx:'automatic'},define:{'process.env.NODE_ENV':'"production"'}});
+await build({configFile:false,base:'/',build:{outDir:'docs',emptyOutDir:true,target:'es2022',rollupOptions:{input:{socioscope:'index.html',test:'test/index.html'}}},esbuild:{jsx:'automatic'},define:{'process.env.NODE_ENV':'"production"'}});
