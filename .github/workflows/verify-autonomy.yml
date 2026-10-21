@@ -25,3 +25,13 @@ jobs:
       - name: Run existing regression tests
         run: |
           node --experimental-strip-types --test tests/*.test.ts
+      - name: Prepare self-contained Supabase Edge Function
+        run: |
+          mkdir -p supabase/functions/socioscope-api
+          printf "import '../../../server/index.ts';\n" > supabase/functions/socioscope-api/index.ts
+          python3 .github/scripts/prepare-edge.py
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Type-check Edge Function without deployment
+        run: deno check --no-config supabase/functions/socioscope-api/index.ts
