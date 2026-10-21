@@ -1,4 +1,4 @@
-name: Deploy Socioscope ULM - familles metier stabilisees
+name: Deploy Socioscope ULM - confirmations fiabilisees
 on:
   push:
     branches: [main]
