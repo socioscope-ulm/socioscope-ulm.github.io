@@ -4,7 +4,7 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/smoke-production.yml'
-      - 'src/**'
+      - 'src/app/api/**'
       - 'server/**'
       - '.github/workflows/deploy-supabase.yml'
   workflow_dispatch:
