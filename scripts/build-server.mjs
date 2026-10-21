@@ -1,0 +1,2 @@
+import {createRequire} from 'node:module';import fs from 'node:fs/promises';import path from 'node:path';const require=createRequire(import.meta.url);const esbuild=await import(require.resolve('esbuild',{paths:[require.resolve('vite/package.json')]}));
+await fs.mkdir('server-dist',{recursive:true});await esbuild.build({entryPoints:['server/index.ts'],outfile:'server-dist/index.ts',bundle:true,format:'esm',platform:'neutral',target:'es2022',minify:true,external:['npm:postgres@3.4.7'],mainFields:['module','main'],conditions:['import','default']});

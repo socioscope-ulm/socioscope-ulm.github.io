@@ -1,0 +1,1 @@
+{"name":"socioscope-ulm","private":true,"type":"module","scripts":{"build":"node scripts/build.mjs"},"dependencies":{"react":"19.2.6","react-dom":"19.2.6","lucide-react":"1.31.0","recharts":"3.8.0","xlsx":"0.18.5","pdfjs-dist":"5.4.624"},"devDependencies":{"vite":"8.0.13","typescript":"5.9.3"}}

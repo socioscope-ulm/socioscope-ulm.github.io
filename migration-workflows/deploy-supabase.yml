@@ -1,0 +1,38 @@
+name: Deploy Socioscope API to Supabase
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout application source
+        uses: actions/checkout@v4
+      - name: Block incomplete server packaging
+      run: |
+        test -s private-data/references/salary-grid-2026.json
+        test -s private-data/references/annual-bonuses-2025.json
+        test -s private-data/references/historical-salary-grids.json
+    - name: Install Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - name: Prepare Edge Function from original source
+        run: |
+          mkdir -p supabase/functions/socioscope-api
+          printf "import '../../../server/index.ts';\n" > supabase/functions/socioscope-api/index.ts
+      - name: Normalize local imports for the Deno bundler
+        run: python3 .github/scripts/prepare-edge.py
+      - name: Deploy (retain existing API JWT handling)
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          if [ -z "$SUPABASE_ACCESS_TOKEN" ]; then
+            echo "::error::Missing SUPABASE_ACCESS_TOKEN repository secret"
+            exit 1
+          fi
+          supabase functions deploy socioscope-api --project-ref ovssjbldmsowzojeftyr --no-verify-jwt
