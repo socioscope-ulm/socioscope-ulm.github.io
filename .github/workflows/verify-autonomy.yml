@@ -1,7 +1,7 @@
 name: Verify autonomous Socioscope source
+# Comprehensive autonomous build available on demand; normal changes are covered
+# by the targeted frontend and API package workflows below.
 on:
-  push:
-    branches: [main, preparation-autonomie]
   workflow_dispatch:
 permissions:
   contents: read

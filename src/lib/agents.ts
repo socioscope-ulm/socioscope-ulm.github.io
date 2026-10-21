@@ -29,15 +29,29 @@ export function careerSeniority(records:AgentRecord[],sources:AgentSource[],asof
 }
 export function unpackAgentSeed(p:any):AgentData{const decode=(v:any):any=>typeof v==='number'&&v<0?p.strings[-v-1]:Array.isArray(v)?v.map(decode):v&&typeof v==='object'?('number'in v?v.number:Object.fromEntries(Object.entries(v).map(([k,x])=>[k,decode(x)]))):v;const unpack=(fields:string[],r:any[])=>Object.fromEntries(fields.flatMap((k,i)=>r[i]===null?[]:[[k,decode(r[i])]]));return {...p,strings:undefined,recordFields:undefined,eventFields:undefined,records:p.records.map((r:any[])=>{const record=unpack(p.recordFields,r);if(['s2022jan','s2022dec'].includes(record.source)&&!record.college&&typeof record.gf==='number'&&record.gf>=12)record.college='cadres';return record;}),events:p.events.map((r:any[])=>unpack(p.eventFields,r))};}
 export function snapshot(data:AgentData,source:string){const grouped=new Map<string,AgentRecord[]>();for(const r of data.records.filter(r=>r.source===source)){const rows=grouped.get(r.agentId)||[];rows.push(r);grouped.set(r.agentId,rows);}return [...grouped].map(([agentId,rows])=>{const out:any={...rows[0],agentId,situations:rows.length,conflicts:[]};for(const field of ['nr','gf','nrYears','gfYears','iegYears','coefficient','agency','college','gfDate','nrDate','seniorityDate','m3e']){const values=[...new Set(rows.map(r=>(r as any)[field]).filter(v=>v!==undefined&&v!==''))];if(values.length>1){out[field]=undefined;out.conflicts.push(field);}else out[field]=values[0];}return out as AgentRecord&{situations:number;conflicts:string[]};});}
+// The preferred previous photograph is the latest older *date*, not just
+// whichever version happens to be marked primary. On the same date the
+// December 2024 "onglets mis en forme" workbook takes precedence.
+export const formattedSnapshot=(source:Pick<AgentSource,'name'|'label'|'sheet'>)=>
+ /onglets?\s+mis\s+en\s+forme/i.test([source.name,source.label,source.sheet].join(' '));
+export function preferredOlderPhotograph(current:AgentSource,sources:AgentSource[]):AgentSource|undefined{
+ return sources.filter(s=>s.id!==current.id&&s.status!=='review'&&!!s.date&&s.date<current.date)
+  .sort((a,b)=>b.date.localeCompare(a.date)||
+   Number(formattedSnapshot(b))-Number(formattedSnapshot(a))||
+   Number(!!b.primary)-Number(!!a.primary)||
+   a.id.localeCompare(b.id))[0];
+}
+export function defaultMovementPhotographs(sources:AgentSource[]):{latest?:AgentSource;previous?:AgentSource}{
+ const available=sources.filter(s=>s.status!=='review'&&!!s.date);
+ const byDate=(a:AgentSource,b:AgentSource)=>b.date.localeCompare(a.date)||Number(!!b.primary)-Number(!!a.primary)||a.id.localeCompare(b.id);
+ const latest=available.filter(s=>s.primary).sort(byDate)[0]||available.sort(byDate)[0];
+ return {latest,previous:latest?preferredOlderPhotograph(latest,available):undefined};
+}
 export function sourcePairs(data:AgentData,id:string,previous?:string){
  const src=data.sources.find(s=>s.id===id);
  const compatible=data.sources.filter(s=>s.status!=='review'&&s.date<(src?.date||'')&&data.records.some(r=>r.source===s.id));
- const mostRecentDate=compatible.map(s=>s.date).sort((a,b)=>b.localeCompare(a))[0];
- const candidates=compatible.filter(s=>s.date===mostRecentDate).sort((a,b)=>{
-  const priority=(s:AgentSource)=>/onglets? mis en forme/i.test(s.name+' '+s.label)?2:Number(!!s.primary);
-  return priority(b)-priority(a);
- });
- const older=previous?compatible.find(s=>s.id===previous):candidates[0];
+ const older=(previous?compatible.find(s=>s.id===previous):undefined)||
+  (src?preferredOlderPhotograph(src,compatible):undefined);
  const current=snapshot(data,id),before=older?snapshot(data,older.id):[];
  const c=new Map(current.filter(r=>r.nni).map(r=>[r.agentId,r])),p=new Map(before.filter(r=>r.nni).map(r=>[r.agentId,r]));
  const appeared=current.filter(r=>r.nni&&!p.has(r.agentId));
