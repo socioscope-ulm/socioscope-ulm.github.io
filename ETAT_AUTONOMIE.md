@@ -1,3 +1,15 @@
+## Première republication entièrement autonome — 21 octobre 2026
+
+- Demande métier : afficher le numéro **réel** de version du serveur dans le bandeau gauche, sous « Socioscope » et « ULM · Observatoire social », uniquement pour le compte administrateur.
+- Le serveur utilise `DENO_DEPLOYMENT_ID` (variable d'exécution fournie par Supabase ; suffixe numérique) et renvoie `serverVersion` seulement dans la réponse de session administrateur.
+- Interface et tests déployés exclusivement depuis `socioscope-ulm/socioscope-ulm.github.io`.
+- Le workflow GitHub autonome a **publié avec succès la fonction `socioscope-api` version 22** : [GitHub Actions déploiement réussi](https://github.com/socioscope-ulm/socioscope-ulm.github.io/actions/runs/39652236524).
+- Le premier essai a échoué **avant le déploiement** en raison d'une limitation GitHub sur la résolution du dernier CLI Supabase. Le workflow a été corrigé en fixant la version `2.117.0`, puis relancé avec succès.
+- Vérifications après déploiement : [contrôles publics et protection des sessions réussis](https://github.com/socioscope-ulm/socioscope-ulm.github.io/actions/runs/39652190447) ; 5 membres, 1 238 décisions, 29 objets privés et 3 références salariales intacts.
+- Le déclencheur temporaire créé pour ce premier essai a été **supprimé** après succès. Le workflow de serveur redevient exclusivement manuel.
+- L'ancien site et son dépôt sont inchangés par cette fonctionnalité ; CORS historique maintenu pour permettre un retour arrière.
+- Le test d'affichage avec une session d'administrateur dans le navigateur reste à valider par l'utilisateur. La version v22 est confirmée par l'API de gestion Supabase, et le parseur a été testé sur les formats documentés.
+
 # État d'autonomie du Socioscope ULM — 21 octobre 2026
 
 ## Adresses
