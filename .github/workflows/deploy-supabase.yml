@@ -1,39 +1,40 @@
-name: Deploy autonomous Socioscope API (manual, gated)
+name: Deploy autonomous Socioscope API (manual and gated)
 on:
   workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  group: socioscope-api-production
+  cancel-in-progress: false
 jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Verify source is independent from the historical repository
-        run: |
-          if grep -R -n 'private-data/references/' server src; then
-            echo "::error::Historical private references still imported"
-            exit 1
-          fi
-      - uses: actions/setup-node@v4
         with:
-          node-version: '22'
-      - name: Install pinned application dependencies
-        run: npm install --no-audit --no-fund
-      - name: Build standalone Supabase server package
+          persist-credentials: false
+      - name: Verify no checkout from the historical repository
         run: |
-          node scripts/build-server.mjs
-          test -s server-dist/index.ts
-          mkdir -p supabase/functions/socioscope-api
-          cp server-dist/index.ts supabase/functions/socioscope-api/index.ts
-      - uses: supabase/setup-cli@v1
+          ! grep -R -n 'private-data/references/' server src
+      - name: Assemble the complete API source and import map
+        run: sh .github/scripts/package-autonomous-api.sh
+      - uses: denoland/setup-deno@v2
         with:
-          version: latest
-      - name: Deploy Socioscope API
+          deno-version: v2.x
+      - name: Check independently deployable Edge Function
+        run: deno check supabase/functions/socioscope-api/index.ts
+      - name: Require an explicitly configured deployment token
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
         run: |
           if [ -z "$SUPABASE_ACCESS_TOKEN" ]; then
-            echo "::error::Missing SUPABASE_ACCESS_TOKEN secret in the new repository"
+            echo "::error::Configure the repository secret SUPABASE_ACCESS_TOKEN before deploying."
             exit 1
           fi
-          supabase functions deploy socioscope-api --project-ref ovssjbldmsowzojeftyr --no-verify-jwt
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - name: Deploy only Socioscope API (never other functions)
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: supabase functions deploy socioscope-api --project-ref ovssjbldmsowzojeftyr --no-verify-jwt --use-api
