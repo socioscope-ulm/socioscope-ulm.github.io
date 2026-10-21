@@ -16,7 +16,8 @@ jobs:
         with:
           deno-version: v2.x
       - name: Resolve and type-check deployable Edge Function
-        run: deno check supabase/functions/socioscope-api/index.ts
+        working-directory: supabase/functions/socioscope-api
+        run: deno check --config deno.json index.ts
       - name: Check package includes private salary reference loader but no private JSON
         run: |
           test -s supabase/functions/socioscope-api/server/references.ts
