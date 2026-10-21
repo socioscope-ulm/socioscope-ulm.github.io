@@ -60,7 +60,12 @@ export function sourcePairs(data:AgentData,id:string,previous?:string){
  }
  const reappeared=appeared.filter(r=>data.records.some(x=>x.agentId===r.agentId&&(data.sources.find(s=>s.id===x.source)?.date||'')<(older?.date||'')));
  const changes=current.filter(r=>{const old=p.get(r.agentId);return old&&((r.nr!==undefined&&old.nr!==undefined&&r.nr!==old.nr)||(r.gf!==undefined&&old.gf!==undefined&&r.gf!==old.gf)||(r.agency&&old.agency&&r.agency!==old.agency));}).map(r=>({current:r,previous:p.get(r.agentId)}));
- return {source:src,previous:older,appeared,absent,reappeared,changes,canInferAbsence:!!src?.primary&&!!older&&older.date<src.date&&current.every(r=>!!r.nni)&&before.every(r=>!!r.nni)};
+ // A complete current photograph and an earlier dated photograph permit an
+ // individual, explicitly verified departure. Missing NNIs still prevent
+ // automatic inference; they must not hide the administrator's review controls.
+ const canConfirmDeparture=!!src?.primary&&!!older&&older.date<src.date&&current.some(r=>!!r.nni)&&before.some(r=>!!r.nni);
+ const canInferAbsence=canConfirmDeparture&&current.every(r=>!!r.nni)&&before.every(r=>!!r.nni);
+ return {source:src,previous:older,appeared,absent,reappeared,changes,canConfirmDeparture,canInferAbsence};
 }
 export function agentProfile(data:AgentData,id:string){const records=data.records.filter(r=>r.agentId===id);const history=data.events.filter(e=>e.agentId===id).sort((a,b)=>b.date.localeCompare(a.date));const sources=data.sources.filter(s=>records.some(r=>r.source===s.id)).sort((a,b)=>b.date.localeCompare(a.date)||Number(b.primary)-Number(a.primary));return {id,rup:data.rup?.records.filter(r=>r.nni===id)||[],records,events:history,sources,snapshots:sources.map(s=>({source:s,situation:snapshot({ ...data,records:records.filter(r=>r.source===s.id)},s.id)[0]}))};}
 export function validateAgentRecord(r:any):r is AgentRecord{return !!r&&typeof r.name==='string'&&r.name.length>0&&r.name.length<180&&typeof r.agentId==='string'&&r.agentId.length<100&&Number.isInteger(r.row)&&r.row>0&&(!r.nni||normalizeNNI(r.nni)===r.nni)&&['nr','gf','nrYears','gfYears','iegYears','age','coefficient'].every(k=>r[k]===undefined||r[k]===null||typeof r[k]==='number'&&Number.isFinite(r[k])&&Math.abs(r[k])<10000);}
