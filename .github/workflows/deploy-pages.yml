@@ -1,16 +1,21 @@
-name: Deploy Socioscope ULM - donnees cadres dirigeants
+name: Deploy autonomous Socioscope ULM
 on:
   push:
     branches: [main]
+    paths:
+      - 'src/**'
+      - 'public/**'
+      - 'index.html'
+      - 'package.json'
+      - 'scripts/build.mjs'
+      - '.github/workflows/deploy-pages.yml'
   workflow_dispatch:
-  schedule:
-    - cron: '17 * * * *'
 permissions:
   contents: read
   pages: write
   id-token: write
 concurrency:
-  group: pages
+  group: socioscope-pages
   cancel-in-progress: true
 jobs:
   deploy:
@@ -20,18 +25,11 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
-        with:
-          repository: fnme-pointage/socioscope-ulm
-          ref: main
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
       - run: npm install --no-audit --no-fund
-      - name: Build pour la racine du nouveau domaine et les chiffres 2025
-        run: |
-          sed -i "s|base:'/socioscope-ulm/'|base:'/'|" scripts/build.mjs
-          grep -q "base:'/'" scripts/build.mjs
-          npm run build
+      - run: npm run build
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
