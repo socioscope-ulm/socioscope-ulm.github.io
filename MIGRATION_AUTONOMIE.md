@@ -20,7 +20,7 @@ La publication de la branche principale n'a pas été modifiée par cette opéra
 7. Tester les rôles admin/lecteur, les rapprochements, les départs confirmés, les cadres dirigeants et les fiches manuelles.
 8. Effectuer la bascule du build et de l'API depuis le nouveau dépôt, puis observer une période de stabilité.
 9. Ensuite seulement supprimer le relais socioscope-bridge et l'ancien dépôt.
-10. Supprimer le workflow temporaire stage-autonomy.yml une fois la bascule terminée.
+10. Le workflow temporaire stage-autonomy.yml a déjà été retiré de main après la copie ; maintenir la branche de préparation sans nouvelle synchronisation implicite.
 
 ## Retour arrière
 Revenir au commit GitHub Pages précédent sans modifier le projet Supabase.
@@ -55,3 +55,9 @@ Revenir au commit GitHub Pages précédent sans modifier le projet Supabase.
 | Exports | Données déjà validées | CSV des absents, exports des analyses et PDF |
 
 **Niveau de préparation :** copie du frontend et workflows autonome effectués ; sortie de dépendance backend et recette fonctionnelle encore requises. **Ne pas fusionner sur main.**
+
+### Vérification supplémentaire : propriété Supabase
+Le projet Supabase `Socioscope ULM` est en état `ACTIVE_HEALTHY` et identifié par `ovssjbldmsowzojeftyr`. Avant l'abandon du compte GitHub historique, vérifier **qui administre l'organisation Supabase propriétaire du projet**, la facturation, les sauvegardes, et que l'équipe du nouveau Socioscope conservera tous les droits de gestion indépendamment de l'ancien compte GitHub.
+
+### Préparation du serveur encore bloquée
+Les trois fichiers de barèmes intégrés dans l'actuel serveur déployé ne sont pas disponibles dans le dépôt historique public, ni sous les objets de stockage nommés `references/` dans le bucket consulté. Les conserver hors Git est obligatoire, mais ils devront être restaurés depuis leur source fiable puis provisionnés en privé afin que la nouvelle organisation puisse reconstruire et déployer `socioscope-api` sans l'ancien dépôt. La recette devra confirmer les mêmes résultats numériques que la version en production, surtout pour rémunérations et coefficients.
