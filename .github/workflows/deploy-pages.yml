@@ -1,4 +1,4 @@
-name: Deploy Socioscope ULM - comptage dirigeants
+name: Deploy Socioscope ULM - export CSV absences
 on:
   push:
     branches: [main]
