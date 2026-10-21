@@ -1,3 +1,22 @@
+## Validation des tests fonctionnels et vérification des anciens relais — 21 octobre 2026
+
+**Validation utilisateur** : les tests fonctionnels du nouveau site sont déclarés concluants, et le bandeau administrateur affiche bien `Version serveur v22`. L'utilisateur autorise la poursuite de l'audit de séparation ; aucune suppression de l'ancienne adresse ou des relais n'a été demandée explicitement à ce stade.
+
+**État de production** : le site utilise directement la fonction `socioscope-api` v22. L'ancienne adresse et le nouveau site restent liés au **même projet Supabase** (ceci est normal et ne prouve pas une dépendance au dépôt GitHub historique).
+
+**Relais hérités** :
+- `socioscope-transfer` version 3 renvoie déjà `410 Migration closed` : elle n'assure plus de transfert actif.
+- `socioscope-bridge` version 1 transmet les requêtes à `socioscope-api` en utilisant l'origine historique ; le nouveau client `src/session.ts` appelle directement `socioscope-api`, sans ce relais.
+- Les derniers journaux observés du relais `socioscope-bridge` datent du 21 octobre 2026 à **13:47:22 UTC** ; les requêtes plus anciennes peuvent provenir de sessions encore ouvertes ou de tests. Les journaux ne garantissent pas l'absence de clients anciens.
+- L'ancien dépôt `fnme-pointage/socioscope-ulm` contient le secours pour les liens d'authentification historiques et son workflow de déploiement est bloqué sauf confirmation explicite. Il est maintenu pour le retour arrière.
+
+**Reste à réaliser avant le retrait effectif** :
+1. Valider les réglages de redirection Auth côté Supabase, notamment invitations et réinitialisations de mot de passe depuis l'ancienne URL.
+2. Organiser l'arrêt volontaire de l'ancienne adresse, en maintenant une redirection ou une page d'information pour les utilisateurs ayant enregistré l'ancien lien.
+3. Après extinction de l'ancien site et contrôle d'absence d'usage, retirer la compatibilité CORS de l'ancien domaine par une nouvelle version testée de l'API.
+4. Retirer `socioscope-bridge` et `socioscope-transfer` seulement après une autorisation explicite, en conservant leurs sources et les moyens de retour arrière.
+5. La sauvegarde externe complète reste recommandée, mais l'utilisateur ne souhaite pas la rendre obligatoire à ce stade. **Aucune suppression du projet Supabase, des comptes, des données ou des fichiers privés n'est prévue.**
+
 ## Première republication entièrement autonome — 21 octobre 2026
 
 - Demande métier : afficher le numéro **réel** de version du serveur dans le bandeau gauche, sous « Socioscope » et « ULM · Observatoire social », uniquement pour le compte administrateur.
@@ -19,7 +38,7 @@
 
 ## Acquis
 - Le nouveau site se construit et se publie depuis le seul dépôt `socioscope-ulm/socioscope-ulm.github.io`.
-- Son serveur Supabase `socioscope-api` est déployé en version 21 depuis le code présent dans ce dépôt.
+- Son serveur Supabase `socioscope-api` est déployé en **version 22** depuis le code présent dans ce dépôt.
 - Les trois références salariales privées sont conservées dans `socioscope.salary_references`, hors GitHub.
 - Les comptes et données métier partagent le projet Supabase `ovssjbldmsowzojeftyr` : il ne faut pas supprimer ce projet.
 - Les utilisateurs et l'administrateur ont validé leurs connexions. La simulation Excel/RUP hors production a été testée.
@@ -30,13 +49,13 @@ Le workflow `.github/workflows/deploy-supabase.yml` est volontairement **manuel*
 
 Le secret GitHub Actions `SUPABASE_ACCESS_TOKEN` a été ajouté au **nouveau dépôt**, puis validé le 21 octobre 2026 par [GitHub Actions — seconde exécution réussie du contrôle d'autorisation](https://github.com/socioscope-ulm/socioscope-ulm.github.io/actions/runs/39648826329). Le workflow a utilisé le jeton pour consulter en lecture seule la liste des Edge Functions du projet Supabase ; il n'a déployé aucun code et n'a modifié aucune donnée.
 
-L'autorisation nécessaire au futur déploiement est ainsi vérifiée. La compilation complète du serveur a également réussi. **Un véritable redéploiement depuis le nouveau workflow n'a pas encore été exécuté** : il devra rester volontaire et accompagné des contrôles de régression et d'un retour arrière.
+L'autorisation de déploiement et la compilation sont vérifiées. **Une publication complète a réussi le 21 octobre 2026**, comme détaillé plus haut pour la version 22. Les prochaines publications restent manuelles et contrôlées.
 
 Le mode de déploiement n'agit que sur `socioscope-api` et conserve `--no-verify-jwt` ; l'application elle-même vérifie les JWT Supabase et les comptes autorisés. Les futures mises à jour doivent être testées avant déclenchement manuel.
 
 ## Compatibilité et limites restantes
 - **Sécurité du dépôt historique :** son workflow de déploiement Supabase exige désormais la confirmation manuelle `RESTAURER_ANCIEN_SERVEUR` avant toute réinstallation de l'ancien serveur, évitant une régression accidentelle. Le dépôt historique et le rollback restent accessibles. Une branche de secours du workflow a été créée : `secours-workflow-api-avant-verrouillage-20261021`.
-- **Activité des relais :** `socioscope-bridge` a eu des requêtes plus tôt le 21 octobre 2026 ; dernière trace observée à 13:47 UTC, aucune requête sur les deux heures précédant la vérification. Ne pas le supprimer sur cette seule base ; l'API principale `socioscope-api` est bien active en version 21.
+- **Activité des relais :** `socioscope-bridge` a eu des requêtes plus tôt le 21 octobre 2026 ; dernière trace observée à 13:47 UTC, aucune requête sur les deux heures précédant la vérification. Ne pas le supprimer sur cette seule base ; l'API principale `socioscope-api` est bien active en version 22.
 - Le serveur accepte provisoirement les origines `https://socioscope-ulm.github.io` **et** `https://fnme-pointage.github.io` pour préserver un retour arrière.
 - Le dépôt historique n'est plus sollicité par les workflows du nouveau site. Son workflow d'API est déjà manuel, pas automatique.
 - Le relais `socioscope-bridge` et la fonction `socioscope-transfer` restent présents dans Supabase. Leur suppression exigerait une étude d'usage indépendante : ils ne constituent pas une preuve que le nouveau site en dépend.
