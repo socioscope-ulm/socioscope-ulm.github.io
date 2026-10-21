@@ -1,4 +1,5 @@
 import {createAccountLink} from './invite';
+import {parseDeploymentVersion} from './version';
 import * as route0 from '../src/app/api/agents/[id]/route';
 import * as route1 from '../src/app/api/agents/decision/route';
 import * as route2 from '../src/app/api/agents/files/[id]/route';
@@ -20,6 +21,9 @@ import {loadSeeds} from './seeds';import {initializeBase} from '../src/lib/store
 const CLIENT_ORIGIN='https://socioscope-ulm.github.io';
 // Accept the legacy address during the overlap, without contacting its website.
 const ALLOWED_ORIGINS=new Set([CLIENT_ORIGIN,'https://fnme-pointage.github.io']);
+// Supabase documents DENO_DEPLOYMENT_ID as: project_ref_function_id_version.
+// Read the deployed version at runtime rather than keeping a hard-coded number.
+const currentServerVersion=()=>parseDeploymentVersion(Deno.env.get('DENO_DEPLOYMENT_ID'));
 const routes:any[]=[[new RegExp('^/api/agents/decision$'),route1],[new RegExp('^/api/agents/import$'),route4],[new RegExp('^/api/payroll/import$'),route11],[new RegExp('^/api/agents$'),route5],[new RegExp('^/api/data$'),route6],[new RegExp('^/api/import$'),route8],[new RegExp('^/api/payroll$'),route12],[new RegExp('^/api/rows$'),route14],[new RegExp('^/api/rup$'),route15],[new RegExp('^/api/agents/files/([^/]+)$'),route2],[new RegExp('^/api/agents/import/([^/]+)$'),route3],[new RegExp('^/api/payroll/files/([^/]+)$'),route9],[new RegExp('^/api/payroll/import/([^/]+)$'),route10],[new RegExp('^/api/agents/([^/]+)$'),route0],[new RegExp('^/api/files/([^/]+)$'),route7],[new RegExp('^/api/review/([^/]+)$'),route13]];
 const json=(body:any,status=200)=>Response.json(body,{status});
 export async function handler(req:Request){
@@ -38,7 +42,7 @@ export async function handler(req:Request){
  if(!member?.enabled || member.user_id&&member.user_id!==user.id)return finish(json({error:'Votre adresse ne dispose pas d’un accès au Socioscope.'},403));
  if(!member.user_id)await db.prepare('UPDATE members SET user_id=? WHERE email=? AND user_id IS NULL').bind(user.id,email).run();
  const u=new URL(req.url);const path=u.pathname.replace(/^\/socioscope-api(?=\/|$)/,'').replace(/^\/functions\/v1\/socioscope-api(?=\/|$)/,'')||'/';
- if(path==='/api/session')return finish(json({email,role:member.role}));
+ if(path==='/api/session')return finish(json({email,role:member.role,...(member.role==='admin'?{serverVersion:currentServerVersion()}:{})}));
  if(!['GET','HEAD'].includes(req.method)&&member.role!=='admin')return finish(json({error:'Modification réservée à l’administrateur.'},403));
  if(path==='/api/members/link'&&req.method==='POST'){
   if(member.role!=='admin')return finish(json({error:'Administration uniquement.'},403));
