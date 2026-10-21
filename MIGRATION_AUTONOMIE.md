@@ -1,3 +1,25 @@
+# Suivi de la bascule autonome — état de production
+
+**Statut au 21 octobre 2026 : frontend et API autonomes publiés, retour arrière conservé.**
+
+- Application GitHub Pages déployée depuis `socioscope-ulm/socioscope-ulm.github.io` : [run réussi](https://github.com/socioscope-ulm/socioscope-ulm.github.io/actions/runs/39638217181).
+- Serveur Supabase `socioscope-api` **version 21 active**, déployée depuis les sources GitHub du nouveau dépôt et les références privées `socioscope.salary_references`.
+- Vérification autonome du client et de la compilation du serveur : [run réussi](https://github.com/socioscope-ulm/socioscope-ulm.github.io/actions/runs/39638396442).
+- Tests publics sans identifiants : [run réussi](https://github.com/socioscope-ulm/socioscope-ulm.github.io/actions/runs/39637494090) (page HTTP 200, CORS ancien/nouveau domaine 204, accès sans session 401, origine inconnue 403).
+- Version antérieure du site : branche `retour-arriere-avant-autonomie-20261021` (commit `72ad188ffb2cddb40fe95fadbb5f3b89e28685f7`).
+- Version 20 antérieure de la fonction `socioscope-api` : **source exacte 796649 caractères** sauvegardée dans `socioscope_backup.edge_function_rollback_20261021`, empreinte MD5 `81606e86cc60508fae2199b7f66acc60`. L'archive se trouve dans un schéma non accessible aux utilisateurs anonymes.
+- Tables et références conservées, snapshots datés ; aucun effacement des 29 objets du bucket privé et aucune suppression de l'ancien dépôt ou de l'ancienne adresse.
+- **Reste à vérifier** : connexion réelle administrateur/lecteur, imports Excel/RUP, écritures, calculs et exports après la version 21. **Sauvegarde externe complète non effectuée**.
+
+## Procédure de retour arrière (si nécessaire)
+
+1. Restaurer d'abord `socioscope-api` version 20 à l'aide du code exact enregistré en privé dans `socioscope_backup.edge_function_rollback_20261021` via le déploiement Supabase ; conserver `verify_jwt=false` comme sur l'original et vérifier l'accès API sans connexion.
+2. Re-publier, si besoin, la version historique du site depuis la branche de secours (commit indiqué) ou rétablir le workflow Pages historique pointant vers l'ancien dépôt. Le simple changement d'adresse URL ne rétablit pas le backend.
+3. **Ne pas restaurer automatiquement un snapshot de données daté** : des utilisateurs peuvent avoir saisi de nouvelles données entre-temps. Ne faire de restauration de données qu'après vérification et analyse ciblée.
+4. Ne pas supprimer les tables de références ni l'ancien dépôt avant la validation métier complète.
+
+---
+
 # Passage à une source autonome pour Socioscope ULM
 
 **Statut : branche de préparation seulement. Ne pas supprimer l'ancien dépôt.**
