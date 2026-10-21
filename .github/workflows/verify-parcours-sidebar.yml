@@ -1,0 +1,38 @@
+name: Verify Parcours graphs and live admin server version
+on:
+  push:
+    branches: [corriger-version-et-graphiques-parcours-20261021]
+    paths:
+      - '.github/workflows/verify-parcours-sidebar.yml'
+      - 'src/**'
+      - 'tests/**'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Validate all regression tests
+        run: node --experimental-strip-types --test tests/*.test.ts
+      - name: Build production and simulator
+        run: |
+          npm run build
+          test -s docs/index.html
+          test -s docs/test/index.html
+      - name: Test public site still available
+        run: |
+          node --input-type=module <<'NODE'
+          for(const uri of ['https://socioscope-ulm.github.io/','https://socioscope-ulm.github.io/test/']){
+            const r=await fetch(uri,{signal:AbortSignal.timeout(20000)});
+            const html=await r.text();
+            if(r.status!==200||!html.includes('id="root"'))throw Error(uri+': HTTP '+r.status+' or missing app shell');
+            console.log('OK '+uri+' HTTP '+r.status);
+          }
+          NODE
