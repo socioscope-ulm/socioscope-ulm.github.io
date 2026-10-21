@@ -1,3 +1,17 @@
+## Correctif situation individuelle — photographie / mouvements (21 octobre 2026)
+
+- Signalement : les boutons « Confirmer la présence », « Confirmer le départ » et « Cadre dirigeant » étaient absents ou bloqués pour certains agents à catégoriser.
+- Cause établie dans le code : l'ensemble des commandes de départ et de classement GF 19 était soumis à une unique condition générale `canInferAbsence` pouvant échouer pour une source partielle, une identité incomplète ou une comparaison imparfaite.
+- Correction : les cadres dirigeants historiques GF 19 sont classables séparément ; les départs peuvent être confirmés individuellement depuis une photographie complète disposant d'un antécédent valide ; la confirmation de présence reste disponible. Une photographie partielle ne permet toujours pas de valider un départ.
+- La photographie de départ par défaut est désormais la plus récente **complète** ; les autres versions restent consultables.
+- Les écritures continuent de passer par l'API administrateur et les recalculs des tableaux utilisent la présence confirmée en conservant les observations d'origine.
+- Tests : présence manuelle répercutée dans les données dérivées, classement GF 19 même sans inférence automatique, départ interdit sur fichier partiel, vérification des permissions administrateur et tests généraux.
+- [Suite de tests et compilation réussies](https://github.com/socioscope-ulm/socioscope-ulm.github.io/actions/runs/39675768334) ; [PR du correctif](https://github.com/socioscope-ulm/socioscope-ulm.github.io/pull/6) ; [publication serveur v24 réussie](https://github.com/socioscope-ulm/socioscope-ulm.github.io/actions/runs/39676022514) ; [tests publics relancés après la publication](https://github.com/socioscope-ulm/socioscope-ulm.github.io/actions/runs/39675959780).
+- Au contrôle après publication, `socioscope-api` est **v24 ACTIVE** ; données inchangées : 5 utilisateurs, 1238 décisions dont 107 départs confirmés et 2 classements GF 19, 29 fichiers privés, 3 références salariales.
+- Pas de décision réelle d'agent prise pendant les tests. **Une validation visuelle par l'administrateur des trois boutons dans une session authentifiée reste à effectuer.**
+- Branche de secours : `secours-v23-avant-commandes-photographie-20261021`.
+- Les workflows d'essai ponctuels ont été supprimés ; le déploiement de l'API reste manuel.
+
 # Socioscope ULM — état de l'autonomie (21 octobre 2026)
 
 ## Adresses et architecture validées
@@ -6,7 +20,7 @@
 - **Simulations locales côté navigateur** : https://socioscope-ulm.github.io/test/
 - **Ancienne adresse conservée uniquement comme redirection** : https://fnme-pointage.github.io/socioscope-ulm/
 - **Code autonome** : dépôt `socioscope-ulm/socioscope-ulm.github.io`. Ses déploiements GitHub Pages et Supabase ne nécessitent plus le dépôt historique.
-- **Serveur Supabase** : fonction `socioscope-api` **v23 ACTIVE** dans le projet `ovssjbldmsowzojeftyr`. Il s'agit désormais de l'**unique Edge Function** du projet.
+- **Serveur Supabase** : fonction `socioscope-api` **v24 ACTIVE** dans le projet `ovssjbldmsowzojeftyr`. Il s'agit désormais de l'**unique Edge Function** du projet.
 - **Données privées** : conservées dans le projet Supabase existant. Ne jamais supprimer ce projet pour fermer le site historique.
 
 ## Connexion, nouveaux accès et récupération de mot de passe
@@ -27,7 +41,7 @@
 
 1. L'ancienne adresse GitHub Pages a été remplacée par une redirection immédiate vers la nouvelle (y compris `404.html` et liens Auth à fragment).
 2. L'ancien domaine `https://fnme-pointage.github.io` a été retiré de la liste CORS autorisée de l'API. Une requête depuis ce domaine reçoit **403** ; depuis le nouveau domaine une requête sans session reçoit **401**.
-3. La fonction `socioscope-api` **v23** a été publiée depuis le **nouveau dépôt GitHub**, après compilation et tests.
+3. La fonction `socioscope-api` **v24** a été publiée depuis le **nouveau dépôt GitHub**, après compilation et tests.
 4. Les fonctions inutilisées `socioscope-bridge` et `socioscope-transfer` ont été **supprimées du déploiement Supabase**, après vérification de l'absence de dépendance de la nouvelle interface. Seule `socioscope-api` reste déployée.
 5. La remise en service du relais depuis l'ancien dépôt est protégée par une confirmation explicite ; le déploiement du serveur historique nécessite également une confirmation.
 6. Les workflows ponctuels ayant servi à changer `site_url`, déployer l'API et supprimer les deux relais ont été supprimés du nouveau dépôt. Les futurs déploiements de l'API restent exclusivement manuels.
