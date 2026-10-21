@@ -10,7 +10,10 @@ test('Parcours et egalite masque seulement les graphes dupliques de salaire et d
   ['remuneration_nonstat_cdd','Rémunération moyenne CDD'],
   ['inflation','Inflation nationale INSEE'],
   ['insee','INSEE évolution des prix'],
-  ['inflation_annual','Inflation annuelle']
+  ['inflation_annual','Inflation annuelle'],
+  ['snb','Revalorisation du SNB'],
+  ['snb_annuel','Taux annuel du SNB'],
+  ['indice_snb','SNB - revalorisation']
  ]){
   assert.equal(parcoursMetricVisible(id,{label,theme:'remuneration'}),false,id);
  }
@@ -32,5 +35,6 @@ test('Le filtrage porte uniquement sur Parcours, les comparaisons salariales res
  assert.match(dashboard,/tab==='parcours'&&data&&!parcoursMetricVisible\(metric/);
  assert.match(dashboard,/const comparisonView=tab==='remuneration'&&salaryView==='comparison'/);
  assert.match(dashboard,/<SalaryComparisonView data=\{data\}/);
+ assert.match(dashboard,/metric==='snb'\?'Revalorisation du SNB'/);
  assert.match(dashboard,/const selectedMetric=populationData!\.metrics\[metric\]/);
 });
