@@ -20,6 +20,11 @@ test('numero de version transmis uniquement pour l administrateur',()=>{
  assert.match(code,/member\.role==='admin'\?\{serverVersion:currentServerVersion\(\)\}:\{\}/);
  assert.match(code,/if\(path==='\/api\/session'\)/);
  const dashboard=readFileSync(new URL('../src\/app\/dashboard.tsx',import.meta.url),'utf8');
- assert.match(dashboard,/\{isAdmin&&<small className="server-version"/);
+ assert.match(dashboard,/\{isAdmin&&<AdminServerVersion initialVersion=\{serverVersion\}\/>\}/);
+ const widget=readFileSync(new URL('../src/app/admin-server-version.tsx',import.meta.url),'utf8');
+ assert.match(widget,/fetch\('\/api\/session'/);
+ assert.match(widget,/session\.role==='admin'/);
+ assert.match(widget,/className="server-version"/);
+ assert.match(widget,/window\.addEventListener\('focus'/);
  assert.ok(!dashboard.includes("Version serveur v22"));
 });
