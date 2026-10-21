@@ -1,4 +1,4 @@
-name: Deploy Socioscope ULM - refresh immediat
+name: Deploy Socioscope ULM - comparaison fichiers
 on:
   push:
     branches: [main]
