@@ -47,8 +47,8 @@ useEffect(()=>{if(!averageSources.length)return;const controller=new AbortContro
   const eligible=averageSources.filter((source:any)=>source.status!=='review'&&String(source.date||'').startsWith(String(year)+'-'));
   const ranked=[...eligible].sort((a:any,b:any)=>String(b.date).localeCompare(String(a.date))||
    (year===to?Number(!!b.primary)-Number(!!a.primary):
-    Number(/onglets?\\s+mis\\s+en\\s+forme/i.test(String(b.name)+' '+String(b.label)))-
-    Number(/onglets?\\s+mis\\s+en\\s+forme/i.test(String(a.name)+' '+String(a.label)))||
+    Number(/onglets?\s+mis\s+en\s+forme/i.test(String(b.name)+' '+String(b.label)))-
+    Number(/onglets?\s+mis\s+en\s+forme/i.test(String(a.name)+' '+String(a.label)))||
     Number(!!b.primary)-Number(!!a.primary)));
   const selected=ranked[0];if(!selected)return;
   const params=new URLSearchParams({source:selected.id,view:'list',archive:'0',offset:'0',
