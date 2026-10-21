@@ -1,0 +1,35 @@
+name: Deploy autonomous Socioscope API (manual, gated)
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Stop if private reference provisioning is incomplete
+        run: |
+          for file in private-data/references/salary-grid-2026.json private-data/references/annual-bonuses-2025.json private-data/references/historical-salary-grids.json; do
+            if [ ! -s "$file" ]; then
+              echo "::error::Missing protected reference: $file. Configure secure provision before server deployment."
+              exit 1
+            fi
+          done
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - name: Prepare API from this repository only
+        run: |
+          mkdir -p supabase/functions/socioscope-api
+          printf "import '../../../server/index.ts';\n" > supabase/functions/socioscope-api/index.ts
+          python3 .github/scripts/prepare-edge.py
+      - name: Deploy Socioscope API
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          if [ -z "$SUPABASE_ACCESS_TOKEN" ]; then
+            echo "::error::Missing SUPABASE_ACCESS_TOKEN secret in the new repository"
+            exit 1
+          fi
+          supabase functions deploy socioscope-api --project-ref ovssjbldmsowzojeftyr --no-verify-jwt
