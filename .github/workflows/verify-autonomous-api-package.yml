@@ -1,0 +1,32 @@
+name: Validate independent API deployment package
+on:
+  push:
+    branches: [preparation-deploiement-api-autonome-20261021]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Package API source without the historical repository
+        run: sh .github/scripts/package-autonomous-api.sh
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Resolve and type-check deployable Edge Function
+        run: deno check supabase/functions/socioscope-api/index.ts
+      - name: Check package includes private salary reference loader but no private JSON
+        run: |
+          test -s supabase/functions/socioscope-api/server/references.ts
+          ! grep -R -n 'private-data/references/' supabase/functions/socioscope-api/server supabase/functions/socioscope-api/src
+          ! grep -R -n 'repository: fnme-pointage/socioscope-ulm' .github/workflows/deploy-supabase.yml
+      - name: Build both production and TEST pages
+        run: |
+          npm install --no-audit --no-fund
+          npm run build
+          test -s docs/index.html
+          test -s docs/test/index.html
+      - name: Run regression tests
+        run: node --experimental-strip-types --test tests/*.test.ts
