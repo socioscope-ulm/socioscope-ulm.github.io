@@ -1,0 +1,76 @@
+name: Retire inactive historical Supabase relays (one time)
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/delete-legacy-edge-relays-20261021.yml'
+permissions:
+  contents: read
+jobs:
+  retire-relays:
+    if: github.event.head_commit.message == 'SUPPRIMER_UNIQUEMENT_RELAIS_HISTORIQUES_20261021'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Prove autonomous Auth, production app and CORS are ready before changing anything
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          const token=process.env.SUPABASE_ACCESS_TOKEN;
+          if(!token)throw Error('Missing token');
+          const cfg=await fetch('https://api.supabase.com/v1/projects/ovssjbldmsowzojeftyr/config/auth',{
+            headers:{Authorization:'Bearer '+token},signal:AbortSignal.timeout(20000)});
+          if(!cfg.ok)throw Error('Unable to verify Supabase Auth configuration '+cfg.status);
+          const c=await cfg.json();
+          assert.equal(c.site_url,'https://socioscope-ulm.github.io/');
+          assert.equal(c.external_email_enabled,true);
+          assert.equal(c.disable_signup,false);
+          const base='https://socioscope-ulm.github.io/';
+          const page=await fetch(base,{signal:AbortSignal.timeout(20000)});
+          assert.equal(page.status,200);
+          assert.match(await page.text(),/id="root"/);
+          const old=await fetch('https://fnme-pointage.github.io/socioscope-ulm/?retirement-check=1',{signal:AbortSignal.timeout(20000)});
+          assert.equal(old.status,200);
+          const fallback=await old.text();
+          assert.ok(fallback.includes('window.location.replace(destination.href)'));
+          assert.ok(fallback.includes('destination.hash = window.location.hash'));
+          const api='https://ovssjbldmsowzojeftyr.supabase.co/functions/v1/socioscope-api';
+          const session=(origin)=>fetch(api+'/api/session',{headers:{Origin:origin},signal:AbortSignal.timeout(20000)});
+          const fresh=await session('https://socioscope-ulm.github.io');
+          assert.equal(fresh.status,401);
+          assert.equal(fresh.headers.get('access-control-allow-origin'),'https://socioscope-ulm.github.io');
+          const legacy=await session('https://fnme-pointage.github.io');
+          assert.equal(legacy.status,403);
+          const anonymousMembers=await fetch(api+'/api/members',{headers:{Origin:'https://socioscope-ulm.github.io'},signal:AbortSignal.timeout(20000)});
+          assert.equal(anonymousMembers.status,401);
+          console.log('Preflight OK: standalone homepage, recovery redirect, correct Auth Site URL, admin access protection and retired CORS.');
+          NODE
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.117.0
+      - name: Confirm API exists and the historical relays are still present
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          supabase functions list --project-ref ovssjbldmsowzojeftyr > /tmp/socioscope-function-list.txt
+          grep -F 'socioscope-api' /tmp/socioscope-function-list.txt
+          grep -F 'socioscope-bridge' /tmp/socioscope-function-list.txt
+          grep -F 'socioscope-transfer' /tmp/socioscope-function-list.txt
+      - name: Delete only the two retired relays, never the autonomous API
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          supabase functions delete socioscope-bridge --project-ref ovssjbldmsowzojeftyr --yes
+          supabase functions delete socioscope-transfer --project-ref ovssjbldmsowzojeftyr --yes
+      - name: Verify only the correct API remains after cleanup
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          supabase functions list --project-ref ovssjbldmsowzojeftyr > /tmp/socioscope-function-list-after.txt
+          grep -F 'socioscope-api' /tmp/socioscope-function-list-after.txt
+          if grep -E 'socioscope-(bridge|transfer)' /tmp/socioscope-function-list-after.txt; then
+            echo "::error::Unexpected historic relay after cleanup"
+            exit 1
+          fi
+          echo "Only the independent Socioscope API remains deployed."
