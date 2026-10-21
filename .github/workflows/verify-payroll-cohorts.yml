@@ -1,4 +1,4 @@
-name: Verify salary cohort filters and autonomous API
+name: Verify salary cohort filters and autonomous API (final)
 on:
   push:
     branches: [activer-filtres-masse-salariale-20261021]
