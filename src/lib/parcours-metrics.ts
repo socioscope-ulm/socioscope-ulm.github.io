@@ -1,5 +1,5 @@
 // Preserve the dedicated Remunerations page; avoid duplicating its
-// salary / inflation / INSEE charts in Parcours & egalite.
+// salary / inflation / INSEE / SNB charts in Parcours & egalite.
 type MetricLabel={label?:string;theme?:string};
 export function parcoursMetricVisible(id:string,metric:MetricLabel):boolean{
  const key=id.toLowerCase();
@@ -8,5 +8,6 @@ export function parcoursMetricVisible(id:string,metric:MetricLabel):boolean{
    /^remuneration moyenne(?:\b|\s|$)/.test(label);
  const priceOrInsee=key==='inflation'||key==='insee'||key.startsWith('inflation_')||
    key.startsWith('insee_')||/\b(?:inflation|insee)\b/.test(label);
- return !duplicatedSalary&&!priceOrInsee;
+ const snb=key==='snb'||key.startsWith('snb_')||/\b(?:revalorisation\s+(?:du\s+)?snb|snb)\b/.test(label);
+ return !duplicatedSalary&&!priceOrInsee&&!snb;
 }
