@@ -10,10 +10,13 @@ export async function GET(request:Request){try{
  // les historiques de carriere ni recalculer la masse salariale.
  const {db,bucket}=resources();
  const rup=JSON.parse(rupSeedText) as {sources:any[];records:any[]};
+ const excluded=(await db.prepare('SELECT source_id FROM rup_source_exclusions').all<{source_id:string}>()).results.map(x=>x.source_id);
+ const excludedIds=new Set(excluded);
+ rup.sources=rup.sources.filter(x=>!excludedIds.has(x.id));rup.records=rup.records.filter(x=>!excludedIds.has(x.source));
  const imports=await db.prepare('SELECT id,name,hash,date,status,count,detail FROM agent_imports').all<any>();
  for(const m of imports.results){
    let detail:any;try{detail=JSON.parse(m.detail||'{}');}catch{continue;}
-   if(detail.kind!=='rup'||m.status!=='validated')continue;
+   if(detail.kind!=='rup'||m.status!=='validated'||excludedIds.has(m.id))continue;
    const object=await bucket.get('agents/'+m.id+'/records.json');
    if(!object)continue;
    rup.sources.push({id:m.id,name:m.name,hash:m.hash,date:m.date,count:m.count,status:m.status});
@@ -51,7 +54,7 @@ export async function GET(request:Request){try{
   return {year:a.year,files:a.files,agents:a.agents.size,genreKnown:direct,genreRecovered:recovered,genreConflicts:conflicts};
  });
  const stats=rupStats(rup);
- return Response.json({sources:rup.sources,years,stats:{...stats,matched:null},notes:[]},{headers:{'Cache-Control':'no-store'}});
+ return Response.json({sources:rup.sources,excluded,years,stats:{...stats,matched:null},notes:[]},{headers:{'Cache-Control':'no-store'}});
  }catch(e){return agentError(e);}}
 export async function POST(request:Request){const denied=accessError(request,true);if(denied)return denied;try{
  await agentAuth(request,true);
@@ -69,8 +72,9 @@ export async function POST(request:Request){const denied=accessError(request,tru
  const existing=imported.results.filter((r:any)=>{try{return JSON.parse(r.detail||'{}').kind==='rup'&&r.status==='validated';}catch{return false;}});
  if(archived.sources.some(r=>r.hash===hash)||imported.results.some((r:any)=>r.hash===hash))
   throw Object.assign(Error('Ce fichier a déjà été intégré.'),{status:409});
- const sameSeed=archived.sources.filter(r=>r.date===date);
- const sameImported=existing.filter((r:any)=>r.date===date);
+ const excludedIds=new Set((await db.prepare('SELECT source_id FROM rup_source_exclusions').all<{source_id:string}>()).results.map(x=>x.source_id));
+ const sameSeed=archived.sources.filter(r=>r.date===date&&!excludedIds.has(r.id));
+ const sameImported=existing.filter((r:any)=>r.date===date&&!excludedIds.has(r.id));
  const incoming=new Set(records.map(r=>r.nni+'|'+r.contrat));
  const prior=new Set(archived.records.filter(r=>sameSeed.some(x=>x.id===r.source)).map(r=>r.nni+'|'+r.contrat));
  for(const src of sameImported){
@@ -82,4 +86,19 @@ export async function POST(request:Request){const denied=accessError(request,tru
  const id='rup-imp-'+crypto.randomUUID();await bucket.put('agents/'+id+'/records.json',JSON.stringify(records.map((r:any)=>({...r,source:id}))));await bucket.put('agents/'+id+'/original',rupCSV(records.map((r:any)=>({...r,source:id}))),{httpMetadata:{contentType:'text/csv;charset=utf-8'}});
  await db.prepare('INSERT INTO agent_imports (id,name,hash,date,created,status,count,complete,detail) VALUES (?,?,?,?,?,?,?,?,?)').bind(id,filename,hash,date,new Date().toISOString(),'validated',records.length,0,JSON.stringify({kind:'rup',sanitized:true})).run();
  return Response.json({id,count:records.length});
+ }catch(e){return agentError(e);}}
+
+export async function DELETE(request:Request){const denied=accessError(request,true);if(denied)return denied;try{
+ await agentAuth(request,true);const body=await request.json() as {id?:string};
+ const id=String(body.id||'');const archived=JSON.parse(rupSeedText) as {sources:{id:string;name:string}[]};
+ const imported=await resources().db.prepare('SELECT id,detail FROM agent_imports WHERE id=?').bind(id).first<any>();
+ const isImport=imported&&JSON.parse(imported.detail||'{}').kind==='rup';
+ if(!archived.sources.some(x=>x.id===id)&&!isImport)throw Object.assign(Error('RUP non reconnu.'),{status:404});
+ await resources().db.prepare('INSERT INTO rup_source_exclusions(source_id) VALUES (?) ON CONFLICT(source_id) DO NOTHING').bind(id).run();
+ return Response.json({ok:true,id,archived:true});
+ }catch(e){return agentError(e);}}
+export async function PATCH(request:Request){const denied=accessError(request,true);if(denied)return denied;try{
+ await agentAuth(request,true);const body=await request.json() as {id?:string};const id=String(body.id||'');
+ await resources().db.prepare('DELETE FROM rup_source_exclusions WHERE source_id=?').bind(id).run();
+ return Response.json({ok:true,id});
  }catch(e){return agentError(e);}}
