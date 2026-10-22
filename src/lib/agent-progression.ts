@@ -12,12 +12,12 @@ function anchor(r:AgentRecord,s:AgentSource,key:'gf'|'nr'){
  const years=r[key==='gf'?'gfYears':'nrYears'];
  return typeof years==='number'&&Number.isFinite(years)&&years>=0&&Number.isFinite(ref)?{time:ref-years*yearMs,estimated:true}:null;
 }
-export function agentProgression(data:AgentData,sourceId:string,includePassages=false){
+export function agentProgression(data:AgentData,sourceId:string,includePassages=false, snapshotFor:(source:string)=>ReturnType<typeof snapshot>=(source)=>snapshot(data,source)){
  const reference=data.sources.find(s=>s.id===sourceId);if(!reference)return null;
  const sources=data.sources.filter(s=>(s.primary||s.status==='validated')&&s.status!=='review'&&s.date<=reference.date).sort((a,b)=>a.date.localeCompare(b.date)||a.id.localeCompare(b.id));
  const histories=new Map<string,{record:AgentRecord;source:AgentSource}[]>();
  // Alternative files and duplicate situations never create extra passages.
- for(const s of sources)for(const r of snapshot(data,s.id).filter(r=>r.nni)){
+ for(const s of sources)for(const r of snapshotFor(s.id).filter(r=>r.nni)){
   const h=histories.get(r.agentId)||[];h.push({record:r,source:s});histories.set(r.agentId,h);
  }
  const passages:{gf:Passage[];nr:Passage[]}={gf:[],nr:[]};
@@ -31,7 +31,7 @@ export function agentProgression(data:AgentData,sourceId:string,includePassages=
   const years=(end.time-start.time)/yearMs;if(years>60)continue;
   passages[key].push({agentId,from,to,years,estimated:start.estimated||end.estimated});
  }
- const current=snapshot(data,sourceId).filter(r=>r.nni);
+ const current=snapshotFor(sourceId).filter(r=>r.nni);
  const summarize=(rows:Passage[])=>({mean:mean(rows.map(r=>r.years)),count:rows.length,estimated:rows.filter(r=>r.estimated).length});
  const groups=(key:'gf'|'nr')=>[...new Set(passages[key].map(r=>r.from))].sort((a,b)=>a-b).map(level=>({level,...summarize(passages[key].filter(r=>r.from===level))}));
  const nrByGF=[...new Set(current.map(r=>r.gf).filter((v):v is number=>typeof v==='number'))].sort((a,b)=>a-b).map(gf=>{const rows=current.filter(r=>r.gf===gf);const values=rows.map(r=>r.nr).filter((v):v is number=>typeof v==='number');return {gf,agents:rows.length,count:values.length,mean:mean(values)};});

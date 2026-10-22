@@ -41,29 +41,31 @@ export function withRupCareer(data:AgentData,rup:RupData):AgentData{
 }
 // Enrichissement leger du sexe, independant des calculs de carriere.
 export function withRupSex(data:AgentData,rup:RupData):AgentData{
- const byNNI=new Map<string,Map<string,Set<string>>>();
+ // Resolve sex once per NNI and contract. Recalculating every historical RUP
+ // contract's Set for every individual file row exceeds the Edge CPU budget.
+ const byNNI=new Map<string,{contracts:Map<string,Set<string>>;all:Set<string>}>();
  for(const row of rup.records){
   const nni=normalizeNNI(row.nni),sex=normalizeAgentSex(row.genre);
   if(!nni||!sex)continue;
-  let contracts=byNNI.get(nni);
-  if(!contracts){contracts=new Map();byNNI.set(nni,contracts);}
+  let group=byNNI.get(nni);
+  if(!group){group={contracts:new Map(),all:new Set()};byNNI.set(nni,group);}
+  group.all.add(sex);
   const contract=String(row.contrat||'').trim();
-  let sexes=contracts.get(contract);
-  if(!sexes){sexes=new Set();contracts.set(contract,sexes);}
+  let sexes=group.contracts.get(contract);
+  if(!sexes){sexes=new Set();group.contracts.set(contract,sexes);}
   sexes.add(sex);
  }
  return {...data,records:data.records.map(r=>{
   if(normalizeAgentSex(r.sex))return r;
-  const nni=normalizeNNI(r.nni),contracts=nni?byNNI.get(nni):undefined;
-  if(!contracts)return r;
+  const nni=normalizeNNI(r.nni),group=nni?byNNI.get(nni):undefined;
+  if(!group)return r;
   const contract=String(r.contract||'').trim();
-  const matching=contract?contracts.get(contract):undefined;
-  // En l'absence de correspondance de contrat, utiliser seulement un sexe
-  // identique sur TOUS les RUP historiques de ce NNI, jamais une estimation.
-  const allSexes=new Set([...contracts.values()].flatMap(v=>[...v]));
-  const values=matching||allSexes;
-  if(!values||values.size!==1)return r;
-  return {...r,sex:[...values][0]};
+  const matching=contract?group.contracts.get(contract):undefined;
+  // A conflicting or absent contract may only use an unanimous NNI-level sex;
+  // no inference is made from first names, job titles, or colleges.
+  const values=matching||group.all;
+  if(values.size!==1)return r;
+  return {...r,sex:values.values().next().value};
  })};
 }
 export async function parseRupFile(file:File,date:string){

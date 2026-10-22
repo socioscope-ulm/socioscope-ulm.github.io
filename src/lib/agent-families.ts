@@ -30,23 +30,37 @@ export function agentFamilies(data:AgentData, sourceId:string, agency='', plage=
   if(!reference)return null;
   // Discover every current source label, including new validated imports.
   // Labels are normalized only for matching, never inferred from a job or agency.
+  const bySource=new Map<string,AgentRecord[]>();
+  for(const r of data.records){const list=bySource.get(r.source)||[];list.push(r);bySource.set(r.source,list);}
+  // Build each snapshot at most once. Previously each historical source
+  // repeatedly scanned ALL records, then rebuilt the same snapshot again
+  // for the historical GF/NR progression.
+  const snapshotCache=new Map<string,ReturnType<typeof snapshot>>();
+  const snapshotFor=(id:string)=>{
+    let rows=snapshotCache.get(id);
+    if(!rows){rows=snapshot({...data,records:bySource.get(id)||[]},id);snapshotCache.set(id,rows);}
+    return rows;
+  };
   const currentTeams=new Map<string,string>();
-  for(const r of data.records)if(r.source===sourceId&&normalName(r.team))currentTeams.set(normalName(r.team),r.team!.trim());
+  for(const r of bySource.get(sourceId)||[])if(normalName(r.team))currentTeams.set(normalName(r.team),r.team!.trim());
   const definitions:{id:string;label:string;team:string}[]=[...families.filter(f=>currentTeams.has(f.team))];
   for(const [team,label] of [...currentTeams].sort(([a],[b])=>a.localeCompare(b,'fr')))if(!definitions.some(f=>f.team===team))definitions.push({id:'service:'+team,label,team});
-  if(data.records.some(r=>r.source===sourceId&&!normalName(r.team)))definitions.push({id:'non-renseigne',label:'Non renseigné',team:''});
+  if((bySource.get(sourceId)||[]).some(r=>!normalName(r.team)))definitions.push({id:'non-renseigne',label:'Non renseigné',team:''});
   const teamIds=new Map(definitions.map(f=>[f.team,f.id]));
+  const familyCache=new Map<string,(AgentRecord&{family:string|undefined})[]>();
   const rowsFor=(id:string)=>{
+    const cached=familyCache.get(id);if(cached)return cached;
     const teams=new Map<string,Set<string>>();
-    for(const r of data.records)if(r.source===id){const set=teams.get(r.agentId)||new Set<string>();set.add(normalName(r.team));teams.set(r.agentId,set);}
-    return snapshot(data,id).map(r=>({...r, family:teams.get(r.agentId)?.size===1 ? teamIds.get([...teams.get(r.agentId)!][0]) : 'rattachement-divergent'}));
+    for(const r of bySource.get(id)||[]){let set=teams.get(r.agentId);if(!set){set=new Set();teams.set(r.agentId,set);}set.add(normalName(r.team));}
+    const rows=snapshotFor(id).map(r=>({...r,family:teams.get(r.agentId)?.size===1 ? teamIds.get([...teams.get(r.agentId)!][0]) : 'rattachement-divergent'}));
+    familyCache.set(id,rows);return rows;
   };
   const all=rowsFor(sourceId);
   if(all.some(r=>r.family==='rattachement-divergent'))definitions.push({id:'rattachement-divergent',label:'Rattachement divergent · à vérifier',team:'__CONFLICT__'});
   const selected=all.filter(r=>(!agency||r.agency===agency)&&(!plage||m3eKey(r)===plage)&&matchesAgentCohort(r,college,sex));
   // One historical traversal for all services. Previously repeated for every
   // family, exceeding the Edge Function's CPU budget (HTTP 546).
-  const allProgression=agentProgression(data,sourceId,true);
+  const allProgression=agentProgression(data,sourceId,true,snapshotFor);
   const passageSummary=(rows:{agentId:string;years:number;estimated:boolean}[])=>({mean:mean(rows.map(p=>p.years)),count:rows.length,estimated:rows.filter(p=>p.estimated).length});
   const histories=new Map<string,AgentRecord[]>();
   for(const r of data.records){const list=histories.get(r.agentId)||[];list.push(r);histories.set(r.agentId,list);}
