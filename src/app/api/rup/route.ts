@@ -4,7 +4,37 @@ import {resources} from '../../../lib/store';
 import {parseRupFile,rupCSV,rupStats} from '../../../lib/rup';
 import {normalizeAgentSex} from '../../../lib/agents';
 import {rupSeedText} from '../../../../server/seeds';
-export async function GET(request:Request){try{await agentAuth(request);const {data}=await agentData();const rup=data.rup!;const matched=new Set(data.records.filter(r=>r.rupCareer).map(r=>r.nni));const years=[...new Set(rup.sources.map(s=>Number(String(s.date).slice(0,4))).filter(Number.isFinite))].sort((a,b)=>a-b).map(year=>{const sourceIds=new Set(rup.sources.filter(s=>Number(String(s.date).slice(0,4))===year).map(s=>s.id));const rows=rup.records.filter(r=>sourceIds.has(r.source));const unique=new Map<string,Set<string>>();for(const r of rows){if(!r.nni)continue;const set=unique.get(r.nni)||new Set<string>();const sex=normalizeAgentSex(r.genre);if(sex)set.add(sex);unique.set(r.nni,set);}return {year,files:sourceIds.size,agents:unique.size,genreKnown:[...unique.values()].filter(v=>v.size===1).length,genreConflicts:[...unique.values()].filter(v=>v.size>1).length};});return Response.json({sources:rup.sources,years,stats:{...rupStats(rup),matched:matched.size},notes:['6 lignes sans NNI reconnu ont été écartées des fichiers fournis.','RUP 31 décembre 2022 : fichier chiffré, non intégré.','RUP 2024 : aucun fichier exploitable retrouvé.']},{headers:{'Cache-Control':'no-store'}});}catch(e){return agentError(e);}}
+export async function GET(request:Request){try{
+ await agentAuth(request);
+ // La liste de RUP doit rester legere : ne jamais charger les fiches agents,
+ // les historiques de carriere ni recalculer la masse salariale.
+ const {db,bucket}=resources();
+ const rup=JSON.parse(rupSeedText) as {sources:any[];records:any[]};
+ const imports=await db.prepare('SELECT id,name,hash,date,status,count,detail FROM agent_imports').all<any>();
+ for(const m of imports.results){
+   let detail:any;try{detail=JSON.parse(m.detail||'{}');}catch{continue;}
+   if(detail.kind!=='rup'||m.status!=='validated')continue;
+   const object=await bucket.get('agents/'+m.id+'/records.json');
+   if(!object)continue;
+   rup.sources.push({id:m.id,name:m.name,hash:m.hash,date:m.date,count:m.count,status:m.status});
+   rup.records.push(...await object.json<any[]>());
+ }
+ const annual=new Map<number,{year:number;files:number;agents:Set<string>;sexes:Map<string,Set<string>>}>();
+ for(const src of rup.sources){
+   const year=Number(String(src.date).slice(0,4));if(!Number.isFinite(year))continue;
+   if(!annual.has(year))annual.set(year,{year,files:0,agents:new Set(),sexes:new Map()});
+   annual.get(year)!.files++;
+ }
+ const yearsToSources=new Map(rup.sources.map(s=>[s.id,Number(String(s.date).slice(0,4))]));
+ for(const r of rup.records){
+   const year=yearsToSources.get(r.source),a=annual.get(year!);if(!a||!r.nni)continue;
+   a.agents.add(r.nni);const values=a.sexes.get(r.nni)||new Set<string>();
+   const sex=normalizeAgentSex(r.genre);if(sex)values.add(sex);a.sexes.set(r.nni,values);
+ }
+ const years=[...annual.values()].sort((a,b)=>a.year-b.year).map(a=>({year:a.year,files:a.files,agents:a.agents.size,genreKnown:[...a.sexes.values()].filter(v=>v.size===1).length,genreConflicts:[...a.sexes.values()].filter(v=>v.size>1).length}));
+ const stats=rupStats(rup);
+ return Response.json({sources:rup.sources,years,stats:{...stats,matched:null},notes:[]},{headers:{'Cache-Control':'no-store'}});
+ }catch(e){return agentError(e);}}
 export async function POST(request:Request){const denied=accessError(request,true);if(denied)return denied;try{
  await agentAuth(request,true);const f=await request.formData();const file=f.get('file'),date=String(f.get('date')||'');
  if(!(file instanceof File)||!/\.(xlsx|xls|xlsm)$/i.test(file.name)||!/^20\d{2}-\d{2}-\d{2}$/.test(date)||!Number.isFinite(Date.parse(date))||new Date(date).toISOString().slice(0,10)!==date)throw Object.assign(Error('Choisir un RUP Excel et une date de référence valide.'),{status:400});
