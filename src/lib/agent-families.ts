@@ -1,5 +1,5 @@
 import {m3eKey,m3eOptions,m3eMeans} from './agent-m3e.ts';
-import {snapshot, normalName, careerSeniority} from './agents.ts';
+import {snapshot, normalName, careerSeniority, matchesAgentCohort, normalizeAgentSex} from './agents.ts';
 import type {AgentData, AgentRecord} from './agents.ts';
 import {agentProgression} from './agent-progression.ts';
 
@@ -25,7 +25,7 @@ export const families = [
 ] as const;
 const mean = (values:number[]) => values.length ? values.reduce((a,b)=>a+b,0)/values.length : null;
 const finite = (v:unknown):v is number => typeof v==='number' && Number.isFinite(v);
-export function agentFamilies(data:AgentData, sourceId:string, agency='', plage='') {
+export function agentFamilies(data:AgentData, sourceId:string, agency='', plage='', college='', sex='') {
   const reference=data.sources.find(s=>s.id===sourceId);
   if(!reference)return null;
   // Discover every current source label, including new validated imports.
@@ -43,7 +43,11 @@ export function agentFamilies(data:AgentData, sourceId:string, agency='', plage=
   };
   const all=rowsFor(sourceId);
   if(all.some(r=>r.family==='rattachement-divergent'))definitions.push({id:'rattachement-divergent',label:'Rattachement divergent · à vérifier',team:'__CONFLICT__'});
-  const selected=all.filter(r=>(!agency||r.agency===agency)&&(!plage||m3eKey(r)===plage));
+  const selected=all.filter(r=>(!agency||r.agency===agency)&&(!plage||m3eKey(r)===plage)&&matchesAgentCohort(r,college,sex));
+  // One historical traversal for all services. Previously repeated for every
+  // family, exceeding the Edge Function's CPU budget (HTTP 546).
+  const allProgression=agentProgression(data,sourceId,true);
+  const passageSummary=(rows:{agentId:string;years:number;estimated:boolean}[])=>({mean:mean(rows.map(p=>p.years)),count:rows.length,estimated:rows.filter(p=>p.estimated).length});
   const histories=new Map<string,AgentRecord[]>();
   for(const r of data.records){const list=histories.get(r.agentId)||[];list.push(r);histories.set(r.agentId,list);}
   const summaries=definitions.map(f=>{
@@ -51,14 +55,17 @@ export function agentFamilies(data:AgentData, sourceId:string, agency='', plage=
     const average=(key:'gf'|'nr'|'age')=>{const values=members.map(r=>r[key]).filter(finite);return {mean:mean(values),count:values.length};};
     const seniorities=members.map(r=>careerSeniority(histories.get(r.agentId)||[],data.sources,reference.date)).filter(s=>s&&finite(s.years));
     const ids=new Set(members.map(r=>r.agentId));
-    const progression=members.length ? agentProgression({...data,records:data.records.filter(r=>ids.has(r.agentId)),events:[]},sourceId) : null;
+    const progression=members.length&&allProgression?.passages ? {
+      gf:passageSummary(allProgression.passages.gf.filter(p=>ids.has(p.agentId))),
+      nr:passageSummary(allProgression.passages.nr.filter(p=>ids.has(p.agentId)))
+    } : null;
     const colleges=['cadres','maitrise','execution'].map(id=>({id,label:{cadres:'Cadres',maitrise:'Maîtrise',execution:'Exécution'}[id],count:members.filter(r=>finite(r.gf)?(r.gf>=12?'cadres':r.gf>=7?'maitrise':'execution')===id:r.college===id).length}));
     return {...f,available:all.some(r=>r.family===f.id),agents:members.length,pending:selected.filter(r=>r.family===f.id&&!r.nni).length,manual:members.filter(r=>r.manualPresence).length,gf:average('gf'),nr:average('nr'),age:average('age'),seniority:{mean:mean(seniorities.map(s=>s!.years!)),count:seniorities.length,estimated:seniorities.filter(s=>s!.estimated).length},colleges,progression};
   });
   // An absent service label is unavailable, never an inferred zero.
   const timeline=data.sources.filter(s=>(s.primary||s.status==='validated')&&s.status!=='review'&&s.date<=reference.date).sort((a,b)=>a.date.localeCompare(b.date)).flatMap(s=>{
     const rows=rowsFor(s.id);
-    const scoped=rows.filter(r=>r.nni&&(!agency||r.agency===agency)&&(!plage||m3eKey(r)===plage));
+    const scoped=rows.filter(r=>r.nni&&(!agency||r.agency===agency)&&(!plage||m3eKey(r)===plage)&&matchesAgentCohort(r,college,sex));
     return [{date:s.date,source:s.id,label:s.label,...Object.fromEntries(definitions.map(f=>[f.id,rows.some(r=>r.family===f.id)&&(!plage||rows.some(r=>m3eKey(r)===plage))?scoped.filter(r=>r.family===f.id).length:null]))}];
   });
   // Retain every calendar year between the first and last accepted photograph.
@@ -72,5 +79,5 @@ export function agentFamilies(data:AgentData, sourceId:string, agency='', plage=
     }
     annualTimeline.sort((a,b)=>a.date.localeCompare(b.date));
   }
-  return {reference,summaries,timeline:annualTimeline,agency,plage,plages:m3eOptions(all),m3eMeans:m3eMeans(selected),agencies:[...new Set(all.map(r=>r.agency).filter((v):v is string=>!!v))].sort(),total:selected.length,pending:selected.filter(r=>!r.nni).length,classified:selected.filter(r=>r.family&&r.nni).length,outside:selected.filter(r=>!r.family).length};
+  return {reference,summaries,timeline:annualTimeline,agency,plage,college,sex,sexKnown:all.filter(r=>r.nni&&normalizeAgentSex(r.sex)!==null).length,sexTotal:all.filter(r=>r.nni).length,plages:m3eOptions(all),m3eMeans:m3eMeans(selected),agencies:[...new Set(all.map(r=>r.agency).filter((v):v is string=>!!v))].sort(),total:selected.length,pending:selected.filter(r=>!r.nni).length,classified:selected.filter(r=>r.family&&r.nni).length,outside:selected.filter(r=>!r.family).length};
 }

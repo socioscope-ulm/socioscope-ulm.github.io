@@ -12,7 +12,7 @@ function anchor(r:AgentRecord,s:AgentSource,key:'gf'|'nr'){
  const years=r[key==='gf'?'gfYears':'nrYears'];
  return typeof years==='number'&&Number.isFinite(years)&&years>=0&&Number.isFinite(ref)?{time:ref-years*yearMs,estimated:true}:null;
 }
-export function agentProgression(data:AgentData,sourceId:string){
+export function agentProgression(data:AgentData,sourceId:string,includePassages=false){
  const reference=data.sources.find(s=>s.id===sourceId);if(!reference)return null;
  const sources=data.sources.filter(s=>(s.primary||s.status==='validated')&&s.status!=='review'&&s.date<=reference.date).sort((a,b)=>a.date.localeCompare(b.date)||a.id.localeCompare(b.id));
  const histories=new Map<string,{record:AgentRecord;source:AgentSource}[]>();
@@ -35,5 +35,5 @@ export function agentProgression(data:AgentData,sourceId:string){
  const summarize=(rows:Passage[])=>({mean:mean(rows.map(r=>r.years)),count:rows.length,estimated:rows.filter(r=>r.estimated).length});
  const groups=(key:'gf'|'nr')=>[...new Set(passages[key].map(r=>r.from))].sort((a,b)=>a-b).map(level=>({level,...summarize(passages[key].filter(r=>r.from===level))}));
  const nrByGF=[...new Set(current.map(r=>r.gf).filter((v):v is number=>typeof v==='number'))].sort((a,b)=>a-b).map(gf=>{const rows=current.filter(r=>r.gf===gf);const values=rows.map(r=>r.nr).filter((v):v is number=>typeof v==='number');return {gf,agents:rows.length,count:values.length,mean:mean(values)};});
- return {source:reference.id,from:sources[0]?.date,to:reference.date,gf:summarize(passages.gf),nr:summarize(passages.nr),gfGroups:groups('gf'),nrGroups:groups('nr'),nrByGF};
+ return {source:reference.id,from:sources[0]?.date,to:reference.date,gf:summarize(passages.gf),nr:summarize(passages.nr),gfGroups:groups('gf'),nrGroups:groups('nr'),nrByGF,...(includePassages?{passages}:{})};
 }

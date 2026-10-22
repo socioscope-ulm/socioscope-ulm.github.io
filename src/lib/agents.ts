@@ -12,8 +12,9 @@ export function normalizeAgentSex(value:unknown):'hommes'|'femmes'|null{
  if(['F','FEMME','FEMMES','FEMININ','FEMININS','FEMALE'].includes(text))return 'femmes';
  return null;
 }
-export function matchesAgentCohort(agent:Pick<AgentRecord,'college'|'sex'>,college='',sex=''):boolean{
- return (!college||agent.college===college)&&
+export function matchesAgentCohort(agent:Pick<AgentRecord,'college'|'sex'> & Partial<Pick<AgentRecord,'gf'>>,college='',sex=''):boolean{
+ const category=agent.college|| (typeof agent.gf==='number'&&Number.isFinite(agent.gf)?agent.gf>=12?'cadres':agent.gf>=7?'maitrise':'execution':'');
+ return (!college||category===college)&&
   (!['hommes','femmes'].includes(sex)||normalizeAgentSex(agent.sex)===sex);
 }
 export const normalizeNNI=(v:unknown)=>{const t=String(v||'').toUpperCase().replace(/[^A-Z0-9]/g,'');const m=t.match(/^([A-Z]\d{5})([A-Z0-9]{2})?$/);return m?.[1]||null;};
