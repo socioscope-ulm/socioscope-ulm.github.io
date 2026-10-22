@@ -3,7 +3,7 @@ import {readRupWorkbook} from './rup-import.js';
 import type {AgentData,AgentRecord} from './agents.ts';
 export type RupRow={nni:string;contrat:string;nom:string;prenom:string;genre?:string;entreeIEG:string|null;entreeUnite:string|null;entreeUO:string|null;agence:string;service:string;metier:string;emploi:string;college:string;m3e:string;lieuTravailCode:string;typeContrat:string;annee:number|null;source:string;row?:number;sheet?:string};
 export type RupSource={id:string;name:string;hash:string;date:string;count:number;status:string;note?:string};
-export type RupCorrection={date:string;source:string;row:number;contract:string;reason:string;actor:string;created:string};
+export type RupCorrection={date:string;source:string;row:number|null;contract:string;reason:string;actor:string;created:string};
 export type RupData={sources:RupSource[];records:RupRow[];corrections?:Record<string,RupCorrection>};
 export type RupCareer={status:'confirmed'|'conflict'|'ambiguous'|'missing';date?:string;dates:string[];history:RupRow[];correction?:RupCorrection};
 const contractKey=(value:string)=>{
@@ -32,7 +32,7 @@ export function withRupCareer(data:AgentData,rup:RupData):AgentData{
  const cache=new Map<string,RupCareer|undefined>();
  return {...data,rup,records:data.records.map(r=>{const key=r.nni+'|'+(r.contract||'');if(!cache.has(key))cache.set(key,rupCareer(byNNI.get(r.nni||'')||[],r.nni,r.contract));let career=cache.get(key);
  const correction=rup.corrections?.[r.nni||''];
- const verified=correction&&(byNNI.get(r.nni||'')||[]).find(v=>v.source===correction.source&&v.row===correction.row&&v.entreeIEG===correction.date);
+ const verified=correction&&(byNNI.get(r.nni||'')||[]).find(v=>v.source===correction.source&&v.entreeIEG===correction.date&&(correction.row===null?String(v.contrat||'').trim()===correction.contract:v.row===correction.row));
  if(correction&&verified){
   const all=byNNI.get(r.nni||'')||[];
   career={status:'confirmed',date:correction.date,dates:[...new Set(all.map(v=>v.entreeIEG).filter((v):v is string=>!!v))].sort(),history:all,correction};

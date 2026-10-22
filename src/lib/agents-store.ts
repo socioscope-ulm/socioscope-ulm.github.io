@@ -12,12 +12,12 @@ export async function agentAuth(request:Request,write=false){const denied=access
 export const agentError=(e:any)=>Response.json({error:e?.message||'Opération impossible.'},{status:e?.status||500,headers:{'Cache-Control':'no-store'}});
 export async function agentData(skipCareerEnrichment=false,focusAgentId?:string){const base=agentBase();const {db,bucket}=resources();const result=await db.prepare('SELECT * FROM agent_imports ORDER BY date,created').all<any>();const rup:RupData=JSON.parse(rupSeedText);const disabled=(await db.prepare('SELECT source_id FROM rup_source_exclusions').all<{source_id:string}>()).results;const disabledIds=new Set(disabled.map(x=>x.source_id));rup.sources=rup.sources.filter(x=>!disabledIds.has(x.id));rup.records=rup.records.filter(x=>!disabledIds.has(x.source));const data:AgentData={...base,records:[...base.records],sources:[...base.sources],events:base.events};for(const m of result.results){const detail=JSON.parse(m.detail||'{}');if(detail.kind==='rup'){if(m.status==='validated'&&!disabledIds.has(m.id)){const object=await bucket.get('agents/'+m.id+'/records.json');if(object){rup.sources.push({id:m.id,name:m.name,hash:m.hash,date:m.date,count:m.count,status:m.status});rup.records.push(...await object.json<any[]>());}}continue;}data.sources.push({id:m.id,name:m.name,hash:m.hash,date:m.date,label:m.date+' · '+m.name,sheet:'Import validé',primary:!!m.complete,...JSON.parse(m.detail||'{}'),confidence:'date choisie lors de l’import',seniorityDate:m.date,rows:m.count,agents:m.count,status:m.status});if(m.status==='validated'){const object=await bucket.get('agents/'+m.id+'/records.json');if(object){const rows=await object.json<AgentRecord[]>();data.records.push(...rows);}}}
 const decisions=(await db.prepare('SELECT * FROM agent_decisions ORDER BY created,id').all<any>()).results;const links=new Map<string,string>();for(const d of decisions)if(d.kind==='link'&&d.target)links.set(d.agent,d.target);else if(d.kind==='unlink')links.delete(d.agent);data.records=data.records.map(r=>links.has(r.agentId)?{...r,agentId:links.get(r.agentId)!,nni:links.get(r.agentId),matchStatus:'rapprochement validé'}:r);
- const corrections:Record<string,{date:string;source:string;row:number;contract:string;reason:string;actor:string;created:string}>={};
+ const corrections:Record<string,{date:string;source:string;row:number|null;contract:string;reason:string;actor:string;created:string}>={};
  for(const d of decisions){
   const agent=links.get(d.agent)||d.agent;
   if(d.kind==='career_auto'){delete corrections[agent];continue;}
   if(d.kind!=='career_rup')continue;
-  try{const v=JSON.parse(d.note||'{}');if(typeof v.date==='string'&&typeof v.row==='number'&&typeof d.source==='string'&&typeof v.reason==='string')corrections[agent]={date:v.date,source:d.source,row:v.row,contract:String(v.contract||''),reason:v.reason,actor:String(v.actor||''),created:d.created};}catch{}
+  try{const v=JSON.parse(d.note||'{}');if(typeof v.date==='string'&&(typeof v.row==='number'||v.row===null)&&typeof d.source==='string'&&typeof v.reason==='string')corrections[agent]={date:v.date,source:d.source,row:v.row,contract:String(v.contract||''),reason:v.reason,actor:String(v.actor||''),created:d.created};}catch{}
  }
  rup.corrections=corrections;
  if(focusAgentId){data.records=data.records.filter(r=>r.agentId===focusAgentId);data.events=data.events.filter(e=>e.agentId===focusAgentId);rup.records=rup.records.filter(r=>r.nni===focusAgentId);}return skipCareerEnrichment?{data:withRupSex(withConfirmedPresence(data,decisions),rup),observedData:withRupSex(data,rup),decisions}:{data:withRupSex(withRupCareer(withConfirmedPresence(data,decisions),rup),rup),observedData:withRupSex(withRupCareer(data,rup),rup),decisions};}
@@ -31,11 +31,13 @@ if(b.kind==='career_rup'||b.kind==='career_auto'){
  if(!data.records.some(r=>r.agentId===nni&&r.nni===nni))throw Object.assign(Error('Fiche agent introuvable.'),{status:404});
  let source:string|null=null;let note='';
  if(b.kind==='career_rup'){
-  if(typeof b.source!=='string'||typeof b.row!=='number'||!Number.isInteger(b.row)||b.row<1)throw Object.assign(Error('Choisir une ligne RUP valide.'),{status:400});
-  const verified=data.rup?.records.find(r=>r.nni===nni&&r.source===b.source&&r.row===b.row&&!!r.entreeIEG);
-  if(!verified||!data.rup?.sources.some(s=>s.id===b.source))throw Object.assign(Error('La ligne RUP sélectionnée est absente, sans date ou désactivée.'),{status:400});
+  if(typeof b.source!=='string'||typeof b.date!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(b.date)||(b.row!==null&&b.row!==undefined&&(!Number.isInteger(b.row)||b.row<1)))throw Object.assign(Error('Choisir une date et une référence RUP valides.'),{status:400});
+  const row=Number.isInteger(b.row)?b.row:null;
+  const contract=String(b.contract||'').trim();
+  const verified=data.rup?.records.find(r=>r.nni===nni&&r.source===b.source&&r.entreeIEG===b.date&&(row===null?String(r.contrat||'').trim()===contract:r.row===row));
+  if(!verified||!data.rup?.sources.some(s=>s.id===b.source))throw Object.assign(Error('La date ou la ligne RUP sélectionnée est absente ou désactivée.'),{status:400});
   source=verified.source;
-  note=JSON.stringify({date:verified.entreeIEG,row:verified.row,contract:verified.contrat,reason,actor:request.headers.get('oai-authenticated-user-email')||''});
+  note=JSON.stringify({date:verified.entreeIEG,row:Number.isInteger(verified.row)?verified.row:null,contract:String(verified.contrat||'').trim(),reason,actor:request.headers.get('oai-authenticated-user-email')||''});
  }else note=JSON.stringify({reason,actor:request.headers.get('oai-authenticated-user-email')||''});
  await db.prepare('INSERT INTO agent_decisions (id,agent,kind,target,source,note,created) VALUES (?,?,?,?,?,?,?)').bind(crypto.randomUUID(),nni,b.kind,null,source,note,new Date().toISOString()).run();
  return {ok:true,kind:b.kind};
