@@ -33,9 +33,9 @@ export function agentProgression(data:AgentData,sourceId:string,includePassages=
  }
  // Family analysis only needs the passages by agent. Avoid computing NR-by-GF
  // and per-level histograms that are not used in this expensive request.
+ const summarize=(rows:Passage[])=>({mean:mean(rows.map(r=>r.years)),count:rows.length,estimated:rows.filter(r=>r.estimated).length});
  if(includePassages)return {source:reference.id,from:sources[0]?.date,to:reference.date,gf:summarize(passages.gf),nr:summarize(passages.nr),gfGroups:[],nrGroups:[],nrByGF:[],passages};
  const current=snapshotFor(sourceId).filter(r=>r.nni);
- const summarize=(rows:Passage[])=>({mean:mean(rows.map(r=>r.years)),count:rows.length,estimated:rows.filter(r=>r.estimated).length});
  const groups=(key:'gf'|'nr')=>[...new Set(passages[key].map(r=>r.from))].sort((a,b)=>a-b).map(level=>({level,...summarize(passages[key].filter(r=>r.from===level))}));
  const nrByGF=[...new Set(current.map(r=>r.gf).filter((v):v is number=>typeof v==='number'))].sort((a,b)=>a-b).map(gf=>{const rows=current.filter(r=>r.gf===gf);const values=rows.map(r=>r.nr).filter((v):v is number=>typeof v==='number');return {gf,agents:rows.length,count:values.length,mean:mean(values)};});
  return {source:reference.id,from:sources[0]?.date,to:reference.date,gf:summarize(passages.gf),nr:summarize(passages.nr),gfGroups:groups('gf'),nrGroups:groups('nr'),nrByGF,...(includePassages?{passages}:{})};
