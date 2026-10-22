@@ -63,14 +63,16 @@ test('Unknown sexes are excluded from sex-specific calculations without inventin
  assert.deepEqual(maleMaitrise.rows,[]);
  assert.equal(normalizeAgentSex(''),null);
 });
-test('Both global filters are forwarded only to Masse salariale and payroll download reflects cohort',()=>{
+test('Global filters are forwarded to employment analyses and payroll while preserving payroll exports',()=>{
  const dashboard=readFileSync(new URL('../src/app/dashboard.tsx',import.meta.url),'utf8');
  const agents=readFileSync(new URL('../src/app/agents.tsx',import.meta.url),'utf8');
  const route=readFileSync(new URL('../src/app/api/agents/route.ts',import.meta.url),'utf8');
  assert.match(dashboard,/forcedView="payroll" filterCollege=\{college\} filterSex=\{sex\}/);
- assert.match(agents,/college:view==='payroll'\?/);
- assert.match(agents,/sex:view==='payroll'\?/);
+ assert.match(agents,/college:\['payroll','hourly','analysis','families'\]\.includes\(view\)\?/);
+ assert.match(agents,/sex:\['payroll','hourly','analysis','families'\]\.includes\(view\)\?/);
  assert.match(agents,/\[source,view,q,agency,college,filterCollege,filterSex/);
+ assert.match(dashboard,/forcedView=\{emploiView\} filterCollege=\{college\} filterSex=\{sex\}/);
+ assert.match(route,/agentFamilies\(data,source,p\.get\('agency'\)\|\|'',p\.get\('m3e'\)\|\|'',p\.get\('college'\)\|\|'',p\.get\('sex'\)\|\|''\)/);
  assert.match(agents,/detailRows=useMemo\(\(\)=>\[\.\.\.data\.rows\]/);
  assert.match(agents,/Exporter les agents filtrés/);
  assert.match(route,/college:p\.get\('college'\)\|\|'',sex:p\.get\('sex'\)\|\|''/);
