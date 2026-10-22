@@ -100,6 +100,21 @@ export async function DELETE(request:Request){const denied=accessError(request,t
  }catch(e){return agentError(e);}}
 export async function PATCH(request:Request){const denied=accessError(request,true);if(denied)return denied;try{
  await agentAuth(request,true);const body=await request.json() as {id?:string};const id=String(body.id||'');
- await resources().db.prepare('DELETE FROM rup_source_exclusions WHERE source_id=?').bind(id).run();
+ const {db,bucket}=resources();
+ const seed=JSON.parse(rupSeedText) as {sources:{id:string;date:string}[];records:{source:string;nni:string;contrat:string}[]};
+ const src=seed.sources.find(x=>x.id===id);
+ if(src){
+  const imports=await db.prepare('SELECT id,detail FROM agent_imports WHERE date=? AND status=?').bind(src.date,'validated').all<any>();
+  const original=new Set(seed.records.filter(x=>x.source===id).map(x=>x.nni+'|'+x.contrat));
+  for(const item of imports.results){
+   let detail:any;try{detail=JSON.parse(item.detail||'{}');}catch{continue;}
+   if(detail.kind!=='rup')continue;
+   const excluded=await db.prepare('SELECT source_id FROM rup_source_exclusions WHERE source_id=?').bind(item.id).first();
+   if(excluded)continue;
+   const stored=await bucket.get('agents/'+item.id+'/records.json');
+   if(stored&&(await stored.json<any[]>()).some(x=>original.has(x.nni+'|'+x.contrat)))throw Object.assign(Error('Restauration bloquée : un RUP de remplacement contient déjà les mêmes agents pour cette date.'),{status:409});
+  }
+ }
+ await db.prepare('DELETE FROM rup_source_exclusions WHERE source_id=?').bind(id).run();
  return Response.json({ok:true,id});
  }catch(e){return agentError(e);}}
