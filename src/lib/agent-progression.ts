@@ -31,6 +31,9 @@ export function agentProgression(data:AgentData,sourceId:string,includePassages=
   const years=(end.time-start.time)/yearMs;if(years>60)continue;
   passages[key].push({agentId,from,to,years,estimated:start.estimated||end.estimated});
  }
+ // Family analysis only needs the passages by agent. Avoid computing NR-by-GF
+ // and per-level histograms that are not used in this expensive request.
+ if(includePassages)return {source:reference.id,from:sources[0]?.date,to:reference.date,gf:summarize(passages.gf),nr:summarize(passages.nr),gfGroups:[],nrGroups:[],nrByGF:[],passages};
  const current=snapshotFor(sourceId).filter(r=>r.nni);
  const summarize=(rows:Passage[])=>({mean:mean(rows.map(r=>r.years)),count:rows.length,estimated:rows.filter(r=>r.estimated).length});
  const groups=(key:'gf'|'nr')=>[...new Set(passages[key].map(r=>r.from))].sort((a,b)=>a-b).map(level=>({level,...summarize(passages[key].filter(r=>r.from===level))}));
