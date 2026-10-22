@@ -17,7 +17,7 @@ export function rupCareer(rows:RupRow[],nni?:string,contract?:string):RupCareer|
 export function withRupCareer(data:AgentData,rup:RupData):AgentData{
  const byNNI=new Map<string,RupRow[]>();for(const r of rup.records){const rows=byNNI.get(r.nni)||[];rows.push(r);byNNI.set(r.nni,rows);}
  const cache=new Map<string,RupCareer|undefined>();
- return {...data,rup,records:data.records.map(r=>{const key=r.nni+'|'+(r.contract||'');if(!cache.has(key))cache.set(key,rupCareer(byNNI.get(r.nni||'')||[],r.nni,r.contract));const career=cache.get(key);const values=new Set((career?.history||[]).map(v=>normalizeAgentSex(v.genre)).filter(Boolean));const rupSex=values.size===1?[...values][0]:null;const recorded=normalizeAgentSex(r.sex);return {...r,sex:recorded||rupSex||r.sex,rupCareer:career};})};
+ return {...data,rup,records:data.records.map(r=>{const key=r.nni+'|'+(r.contract||'');if(!cache.has(key))cache.set(key,rupCareer(byNNI.get(r.nni||'')||[],r.nni,r.contract));const career=cache.get(key);const values=new Set((career?.history||[]).map(v=>normalizeAgentSex(v.genre)).filter(Boolean));const rupSex=career?.status!=='ambiguous'&&values.size===1?[...values][0]:null;const recorded=normalizeAgentSex(r.sex);return {...r,sex:recorded||rupSex||r.sex,rupCareer:career};})};
 }
 export async function parseRupFile(file:File,date:string){
  if(file.size>20*1024*1024)throw Error('Fichier limité à 20 Mo.');
