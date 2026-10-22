@@ -31,7 +31,25 @@ export async function GET(request:Request){try{
    a.agents.add(r.nni);const values=a.sexes.get(r.nni)||new Set<string>();
    const sex=normalizeAgentSex(r.genre);if(sex)values.add(sex);a.sexes.set(r.nni,values);
  }
- const years=[...annual.values()].sort((a,b)=>a.year-b.year).map(a=>({year:a.year,files:a.files,agents:a.agents.size,genreKnown:[...a.sexes.values()].filter(v=>v.size===1).length,genreConflicts:[...a.sexes.values()].filter(v=>v.size>1).length}));
+ // Determiner un sexe fiable pour un NNI sur l'ensemble des millesimes.
+ // Ne pas confondre sexe present dans un fichier et sexe reconstitue.
+ const sexesByNNI=new Map<string,Set<string>>();
+ for(const r of rup.records){
+  if(!r.nni)continue;
+  const sex=normalizeAgentSex(r.genre);if(!sex)continue;
+  const set=sexesByNNI.get(r.nni)||new Set<string>();set.add(sex);sexesByNNI.set(r.nni,set);
+ }
+ const years=[...annual.values()].sort((a,b)=>a.year-b.year).map(a=>{
+  let direct=0,recovered=0,conflicts=0;
+  for(const nni of a.agents){
+   const local=a.sexes.get(nni)||new Set<string>();
+   const historical=sexesByNNI.get(nni)||new Set<string>();
+   if(historical.size>1){conflicts++;continue;}
+   if(local.size===1)direct++;
+   else if(local.size===0&&historical.size===1)recovered++;
+  }
+  return {year:a.year,files:a.files,agents:a.agents.size,genreKnown:direct,genreRecovered:recovered,genreConflicts:conflicts};
+ });
  const stats=rupStats(rup);
  return Response.json({sources:rup.sources,years,stats:{...stats,matched:null},notes:[]},{headers:{'Cache-Control':'no-store'}});
  }catch(e){return agentError(e);}}
