@@ -27,7 +27,7 @@ if(b.kind==='career_rup'||b.kind==='career_auto'){
  if(!nni||nni!==b.agent)throw Object.assign(Error('La correction exige une identité NNI rapprochée.'),{status:400});
  const reason=String(b.note||'').trim();
  if(reason.length<5||reason.length>1000)throw Object.assign(Error('Indiquer un motif de correction (5 à 1 000 caractères).'),{status:400});
- const {observedData:data}=await agentData(true,nni);
+ const {observedData:data}=await agentData(false,nni);
  if(!data.records.some(r=>r.agentId===nni&&r.nni===nni))throw Object.assign(Error('Fiche agent introuvable.'),{status:404});
  let source:string|null=null;let note='';
  if(b.kind==='career_rup'){
