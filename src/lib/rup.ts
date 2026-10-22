@@ -19,6 +19,30 @@ export function withRupCareer(data:AgentData,rup:RupData):AgentData{
  const cache=new Map<string,RupCareer|undefined>();
  return {...data,rup,records:data.records.map(r=>{const key=r.nni+'|'+(r.contract||'');if(!cache.has(key))cache.set(key,rupCareer(byNNI.get(r.nni||'')||[],r.nni,r.contract));const career=cache.get(key);const values=new Set((career?.history||[]).map(v=>normalizeAgentSex(v.genre)).filter(Boolean));const rupSex=career?.status!=='ambiguous'&&values.size===1?[...values][0]:null;const recorded=normalizeAgentSex(r.sex);return {...r,sex:recorded||rupSex||r.sex,rupCareer:career};})};
 }
+// Enrichissement leger du sexe, independant des calculs de carriere.
+export function withRupSex(data:AgentData,rup:RupData):AgentData{
+ const byNNI=new Map<string,Map<string,Set<string>>>();
+ for(const row of rup.records){
+  const nni=normalizeNNI(row.nni),sex=normalizeAgentSex(row.genre);
+  if(!nni||!sex)continue;
+  let contracts=byNNI.get(nni);
+  if(!contracts){contracts=new Map();byNNI.set(nni,contracts);}
+  const contract=String(row.contrat||'').trim();
+  let sexes=contracts.get(contract);
+  if(!sexes){sexes=new Set();contracts.set(contract,sexes);}
+  sexes.add(sex);
+ }
+ return {...data,records:data.records.map(r=>{
+  if(normalizeAgentSex(r.sex))return r;
+  const nni=normalizeNNI(r.nni),contracts=nni?byNNI.get(nni):undefined;
+  if(!contracts)return r;
+  const contract=String(r.contract||'').trim();
+  const matching=contract?contracts.get(contract):undefined;
+  const values=matching||(!contract&&contracts.size===1?[...contracts.values()][0]:undefined);
+  if(!values||values.size!==1)return r;
+  return {...r,sex:[...values][0]};
+ })};
+}
 export async function parseRupFile(file:File,date:string){
  if(file.size>20*1024*1024)throw Error('Fichier limité à 20 Mo.');
  const XLSX=await import('xlsx');const raw=readRupWorkbook(await file.arrayBuffer(),file.name,XLSX) as RupRow[];
