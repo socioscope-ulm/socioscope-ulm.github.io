@@ -10,6 +10,7 @@ export async function GET(request:Request){try{
  // les historiques de carriere ni recalculer la masse salariale.
  const {db,bucket}=resources();
  const rup=JSON.parse(rupSeedText) as {sources:any[];records:any[]};
+ const archivedSources=[...rup.sources];
  const excluded=(await db.prepare('SELECT source_id FROM rup_source_exclusions').all<{source_id:string}>()).results.map(x=>x.source_id);
  const excludedIds=new Set(excluded);
  rup.sources=rup.sources.filter(x=>!excludedIds.has(x.id));rup.records=rup.records.filter(x=>!excludedIds.has(x.source));
@@ -22,6 +23,7 @@ export async function GET(request:Request){try{
    rup.sources.push({id:m.id,name:m.name,hash:m.hash,date:m.date,count:m.count,status:m.status});
    rup.records.push(...await object.json<any[]>());
  }
+ const disabledSources=excluded.map(id=>{const historical=archivedSources.find(x=>x.id===id);const imported=imports.results.find(x=>x.id===id);return historical?{id,name:historical.name,date:historical.date,count:historical.count}:imported?{id,name:imported.name,date:imported.date,count:imported.count}:{id,name:id,date:'',count:0};});
  const annual=new Map<number,{year:number;files:number;agents:Set<string>;sexes:Map<string,Set<string>>}>();
  for(const src of rup.sources){
    const year=Number(String(src.date).slice(0,4));if(!Number.isFinite(year))continue;
@@ -54,7 +56,7 @@ export async function GET(request:Request){try{
   return {year:a.year,files:a.files,agents:a.agents.size,genreKnown:direct,genreRecovered:recovered,genreConflicts:conflicts};
  });
  const stats=rupStats(rup);
- return Response.json({sources:rup.sources,excluded,years,stats:{...stats,matched:null},notes:[]},{headers:{'Cache-Control':'no-store'}});
+ return Response.json({sources:rup.sources,excluded:disabledSources,years,stats:{...stats,matched:null},notes:[]},{headers:{'Cache-Control':'no-store'}});
  }catch(e){return agentError(e);}}
 export async function POST(request:Request){const denied=accessError(request,true);if(denied)return denied;try{
  await agentAuth(request,true);
