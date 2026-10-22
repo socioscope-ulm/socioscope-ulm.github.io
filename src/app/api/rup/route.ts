@@ -39,7 +39,7 @@ export async function POST(request:Request){const denied=accessError(request,tru
  await agentAuth(request,true);
  const f=await request.formData();
  const filename=String(f.get('filename')||''),date=String(f.get('date')||''),raw=f.get('extraction');
- if(!/\\.(xlsx|xls|xlsm)$/i.test(filename)||!/^20\d{2}-\d{2}-\d{2}$/.test(date)||!Number.isFinite(Date.parse(date))||new Date(date).toISOString().slice(0,10)!==date||typeof raw!=='string'||raw.length>5000000)throw Object.assign(Error('RUP ou date de référence invalide.'),{status:400});
+ if(!/\.(xlsx|xls|xlsm)$/i.test(filename)||!/^20\d{2}-\d{2}-\d{2}$/.test(date)||!Number.isFinite(Date.parse(date))||new Date(date).toISOString().slice(0,10)!==date||typeof raw!=='string'||raw.length>5000000)throw Object.assign(Error('RUP ou date de référence invalide.'),{status:400});
  const records=JSON.parse(raw);
  if(!Array.isArray(records)||!records.length||records.length>10000||!records.every((r:any)=>r&&typeof r.nni==='string'&&/^[A-Z0-9]{5,12}$/.test(r.nni)&&typeof r.contrat==='string'&&typeof r.genre==='string'&&r.genre.length<=80&&typeof r.nom==='string'&&typeof r.prenom==='string'&&typeof r.source==='string'))throw Object.assign(Error('Données RUP non conformes.'),{status:400});
  const hash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(raw)))).map(v=>v.toString(16).padStart(2,'0')).join('');
