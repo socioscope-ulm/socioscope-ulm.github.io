@@ -70,7 +70,8 @@ export async function POST(request:Request){const denied=accessError(request,tru
  const archived=JSON.parse(rupSeedText) as {sources:{id:string;hash?:string;date:string}[];records:{source:string;nni:string;contrat:string}[]};
  const imported=await db.prepare("SELECT id,hash,date,status,detail FROM agent_imports").all<any>();
  const existing=imported.results.filter((r:any)=>{try{return JSON.parse(r.detail||'{}').kind==='rup'&&r.status==='validated';}catch{return false;}});
- if(archived.sources.some(r=>r.hash===hash)||imported.results.some((r:any)=>r.hash===hash))
+ const excludedForHash=new Set((await db.prepare('SELECT source_id FROM rup_source_exclusions').all<{source_id:string}>()).results.map(r=>r.source_id));
+ if(archived.sources.some(r=>r.hash===hash&&!excludedForHash.has(r.id))||imported.results.some((r:any)=>r.hash===hash&&!excludedForHash.has(r.id)))
   throw Object.assign(Error('Ce fichier a déjà été intégré.'),{status:409});
  const excludedIds=new Set((await db.prepare('SELECT source_id FROM rup_source_exclusions').all<{source_id:string}>()).results.map(x=>x.source_id));
  const sameSeed=archived.sources.filter(r=>r.date===date&&!excludedIds.has(r.id));
