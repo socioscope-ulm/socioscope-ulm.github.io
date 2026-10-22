@@ -20,7 +20,12 @@ const decisions=(await db.prepare('SELECT * FROM agent_decisions ORDER BY create
   try{const v=JSON.parse(d.note||'{}');if(typeof v.date==='string'&&(typeof v.row==='number'||v.row===null)&&typeof d.source==='string'&&typeof v.reason==='string')corrections[agent]={date:v.date,source:d.source,row:v.row,contract:String(v.contract||''),reason:v.reason,actor:String(v.actor||''),created:d.created};}catch{}
  }
  rup.corrections=corrections;
- if(focusAgentId){data.records=data.records.filter(r=>r.agentId===focusAgentId);data.events=data.events.filter(e=>e.agentId===focusAgentId);rup.records=rup.records.filter(r=>r.nni===focusAgentId);}return skipCareerEnrichment?{data:withRupSex(withConfirmedPresence(data,decisions),rup),observedData:withRupSex(data,rup),decisions}:{data:withRupSex(withRupCareer(withConfirmedPresence(data,decisions),rup),rup),observedData:withRupSex(withRupCareer(data,rup),rup),decisions};}
+ if(focusAgentId){data.records=data.records.filter(r=>r.agentId===focusAgentId);data.events=data.events.filter(e=>e.agentId===focusAgentId);rup.records=rup.records.filter(r=>r.nni===focusAgentId);}// Enrich sex only once; presence records inherit it from their source.
+ // Historical observed records are used for movement comparisons, where
+ // career dates are irrelevant and should not trigger another RUP traversal.
+ const observedData=withRupSex(data,rup);
+ const present=withConfirmedPresence(observedData,decisions);
+ return {data:skipCareerEnrichment?present:withRupCareer(present,rup),observedData,decisions};}
 export async function decision(request:Request){await agentAuth(request,true);const b:any=await request.json();if(!['link','unlink','departure','absence','return','dismiss','restore','executive','executive_manual','executive_remove','executive_update','career_rup','career_auto'].includes(b.kind)||typeof b.agent!=='string'||b.agent.length>100||String(b.note||'').length>1000)throw Object.assign(Error('Décision invalide.'),{status:400});const {db}=resources();
 if(b.kind==='career_rup'||b.kind==='career_auto'){
  const nni=normalizeNNI(b.agent);
