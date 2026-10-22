@@ -30,7 +30,7 @@ function parseRow(row, source, year){
     contrat:String(field(row,'Numéro contrat','N° de contrat','Numero de contrat')??'').trim(),
     nom:String(field(row,'Nom')??'').trim(),
     prenom:String(field(row,'Prénom','Prenom')??'').trim(),
-    genre:String(field(row,'Genre','Sexe','Genre (libellé)','Sexe (libellé)')??'').trim(),
+    genre:String(field(row,'Genre','Sexe','Genre (libellé)','Sexe (libellé)','Sexe (code)','Genre (code)')??'').trim(),
     entreeIEG:dateISO(field(row,'Date entrée IEG',"Date d'entrée dans les IEG")),
     entreeUnite:dateISO(field(row,"Date d'entrée dans l'UM","Entrée dans l'Etablissement")),
     entreeUO:dateISO(field(row,"Date d'entrée dans l'UO",'Entrée dans la DUM')),
