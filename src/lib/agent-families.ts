@@ -58,9 +58,19 @@ export function agentFamilies(data:AgentData, sourceId:string, agency='', plage=
   // An absent service label is unavailable, never an inferred zero.
   const timeline=data.sources.filter(s=>(s.primary||s.status==='validated')&&s.status!=='review'&&s.date<=reference.date).sort((a,b)=>a.date.localeCompare(b.date)).flatMap(s=>{
     const rows=rowsFor(s.id);
-    if(!definitions.some(f=>rows.some(r=>r.family===f.id)))return [];
     const scoped=rows.filter(r=>r.nni&&(!agency||r.agency===agency)&&(!plage||m3eKey(r)===plage));
     return [{date:s.date,source:s.id,label:s.label,...Object.fromEntries(definitions.map(f=>[f.id,rows.some(r=>r.family===f.id)&&(!plage||rows.some(r=>m3eKey(r)===plage))?scoped.filter(r=>r.family===f.id).length:null]))}];
   });
-  return {reference,summaries,timeline,agency,plage,plages:m3eOptions(all),m3eMeans:m3eMeans(selected),agencies:[...new Set(all.map(r=>r.agency).filter((v):v is string=>!!v))].sort(),total:selected.length,pending:selected.filter(r=>!r.nni).length,classified:selected.filter(r=>r.family&&r.nni).length,outside:selected.filter(r=>!r.family).length};
+  // Retain every calendar year between the first and last accepted photograph.
+  // Missing photographs are explicitly unavailable, never zero or interpolated.
+  const datedYears=timeline.map(r=>Number(r.date.slice(0,4))).filter(Number.isFinite);
+  const annualTimeline=[...timeline];
+  if(datedYears.length>1){
+    const known=new Set(datedYears);
+    for(let year=Math.min(...datedYears);year<=Math.max(...datedYears);year++){
+      if(!known.has(year))annualTimeline.push({date:year+'-12-31',source:'missing-'+year,label:'Aucune photographie disponible pour '+year,...Object.fromEntries(definitions.map(f=>[f.id,null]))});
+    }
+    annualTimeline.sort((a,b)=>a.date.localeCompare(b.date));
+  }
+  return {reference,summaries,timeline:annualTimeline,agency,plage,plages:m3eOptions(all),m3eMeans:m3eMeans(selected),agencies:[...new Set(all.map(r=>r.agency).filter((v):v is string=>!!v))].sort(),total:selected.length,pending:selected.filter(r=>!r.nni).length,classified:selected.filter(r=>r.family&&r.nni).length,outside:selected.filter(r=>!r.family).length};
 }
