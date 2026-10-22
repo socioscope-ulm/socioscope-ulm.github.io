@@ -25,6 +25,6 @@ export async function parseRupFile(file:File,date:string){
  if(raw.length>10000)throw Error('RUP limité à 10 000 lignes.');
  return raw.map(r=>({...r,nni:normalizeNNI(r.nni)||'',annee:Number(date.slice(0,4))})).filter(r=>r.nni);
 }
-export function rupStats(rup:RupData){const keys=[...new Set(rup.records.map(r=>r.nni+'|'+r.contrat))];const groups=keys.map(k=>{const [n,c]=k.split('|');return rupCareer(rup.records,n,c)!;});return {lines:rup.records.length,agents:keys.length,dates:groups.filter(g=>g.dates.length).length,conflicts:groups.filter(g=>g.status==='conflict').length};}
+export function rupStats(rup:RupData){const groups=new Map<string,Set<string>>();for(const r of rup.records){const key=r.nni+'|'+r.contrat;let dates=groups.get(key);if(!dates){dates=new Set<string>();groups.set(key,dates);}if(r.entreeIEG)dates.add(r.entreeIEG);}const values=[...groups.values()];return {lines:rup.records.length,agents:groups.size,dates:values.filter(v=>v.size>0).length,conflicts:values.filter(v=>v.size>1).length};}
 // The server only archives this filtered representation; raw workbooks are never stored.
 export function rupCSV(rows:RupRow[]){const fields: (keyof RupRow)[]=['nni','contrat','nom','prenom','genre','entreeIEG','entreeUnite','entreeUO','agence','service','metier','emploi','college','m3e','lieuTravailCode','typeContrat','annee','source'];return '\ufeff'+[fields,...rows.map(r=>fields.map(f=>r[f]??''))].map(row=>row.map(v=>'"'+String(v).replaceAll('"','""')+'"').join(';')).join('\r\n');}
