@@ -10,6 +10,13 @@ export async function POST(request:Request){const denied=accessError(request,tru
  const records=await parseRupFile(file,date);if(!records.length)throw Object.assign(Error('Aucun NNI reconnu dans ce RUP.'),{status:400});
  const bytes=await file.arrayBuffer();const hash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes))).map(v=>v.toString(16).padStart(2,'0')).join('');
  const {data}=await agentData();const {db,bucket}=resources();if(data.rup!.sources.some(s=>s.hash===hash)||await db.prepare('SELECT id FROM agent_imports WHERE hash=?').bind(hash).first())throw Object.assign(Error('Ce fichier a déjà été intégré.'),{status:409});
+ const sameDate=data.rup!.sources.filter(s=>s.date===date);
+ if(sameDate.length){
+  const incoming=new Map(records.map(r=>[r.nni+'|'+r.contrat,r]));
+  const existing=new Set(data.rup!.records.filter(r=>sameDate.some(s=>s.id===r.source)).map(r=>r.nni+'|'+r.contrat));
+  const overlap=[...incoming.keys()].filter(k=>existing.has(k)).length;
+  if(overlap>0)throw Object.assign(Error('Un RUP existe déjà pour cette date : '+overlap+' agent(s)/contrat(s) commun(s). Import bloqué pour éviter les doublons ; comparer ou remplacer la source existante avant de poursuivre.'),{status:409});
+ }
  const id='rup-imp-'+crypto.randomUUID();await bucket.put('agents/'+id+'/records.json',JSON.stringify(records));await bucket.put('agents/'+id+'/original',rupCSV(records),{httpMetadata:{contentType:'text/csv;charset=utf-8'}});
  await db.prepare('INSERT INTO agent_imports (id,name,hash,date,created,status,count,complete,detail) VALUES (?,?,?,?,?,?,?,?,?)').bind(id,file.name,hash,date,new Date().toISOString(),'validated',records.length,0,JSON.stringify({kind:'rup',sanitized:true})).run();
  return Response.json({id,count:records.length});
