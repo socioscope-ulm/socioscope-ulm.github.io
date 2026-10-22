@@ -11,8 +11,35 @@ export function agentBase(){return decoded ||=unpackAgentSeed(JSON.parse(packedT
 export async function agentAuth(request:Request,write=false){const denied=accessError(request,write);if(denied){const body=await denied.json() as {error:string};throw Object.assign(Error(body.error),{status:denied.status});}}
 export const agentError=(e:any)=>Response.json({error:e?.message||'Opération impossible.'},{status:e?.status||500,headers:{'Cache-Control':'no-store'}});
 export async function agentData(skipCareerEnrichment=false,focusAgentId?:string){const base=agentBase();const {db,bucket}=resources();const result=await db.prepare('SELECT * FROM agent_imports ORDER BY date,created').all<any>();const rup:RupData=JSON.parse(rupSeedText);const disabled=(await db.prepare('SELECT source_id FROM rup_source_exclusions').all<{source_id:string}>()).results;const disabledIds=new Set(disabled.map(x=>x.source_id));rup.sources=rup.sources.filter(x=>!disabledIds.has(x.id));rup.records=rup.records.filter(x=>!disabledIds.has(x.source));const data:AgentData={...base,records:[...base.records],sources:[...base.sources],events:base.events};for(const m of result.results){const detail=JSON.parse(m.detail||'{}');if(detail.kind==='rup'){if(m.status==='validated'&&!disabledIds.has(m.id)){const object=await bucket.get('agents/'+m.id+'/records.json');if(object){rup.sources.push({id:m.id,name:m.name,hash:m.hash,date:m.date,count:m.count,status:m.status});rup.records.push(...await object.json<any[]>());}}continue;}data.sources.push({id:m.id,name:m.name,hash:m.hash,date:m.date,label:m.date+' · '+m.name,sheet:'Import validé',primary:!!m.complete,...JSON.parse(m.detail||'{}'),confidence:'date choisie lors de l’import',seniorityDate:m.date,rows:m.count,agents:m.count,status:m.status});if(m.status==='validated'){const object=await bucket.get('agents/'+m.id+'/records.json');if(object){const rows=await object.json<AgentRecord[]>();data.records.push(...rows);}}}
-const decisions=(await db.prepare('SELECT * FROM agent_decisions ORDER BY created,id').all<any>()).results;const links=new Map<string,string>();for(const d of decisions)if(d.kind==='link'&&d.target)links.set(d.agent,d.target);else if(d.kind==='unlink')links.delete(d.agent);data.records=data.records.map(r=>links.has(r.agentId)?{...r,agentId:links.get(r.agentId)!,nni:links.get(r.agentId),matchStatus:'rapprochement validé'}:r);if(focusAgentId){data.records=data.records.filter(r=>r.agentId===focusAgentId);data.events=data.events.filter(e=>e.agentId===focusAgentId);rup.records=rup.records.filter(r=>r.nni===focusAgentId);}return skipCareerEnrichment?{data:withRupSex(withConfirmedPresence(data,decisions),rup),observedData:withRupSex(data,rup),decisions}:{data:withRupSex(withRupCareer(withConfirmedPresence(data,decisions),rup),rup),observedData:withRupSex(withRupCareer(data,rup),rup),decisions};}
-export async function decision(request:Request){await agentAuth(request,true);const b:any=await request.json();if(!['link','unlink','departure','absence','return','dismiss','restore','executive','executive_manual','executive_remove','executive_update'].includes(b.kind)||typeof b.agent!=='string'||b.agent.length>100||String(b.note||'').length>1000)throw Object.assign(Error('Décision invalide.'),{status:400});const {db}=resources();
+const decisions=(await db.prepare('SELECT * FROM agent_decisions ORDER BY created,id').all<any>()).results;const links=new Map<string,string>();for(const d of decisions)if(d.kind==='link'&&d.target)links.set(d.agent,d.target);else if(d.kind==='unlink')links.delete(d.agent);data.records=data.records.map(r=>links.has(r.agentId)?{...r,agentId:links.get(r.agentId)!,nni:links.get(r.agentId),matchStatus:'rapprochement validé'}:r);
+ const corrections:Record<string,{date:string;source:string;row:number;contract:string;reason:string;actor:string;created:string}>={};
+ for(const d of decisions){
+  const agent=links.get(d.agent)||d.agent;
+  if(d.kind==='career_auto'){delete corrections[agent];continue;}
+  if(d.kind!=='career_rup')continue;
+  try{const v=JSON.parse(d.note||'{}');if(typeof v.date==='string'&&typeof v.row==='number'&&typeof d.source==='string'&&typeof v.reason==='string')corrections[agent]={date:v.date,source:d.source,row:v.row,contract:String(v.contract||''),reason:v.reason,actor:String(v.actor||''),created:d.created};}catch{}
+ }
+ rup.corrections=corrections;
+ if(focusAgentId){data.records=data.records.filter(r=>r.agentId===focusAgentId);data.events=data.events.filter(e=>e.agentId===focusAgentId);rup.records=rup.records.filter(r=>r.nni===focusAgentId);}return skipCareerEnrichment?{data:withRupSex(withConfirmedPresence(data,decisions),rup),observedData:withRupSex(data,rup),decisions}:{data:withRupSex(withRupCareer(withConfirmedPresence(data,decisions),rup),rup),observedData:withRupSex(withRupCareer(data,rup),rup),decisions};}
+export async function decision(request:Request){await agentAuth(request,true);const b:any=await request.json();if(!['link','unlink','departure','absence','return','dismiss','restore','executive','executive_manual','executive_remove','executive_update','career_rup','career_auto'].includes(b.kind)||typeof b.agent!=='string'||b.agent.length>100||String(b.note||'').length>1000)throw Object.assign(Error('Décision invalide.'),{status:400});const {db}=resources();
+if(b.kind==='career_rup'||b.kind==='career_auto'){
+ const nni=normalizeNNI(b.agent);
+ if(!nni||nni!==b.agent)throw Object.assign(Error('La correction exige une identité NNI rapprochée.'),{status:400});
+ const reason=String(b.note||'').trim();
+ if(reason.length<5||reason.length>1000)throw Object.assign(Error('Indiquer un motif de correction (5 à 1 000 caractères).'),{status:400});
+ const {observedData:data}=await agentData(true,nni);
+ if(!data.records.some(r=>r.agentId===nni&&r.nni===nni))throw Object.assign(Error('Fiche agent introuvable.'),{status:404});
+ let source:string|null=null;let note='';
+ if(b.kind==='career_rup'){
+  if(typeof b.source!=='string'||typeof b.row!=='number'||!Number.isInteger(b.row)||b.row<1)throw Object.assign(Error('Choisir une ligne RUP valide.'),{status:400});
+  const verified=data.rup?.records.find(r=>r.nni===nni&&r.source===b.source&&r.row===b.row&&!!r.entreeIEG);
+  if(!verified||!data.rup?.sources.some(s=>s.id===b.source))throw Object.assign(Error('La ligne RUP sélectionnée est absente, sans date ou désactivée.'),{status:400});
+  source=verified.source;
+  note=JSON.stringify({date:verified.entreeIEG,row:verified.row,contract:verified.contrat,reason,actor:request.headers.get('oai-authenticated-user-email')||''});
+ }else note=JSON.stringify({reason,actor:request.headers.get('oai-authenticated-user-email')||''});
+ await db.prepare('INSERT INTO agent_decisions (id,agent,kind,target,source,note,created) VALUES (?,?,?,?,?,?,?)').bind(crypto.randomUUID(),nni,b.kind,null,source,note,new Date().toISOString()).run();
+ return {ok:true,kind:b.kind};
+}
 // A confirmed departure or a return to "to review" must not require loading
 // all careers, RUP files and computed individual histories.
 if(b.kind==='departure'||b.kind==='absence'){
