@@ -2,7 +2,7 @@
 import {useEffect,useState} from 'react';
 import {parseRupFile,rupCareer} from '../lib/rup';
 import type {RupRow} from '../lib/rup';
-async function api(url:string,init?:RequestInit){const r=await fetch(url,init);const b:any=await r.json();if(!r.ok)throw Error(b.error||'Opération impossible.');return b;}
+async function api(url:string,init?:RequestInit){const r=await fetch(url,init);const b:any=await r.json().catch(()=>null);if(!r.ok)throw Error(b?.error||('Import indisponible (HTTP '+r.status+'). Aucun ajout confirmé ; vérifier la liste des RUP avant de réessayer.'));if(!b)throw Error('Réponse du serveur illisible. Vérifier la liste des RUP avant de réessayer.');return b;}
 export default function RupImport({onValidated}:{onValidated:()=>void}){
  const [meta,setMeta]=useState<any>(null),[file,setFile]=useState<File|null>(null),[date,setDate]=useState(''),[rows,setRows]=useState<RupRow[]>([]),[busy,setBusy]=useState(false),[message,setMessage]=useState(''),[checked,setChecked]=useState(false);
  const reload=()=>api('/api/rup').then(setMeta);
