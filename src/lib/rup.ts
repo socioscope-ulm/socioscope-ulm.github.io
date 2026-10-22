@@ -38,7 +38,10 @@ export function withRupSex(data:AgentData,rup:RupData):AgentData{
   if(!contracts)return r;
   const contract=String(r.contract||'').trim();
   const matching=contract?contracts.get(contract):undefined;
-  const values=matching||(!contract&&contracts.size===1?[...contracts.values()][0]:undefined);
+  // En l'absence de correspondance de contrat, utiliser seulement un sexe
+  // identique sur TOUS les RUP historiques de ce NNI, jamais une estimation.
+  const allSexes=new Set([...contracts.values()].flatMap(v=>[...v]));
+  const values=matching||allSexes;
   if(!values||values.size!==1)return r;
   return {...r,sex:[...values][0]};
  })};
