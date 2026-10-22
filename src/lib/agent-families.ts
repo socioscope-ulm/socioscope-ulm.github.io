@@ -93,5 +93,5 @@ export function agentFamilies(data:AgentData, sourceId:string, agency='', plage=
     }
     annualTimeline.sort((a,b)=>a.date.localeCompare(b.date));
   }
-  return {reference,summaries,timeline:annualTimeline,agency,plage,college,sex,sexKnown:all.filter(r=>r.nni&&normalizeAgentSex(r.sex)!==null).length,sexTotal:all.filter(r=>r.nni).length,plages:m3eOptions(all),m3eMeans:m3eMeans(selected),agencies:[...new Set(all.map(r=>r.agency).filter((v):v is string=>!!v))].sort(),total:selected.length,pending:selected.filter(r=>!r.nni).length,classified:selected.filter(r=>r.family&&r.nni).length,outside:selected.filter(r=>!r.family).length};
+  return {reference,summaries,timeline:annualTimeline,agency,plage,college,sex,sexCounts:{hommes:all.filter(r=>r.nni&&normalizeAgentSex(r.sex)==='hommes').length,femmes:all.filter(r=>r.nni&&normalizeAgentSex(r.sex)==='femmes').length,inconnus:all.filter(r=>r.nni&&!normalizeAgentSex(r.sex)).length},sexKnown:all.filter(r=>r.nni&&normalizeAgentSex(r.sex)!==null).length,sexTotal:all.filter(r=>r.nni).length,plages:m3eOptions(all),m3eMeans:m3eMeans(selected),agencies:[...new Set(all.map(r=>r.agency).filter((v):v is string=>!!v))].sort(),total:selected.length,pending:selected.filter(r=>!r.nni).length,classified:selected.filter(r=>r.family&&r.nni).length,outside:selected.filter(r=>!r.family).length};
 }
