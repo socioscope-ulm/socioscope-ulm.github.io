@@ -107,7 +107,7 @@ if(!meta)return <section className="panel"><ShieldCheck/><h2>Chargement de l’e
 const sources:AgentSource[]=meta.sources;const active=sources.find(s=>s.id===source);
 const listKey=JSON.stringify([source,q,agency,college,gf,nr,m3e,years,archive,sort]);
 const completeRows=completeList?.key===listKey?completeList.rows:null;
-const sortedRows=useMemo(()=>{
+const sortedRows=(()=>{
  if(!completeRows||!columnSort)return null;
  const {field,ascending}=columnSort;
  return [...completeRows].sort((a:any,b:any)=>{
@@ -116,7 +116,7 @@ const sortedRows=useMemo(()=>{
   const cmp=av==null&&bv==null?0:av==null?1:bv==null?-1:typeof av==='number'&&typeof bv==='number'?av-bv:String(av).localeCompare(String(bv),'fr',{sensitivity:'base',numeric:true});
   return (ascending?cmp:-cmp)||String(a.name||'').localeCompare(String(b.name||''),'fr');
  });
-},[completeRows,columnSort,source]);
+})();
 const list=sortedRows?sortedRows.slice(offset,offset+100):result?.records||[];
 const fetchCompleteList=async():Promise<AgentRecord[]>=>{
  if(completeList?.key===listKey)return completeList.rows;
