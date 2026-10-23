@@ -1,11 +1,5 @@
 name: Verify Parcours graphs and live admin server version
 on:
-  push:
-    branches: [main, correction-photos-2025-2024-formate-20261021]
-    paths:
-      - '.github/workflows/verify-parcours-sidebar.yml'
-      - 'src/**'
-      - 'tests/**'
   workflow_dispatch:
 permissions:
   contents: read
