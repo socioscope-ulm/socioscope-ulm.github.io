@@ -160,7 +160,11 @@ const exportAllAgents=async()=>{
    }
   };
   await Promise.all(Array.from({length:Math.min(4,rows.length)},()=>worker()));
-  const csvRows=rows.map((r:AgentRecord,i:number)=>[r.nni,r.name,m3eLabel(m3eKey(r)),r.gf,r.nr,r.gfYears,r.nrYears,r.agency,sources.find(s=>s.id===r.source)?.name,details[i].published,details[i].years===null?'':Number(details[i].years!.toFixed(2)),details[i].date,details[i].method,r.seniorityDate,r.manualPresence?'Oui':'Non',r.presenceNote]);
+  const csvRows=rows.map((r:AgentRecord,i:number)=>({r,detail:details[i]})).sort((a,b)=>
+  String(sources.find(s=>s.id===a.r.source)?.date||'').localeCompare(String(sources.find(s=>s.id===b.r.source)?.date||''))||
+  String(a.r.name||'').localeCompare(String(b.r.name||''),'fr',{sensitivity:'base'})||
+  String(a.r.nni||'').localeCompare(String(b.r.nni||''))
+ ).map(({r,detail})=>[r.nni,r.name,m3eLabel(m3eKey(r)),r.gf,r.nr,r.gfYears,r.nrYears,r.agency,sources.find(s=>s.id===r.source)?.name,detail.published,detail.years===null?'':Number(detail.years!.toFixed(2)),detail.date,detail.method,r.seniorityDate,r.manualPresence?'Oui':'Non',r.presenceNote]);
   csv('agents-ulm-toutes-fiches.csv',[['NNI','Nom','Plage M3E','GF','NR','Années GF','Années NR','Agence','Fichier','Ancienneté IEG publiée (années)','Ancienneté de carrière recalculée (années)','Date de calcul','Méthode du calcul','Date de référence des données','Présence manuelle','Motif'],...csvRows]);
  }catch(e){setNotice((e as Error).message);}finally{setExportBusy(false);setExportProgress('');}
 };
@@ -178,7 +182,7 @@ const pendingAbsences=absences.filter((r:any)=>!['departure','return','executive
 const confirmedAbsences=absences.filter((r:any)=>movementDecisions.get(r.agentId)?.kind==='departure');const executiveAbsences=absences.filter((r:any)=>movementDecisions.get(r.agentId)?.kind==='executive');
 const displayedAbsences=absenceFilter==='pending'?pendingAbsences:absenceFilter==='confirmed'?confirmedAbsences:absenceFilter==='executives'?executiveAbsences:absences;
 const exportAbsences=()=>{
- const headers=['Agent','NNI','GF','NR','Agence','Fichier de référence','Fichier précédent','Catégorie','Décision','Date de confirmation','Commentaire','Origine historique GF 19'];
+ const headers=['Agent','NNI','GF','NR','Agence','Fichier précédent','Fichier de référence','Catégorie','Décision','Date de confirmation','Commentaire','Origine historique GF 19'];
  const sorted=[...displayedAbsences].sort((a:any,b:any)=>(a.name||'').localeCompare(b.name||'','fr',{sensitivity:'base'}));
  const status=(r:any)=>{
   const d=movementDecisions.get(r.agentId);
@@ -188,7 +192,7 @@ const exportAbsences=()=>{
   const d=movementDecisions.get(r.agentId);
   let note=d?.note||'';
   try{const detail=JSON.parse(note);note=detail.note||note;}catch{}
-  return [r.name||'',r.nni||'',r.gf??'',r.nr??'',r.agency||'',result?.source?.label||active?.label||'',result?.previous?.label||'',r.historicalGF19?'GF 19 historique':'Disparition entre fichiers',status(r),d?.created||'',note,r.historicalGF19?'Oui':'Non'];
+  return [r.name||'',r.nni||'',r.gf??'',r.nr??'',r.agency||'',result?.previous?.label||'',result?.source?.label||active?.label||'',r.historicalGF19?'GF 19 historique':'Disparition entre fichiers',status(r),d?.created||'',note,r.historicalGF19?'Oui':'Non'];
  });
  const suffix=(result?.source?.date||'reference').replace(/[^0-9a-z-]/gi,'-');
  csv('socioscope-absents-'+suffix+'-'+absenceFilter+'.csv',[headers,...rows]);
