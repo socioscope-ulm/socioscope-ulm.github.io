@@ -269,19 +269,26 @@ const continuityWarnings=annualCareer.filter((s:any)=>s.unexpected);
   finally{setRupSaving(false);}
  };useEffect(()=>setCalculationDate(''),[chosen]);useEffect(()=>{setBenchmark(null);const c=new AbortController();api('/api/agents?view=progression&source='+encodeURIComponent(chosen),{signal:c.signal}).then(setBenchmark).catch(()=>{});return()=>c.abort();},[chosen]);
 return <><button className="text-btn" onClick={onBack}><ArrowLeft size={16}/>Retour aux agents</button><section className="panel agent-profile-head"><div><div className="eyebrow">FICHE INDIVIDUELLE · HISTORIQUE CONSERVÉ</div><h2>{r.name||profile.records.at(-1)?.name||profile.id}</h2><p>NNI : {r.nni||'non rapproché'} · {fmt(r.agency)} · {colleges[r.college]||'Collège non renseigné dans cette source'}</p></div><button className="btn" onClick={()=>{
- const rows=profile.records.map((record:AgentRecord)=>{
+ // Historical source arrays are not guaranteed to be ordered by date (2021 may arrive last).
+ // Sort only the exported copy, preserving the chronology and every original situation row.
+ const orderedRecords=[...profile.records].sort((a:AgentRecord,b:AgentRecord)=>{
+  const dateA=source(a.source)?.date||'';
+  const dateB=source(b.source)?.date||'';
+  return dateA.localeCompare(dateB)||String(source(a.source)?.name||'').localeCompare(String(source(b.source)?.name||''),'fr')||(Number(a.row)||0)-(Number(b.row)||0);
+ });
+ const rows=orderedRecords.map((record:AgentRecord)=>{
   const ref=source(record.source);
   const atFile=ref?.date||'';
   const historical=careerSeniority(profile.records,sources,atFile,record.source);
   const current=careerSeniority(profile.records,sources,calculationAsOf,chosen);
   const numeric=(value:number|null|undefined)=>typeof value==='number'&&Number.isFinite(value)?Number(value.toFixed(2)):'';
-  return [ref?.name,atFile,record.row,record.gf,record.nr,record.gfYears,record.nrYears,
+  return [record.name||r.name||profile.records.at(-1)?.name||profile.id,record.nni||r.nni||'',ref?.name,atFile,record.row,record.gf,record.nr,record.gfYears,record.nrYears,
    record.iegYears,record.seniorityDate,record.agency,
    atFile,numeric(historical?.years),historical?.method||'Non calculable',
    calculationAsOf,numeric(current?.years),current?.method||'Non calculable'];
  });
  csv('fiche-agent-'+profile.id+'.csv',[[
-  'Document','Date du fichier','Ligne','GF','NR','Années GF','Années NR',
+  'Nom de l’agent','NNI','Document','Date du fichier','Ligne','GF','NR','Années GF','Années NR',
   'Ancienneté IEG publiée (années)','Date de référence des anciennetés publiées','Agence',
   'Date de calcul historique','Ancienneté carrière recalculée à la date du fichier (années)','Méthode du calcul historique',
   'Date de calcul choisie','Ancienneté carrière recalculée à la date choisie (années)','Méthode du calcul à la date choisie'
