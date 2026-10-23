@@ -1,12 +1,5 @@
 name: Socioscope production smoke checks
 on:
-  push:
-    branches: [main]
-    paths:
-      - '.github/workflows/smoke-production.yml'
-      - 'src/app/api/**'
-      - 'server/**'
-      - '.github/workflows/deploy-supabase.yml'
   workflow_dispatch:
 permissions:
   contents: read

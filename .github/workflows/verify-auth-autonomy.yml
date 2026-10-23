@@ -1,12 +1,5 @@
 name: Verify independent authentication and retire legacy API safely
 on:
-  push:
-    branches: [nettoyage-relais-socioscope-20261021,main]
-    paths:
-      - 'server/**'
-      - 'src/main.tsx'
-      - 'src/session.ts'
-      - '.github/workflows/verify-auth-autonomy.yml'
   workflow_dispatch:
 permissions:
   contents: read
