@@ -138,7 +138,7 @@ const exportAllAgents=async()=>{
  try{
   const rows=await fetchCompleteList();
   const selectedDate=active?.date||'';
-  if(!/^\\d{4}-\\d{2}-\\d{2}$/.test(selectedDate))throw Error('Date de photographie invalide : export annulé.');
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(selectedDate))throw Error('Date de photographie invalide : export annulé.');
   const details:Array<{published:number|null;years:number|null;method:string;date:string}> = new Array(rows.length);
   // Retrieve each full profile: the table row alone does not contain the historical
   // observations and validated RUP corrections required by careerSeniority.
