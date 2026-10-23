@@ -12,4 +12,38 @@ async function token(){if(!session)return '';if(session.expires_at<Date.now()/10
 export async function apiFetch(path:string,options:RequestInit={}){const access=await token();const headers=new Headers(options.headers);headers.set('apikey',PUBLISHABLE_KEY);if(access)headers.set('authorization','Bearer '+access);const r=await originalFetch(API_URL+path,{...options,headers,cache:'no-store'});if(r.status===401){save(null);window.dispatchEvent(new Event('socioscope-expired'));}return r;}
 window.fetch=async(input:RequestInfo|URL,options?:RequestInit)=>{if(typeof input==='string'&&(input.startsWith('/api/')||input.startsWith('/sources/')))return apiFetch(input,options);return originalFetch(input,options);};
 export async function importAuthCallback(){const hash=new URLSearchParams(window.location.hash.slice(1));if(hash.has('error_description')){const message=hash.get('error_description')!;history.replaceState(null,'',location.pathname);throw Error(message);}const access=hash.get('access_token'),refresh=hash.get('refresh_token');if(access&&refresh){save({access_token:access,refresh_token:refresh,expires_at:Math.floor(Date.now()/1000)+Number(hash.get('expires_in')||3600)});const recovery=hash.get('type')==='recovery'||hash.get('type')==='invite';history.replaceState(null,'',location.pathname);return recovery;}return false;}
-document.addEventListener('click',async event=>{const a=(event.target as Element)?.closest?.('a');if(!a)return;const href=a.getAttribute('href')||'';if(!href.startsWith('/sources/')&&!/^\/api\/.+files\//.test(href)&&!href.startsWith('/api/files/'))return;event.preventDefault();const popup=a.target==='_blank'?window.open('about:blank','_blank'):null;try{const r=await apiFetch(href);if(!r.ok){const b=await r.json();throw Error(b.error||'Téléchargement impossible.');}const bytes=await r.blob();const mime=href.endsWith('.pdf')?'application/pdf':href.endsWith('.png')?'image/png':bytes.type;const url=URL.createObjectURL(new Blob([bytes],{type:mime}));if(popup)popup.location.replace(url);else{const link=document.createElement('a');link.href=url;const disposition=r.headers.get('content-disposition');link.download=disposition?.includes("filename*=UTF-8''")?decodeURIComponent(disposition.split("filename*=UTF-8''")[1]):href.split('/').at(-1)||'document';link.click();}setTimeout(()=>URL.revokeObjectURL(url),120000);}catch(e){popup?.close();alert((e as Error).message);}});
+// Preserve the original filename when serving protected source documents.
+// A blob: URL opened in a new tab has no filename, so browser "Save as"
+// would otherwise produce an extensionless UUID.
+function protectedDocumentFilename(response:Response,href:string){
+ const disposition=response.headers.get('content-disposition')||'';
+ const encoded=disposition.match(/filename\*\s*=\s*UTF-8''([^;]+)/i)?.[1];
+ const legacy=disposition.match(/filename\s*=\s*"?([^";]+)"?/i)?.[1];
+ let name='';
+ try{name=encoded?decodeURIComponent(encoded):legacy||'';}catch{name=legacy||'';}
+ if(!name)name=decodeURIComponent(href.split(/[?#]/)[0].split('/').at(-1)||'document');
+ name=name.split(/[\\/]/).at(-1)?.replace(/[\u0000-\u001f\u007f]/g,'').trim()||'document';
+ if(!/\.[a-z0-9]{2,8}$/i.test(name)){
+  const mime=(response.headers.get('content-type')||'').toLowerCase();
+  const ext=mime.includes('pdf')?'.pdf':mime.includes('spreadsheetml')?'.xlsx':mime.includes('ms-excel')?'.xls':mime.includes('png')?'.png':mime.includes('jpeg')?'.jpg':mime.includes('csv')?'.csv':mime.includes('zip')?'.zip':href.toLowerCase().includes('.pdf')?'.pdf':'';
+  name+=ext;
+ }
+ return name;
+}
+document.addEventListener('click',async event=>{
+ const a=(event.target as Element)?.closest?.('a');if(!a)return;
+ const href=a.getAttribute('href')||'';
+ if(!href.startsWith('/sources/')&&!/^\\/api\\/.+files\\//.test(href)&&!href.startsWith('/api/files/'))return;
+ event.preventDefault();
+ try{
+  const requestPath=href.split('#')[0];
+  const response=await apiFetch(requestPath);
+  if(!response.ok){const body=await response.json().catch(()=>({}));throw Error(body.error||'Téléchargement impossible.');}
+  const filename=protectedDocumentFilename(response,href);
+  const url=URL.createObjectURL(await response.blob());
+  const link=document.createElement('a');
+  link.href=url;link.download=filename;
+  document.body.appendChild(link);link.click();link.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),120000);
+ }catch(e){alert((e as Error).message);}
+});
