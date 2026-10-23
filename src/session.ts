@@ -22,7 +22,7 @@ function protectedDocumentFilename(response:Response,href:string){
  let name='';
  try{name=encoded?decodeURIComponent(encoded):legacy||'';}catch{name=legacy||'';}
  if(!name)name=decodeURIComponent(href.split(/[?#]/)[0].split('/').at(-1)||'document');
- name=name.split(/[\\/]/).at(-1)?.replace(/[\u0000-\u001f\u007f]/g,'').trim()||'document';
+ name=name.replaceAll(String.fromCharCode(92),'/').split('/').at(-1)?.replace(/[\u0000-\u001f\u007f]/g,'').trim()||'document';
  if(!/\.[a-z0-9]{2,8}$/i.test(name)){
   const mime=(response.headers.get('content-type')||'').toLowerCase();
   const ext=mime.includes('pdf')?'.pdf':mime.includes('spreadsheetml')?'.xlsx':mime.includes('ms-excel')?'.xls':mime.includes('png')?'.png':mime.includes('jpeg')?'.jpg':mime.includes('csv')?'.csv':mime.includes('zip')?'.zip':href.toLowerCase().includes('.pdf')?'.pdf':'';
@@ -33,7 +33,7 @@ function protectedDocumentFilename(response:Response,href:string){
 document.addEventListener('click',async event=>{
  const a=(event.target as Element)?.closest?.('a');if(!a)return;
  const href=a.getAttribute('href')||'';
- if(!href.startsWith('/sources/')&&!/^\\/api\\/.+files\\//.test(href)&&!href.startsWith('/api/files/'))return;
+ if(!href.startsWith('/sources/')&&!href.startsWith('/api/files/')&&!href.startsWith('/api/agents/files/')&&!href.startsWith('/api/payroll/files/'))return;
  event.preventDefault();
  try{
   const requestPath=href.split('#')[0];
