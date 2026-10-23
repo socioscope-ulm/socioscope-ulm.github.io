@@ -82,9 +82,23 @@ const decide=async(body:any)=>{
   applySavedDecision(body);
   setNotice(body.kind==='return'?'Présence confirmée. Les effectifs et analyses sont recalculés ; l’historique est conservé.':body.kind==='executive'||body.kind==='executive_manual'?'Cadre dirigeant enregistré à part. Aucun ajout aux effectifs.':'Décision enregistrée. L’historique est conservé.');
   setRevision(r=>r+1);
-  if(profile)setProfile(await api('/api/agents/'+encodeURIComponent(profile.id)));
+  if(profile){
+   try{
+    const refreshed=await api('/api/agents/'+encodeURIComponent(profile.id));
+    setProfile(refreshed);
+    if(body.kind==='career_rup' && (refreshed.careerCorrection?.date!==body.date || refreshed.careerCorrection?.source!==body.source)){
+     setNotice('La décision a été enregistrée, mais son application au calcul n’est pas confirmée. Vérifier la référence RUP et réessayer le chargement de la fiche.');
+    }else if(body.kind==='career_rup'){
+     setNotice('Date d’entrée IEG validée et relue dans le dossier. Les calculs de carrière et de masse salariale utilisent désormais cette correction.');
+    }else if(body.kind==='career_auto'&&refreshed.careerCorrection){
+     setNotice('Annulation enregistrée, mais le retour au calcul automatique reste à vérifier.');
+    }
+   }catch(error){
+    setNotice('Décision enregistrée dans l’historique, mais le rechargement de la fiche a échoué : '+(error as Error).message+'. Revenir sur la fiche pour vérifier les calculs.');
+   }
+  }
   return true;
- }catch(e){setNotice((e as Error).message);return false;}
+ }catch(e){setNotice('Enregistrement impossible : '+(e as Error).message);return false;}
  finally{setBusy(false);}
 };
 const archivePending=async(rows:any[],kind:'dismiss'|'restore')=>{
