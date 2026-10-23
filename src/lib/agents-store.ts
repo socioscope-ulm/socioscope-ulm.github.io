@@ -32,20 +32,36 @@ if(b.kind==='career_rup'||b.kind==='career_auto'){
  if(!nni||nni!==b.agent)throw Object.assign(Error('La correction exige une identité NNI rapprochée.'),{status:400});
  const reason=String(b.note||'').trim();
  if(reason.length<5||reason.length>1000)throw Object.assign(Error('Indiquer un motif de correction (5 à 1 000 caractères).'),{status:400});
- const {observedData:data}=await agentData(false,nni);
- if(!data.records.some(r=>r.agentId===nni&&r.nni===nni))throw Object.assign(Error('Fiche agent introuvable.'),{status:404});
+ // Validate against the selected ACTIVE RUP itself, not against a full
+ // enrichment of every historical situation. Reused labels are not IDs.
+ const {bucket}=resources();
  let source:string|null=null;let note='';
  if(b.kind==='career_rup'){
   if(typeof b.source!=='string'||typeof b.date!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(b.date)||(b.row!==null&&b.row!==undefined&&(!Number.isInteger(b.row)||b.row<1)))throw Object.assign(Error('Choisir une date et une référence RUP valides.'),{status:400});
+  if(await db.prepare('SELECT source_id FROM rup_source_exclusions WHERE source_id=?').bind(b.source).first())throw Object.assign(Error('La référence RUP choisie est désactivée. Choisir un import actif.'),{status:400});
+  const rup=JSON.parse(rupSeedText) as RupData;
+  let matching:any[]=[];
+  if(rup.sources.some(s=>s.id===b.source)){
+   matching=rup.records.filter(r=>r.source===b.source&&r.nni===nni);
+  }else{
+   const imported=await db.prepare('SELECT status,detail FROM agent_imports WHERE id=?').bind(b.source).first<any>();
+   let detail:any={};try{detail=JSON.parse(imported?.detail||'{}');}catch{}
+   if(imported?.status!=='validated'||detail.kind!=='rup')throw Object.assign(Error('La référence RUP sélectionnée n’est pas un import actif validé.'),{status:400});
+   const object=await bucket.get('agents/'+b.source+'/records.json');
+   if(!object)throw Object.assign(Error('Les lignes du RUP actif sont introuvables.'),{status:404});
+   matching=(await object.json<any[]>()).filter(r=>r.nni===nni);
+  }
   const row=Number.isInteger(b.row)?b.row:null;
   const contract=String(b.contract||'').trim();
-  const verified=data.rup?.records.find(r=>r.nni===nni&&r.source===b.source&&r.entreeIEG===b.date&&(row===null?String(r.contrat||'').trim()===contract:r.row===row));
-  if(!verified||!data.rup?.sources.some(s=>s.id===b.source))throw Object.assign(Error('La date ou la ligne RUP sélectionnée est absente ou désactivée.'),{status:400});
-  source=verified.source;
+  const verified=matching.find(r=>r.entreeIEG===b.date&&(row===null?String(r.contrat||'').trim()===contract:r.row===row));
+  if(!verified)throw Object.assign(Error('La date et la ligne choisies ne correspondent pas aux données du RUP actif pour cet agent.'),{status:400});
+  source=b.source;
   note=JSON.stringify({date:verified.entreeIEG,row:Number.isInteger(verified.row)?verified.row:null,contract:String(verified.contrat||'').trim(),reason,actor:request.headers.get('oai-authenticated-user-email')||''});
  }else note=JSON.stringify({reason,actor:request.headers.get('oai-authenticated-user-email')||''});
- await db.prepare('INSERT INTO agent_decisions (id,agent,kind,target,source,note,created) VALUES (?,?,?,?,?,?,?)').bind(crypto.randomUUID(),nni,b.kind,null,source,note,new Date().toISOString()).run();
- return {ok:true,kind:b.kind};
+ const id=crypto.randomUUID();
+ const write=await db.prepare('INSERT INTO agent_decisions (id,agent,kind,target,source,note,created) VALUES (?,?,?,?,?,?,?)').bind(id,nni,b.kind,null,source,note,new Date().toISOString()).run();
+ if(write.meta.changes!==1)throw Object.assign(Error('La correction n’a pas été enregistrée.'),{status:503});
+ return {ok:true,kind:b.kind,id};
 }
 // A confirmed departure or a return to "to review" must not require loading
 // all careers, RUP files and computed individual histories.
