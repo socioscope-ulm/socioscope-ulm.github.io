@@ -15,7 +15,7 @@ export default function AgentRemuneration({agentId,source,grid,bonus,residence}:
  const [loading,setLoading]=useState(false);
  const [retry,setRetry]=useState(0);
  const [months,setMonths]=useState(13);
- const [contrib,setContrib]=useState(23);
+ const [contrib,setContrib]=useState(21);
  const [pas,setPas]=useState(0);
  const [pasCustom,setPasCustom]=useState(false);
  const pasOptions=[0,2,5,8,10,12.1,12.3,15,20,25,30];
