@@ -17,7 +17,7 @@ import * as route13 from '../src/app/api/review/[id]/route';
 import * as route14 from '../src/app/api/rows/route';
 import * as route15 from '../src/app/api/rup/route';
 import {db,bucket,projectURL,serviceKey} from './storage';
-import {loadSeeds} from './seeds';import {initializeBase} from '../src/lib/store';
+import {loadSeeds} from './seeds';import {seedsForPath} from './seed-loader';import {initializeBase} from '../src/lib/store';
 const CLIENT_ORIGIN='https://socioscope-ulm.github.io';
 // All authenticated app operations now originate from the autonomous site only.
 // The historical Pages site continues to redirect old email links to this origin.
@@ -82,8 +82,8 @@ export async function handler(req:Request){
   if(req.method==='POST'){const b=await req.json();const e=String(b.email||'').trim().toLowerCase();if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)||e.length>254)return finish(json({error:'Adresse mail invalide.'},400));if(e==='fnme.pointage@gmail.com')return finish(json({error:'Le compte administrateur est conservé.'},400));await db.prepare("INSERT INTO members(email,role,enabled) VALUES (?,'viewer',?) ON CONFLICT(email) DO UPDATE SET enabled=EXCLUDED.enabled WHERE members.role='viewer'").bind(e,b.enabled!==false).run();return finish(json({ok:true}));}
  }
  if(path.startsWith('/sources/')){const key=path.slice(1);if(key.includes('..')||key.split('/').length!==2)return finish(json({error:'Fichier invalide.'},400));const f=await bucket.get(key);if(!f)return finish(json({error:'Fichier introuvable.'},404));const h=new Headers();f.writeHttpMetadata(h);h.set('Content-Disposition',"attachment; filename*=UTF-8''"+encodeURIComponent(path.split('/').at(-1)!));return finish(new Response(f.body,{headers:h}));}
- await loadSeeds();initializeBase();
  for(const [pattern,route]of routes){const match=path.match(pattern);if(!match)continue;const fn=route[req.method];if(!fn)return finish(json({error:'Méthode non autorisée.'},405));
+  const requiredSeeds=seedsForPath(path);await loadSeeds(requiredSeeds);if(requiredSeeds.includes('seed'))initializeBase();
   const h=new Headers(req.headers);h.delete('oai-authenticated-user-id');h.delete('oai-authenticated-user-email');h.delete('x-socioscope-role');h.set('oai-authenticated-user-id',user.id);h.set('oai-authenticated-user-email',email);h.set('x-socioscope-role',member.role);
   const trustedOrigin=origin&&ALLOWED_ORIGINS.has(origin)?origin:CLIENT_ORIGIN;
   const internal=new Request(trustedOrigin+path+u.search,{method:req.method,headers:h,...(!['GET','HEAD'].includes(req.method)?{body:await req.arrayBuffer()}:{})});
