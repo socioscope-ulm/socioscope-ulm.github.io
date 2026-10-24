@@ -105,7 +105,7 @@ export default function AgentRemuneration({agentId,source,grid,bonus,residence}:
  return <section className="panel" style={{display:'grid',gap:16}}>
   <div className="panel-heading"><div><h2>Rémunération estimée</h2><p>Situation au {date(data.referenceDate)} · grille du {date(data.gridDate)} · simulation individuelle basée sur les mêmes hypothèses que le simulateur de paie.</p></div><button className="btn" onClick={download}>Exporter la rémunération (CSV)</button></div>
   {row.reason&&<div className="notice" role="status">Salaire indisponible : {row.reason}. Les montants impossibles à calculer ne sont pas remplacés par zéro.</div>}
-  <div className="analysis-options">
+  <div className="analysis-options" style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(190px,1fr))',alignItems:'start',gap:14}}>
    <label>Annualisation<select value={months} onChange={e=>setMonths(Number(e.target.value))}><option value={12}>12 mois</option><option value={13}>13 mois</option></select></label>
    <label>Cotisations estimées (%)<input type="number" min={0} max={70} step={0.1} value={contrib} onChange={e=>setContrib(Math.max(0,Math.min(70,Number(e.target.value)||0)))}/></label>
    <label>Taux de PAS personnalisé (%)<input type="number" min={0} max={60} step={0.1} value={pas} onChange={e=>setPas(Math.max(0,Math.min(60,Number(e.target.value)||0)))}/><small>Taux indicatifs : 0 %, 2 %, 5 %, 8 %, 10 %, 12,1 %, 12,3 %, 15 %, 20 %, 25 %, 30 %.</small></label>
