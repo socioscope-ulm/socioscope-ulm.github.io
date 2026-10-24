@@ -38,11 +38,12 @@ export default function PaySimulator({revision=0}:{revision?:number}){
  const levels=rates[effectiveResidence]?.[effectiveNr]||[];
  const value=levels[level-1];
  const base=typeof value==='number'&&Number.isFinite(value)?value:null;
+ const cadreEligible=Number(gf)>=12;
  const rpcAnnual=rpc&&bonus?.payload?.bonuses?.[gf]!=null?Number(bonus.payload.bonuses[gf]):0;
- const pvpaAnnual=pvpa&&Number(grid?.date.slice(0,4))>=2025?PVPA_2025_BY_GF_CENTS[gf]||0:0;
+ const pvpaAnnual=cadreEligible&&pvpa&&Number(grid?.date.slice(0,4))>=2025?PVPA_2025_BY_GF_CENTS[gf]||0:0;
  const cadrePrimes=cadreMonthlyBonuses(base,Number(gf)>=12&&Number(gf)<=19?'cadres':'');
- const engagementMonthly=engagement?cadrePrimes.engagementMonthlyCents:0;
- const autonomieMonthly=autonomie?cadrePrimes.autonomieMonthlyCents:0;
+ const engagementMonthly=cadreEligible&&engagement?cadrePrimes.engagementMonthlyCents:0;
+ const autonomieMonthly=cadreEligible&&autonomie?cadrePrimes.autonomieMonthlyCents:0;
  const engagementAnnual=engagementMonthly*12;
  const autonomieAnnual=autonomieMonthly*12;
  const annualBonus=rpcAnnual+pvpaAnnual+engagementAnnual+autonomieAnnual+Math.round(extra*100);
@@ -71,7 +72,8 @@ export default function PaySimulator({revision=0}:{revision?:number}){
     {taxCustom&&input('Saisir mon taux de PAS (%)',numberInput(tax,setTax,0,60,.1))}
     {input('Autres primes brutes annuelles (€)',numberInput(extra,setExtra,0,1000000,.01))}
    </div>
-   <div style={{display:'flex',flexWrap:'wrap',gap:18,marginTop:18}}><label><input type="checkbox" checked={rpc} onChange={e=>setRpc(e.target.checked)}/> Inclure RPC / RPEM</label><label><input type="checkbox" checked={pvpa} onChange={e=>setPvpa(e.target.checked)}/> Inclure PVPA (référence 2025)</label><label><input type="checkbox" checked={engagement} onChange={e=>setEngagement(e.target.checked)}/> Prime d’engagement · 3,5 % (cadres)</label><label><input type="checkbox" checked={autonomie} onChange={e=>setAutonomie(e.target.checked)}/> Prime d’autonomie · 4 % (cadres)</label></div>
+   <div style={{display:'flex',flexWrap:'wrap',gap:18,marginTop:18}}><label><input type="checkbox" checked={rpc} onChange={e=>setRpc(e.target.checked)}/> Inclure RPC / RPEM</label><label><input type="checkbox" disabled={!cadreEligible} checked={cadreEligible&&pvpa} onChange={e=>setPvpa(e.target.checked)}/> Inclure PVPA (référence 2025)</label><label><input type="checkbox" disabled={!cadreEligible} checked={cadreEligible&&engagement} onChange={e=>setEngagement(e.target.checked)}/> Prime d’engagement · 3,5 % (cadres)</label><label><input type="checkbox" disabled={!cadreEligible} checked={cadreEligible&&autonomie} onChange={e=>setAutonomie(e.target.checked)}/> Prime d’autonomie · 4 % (cadres)</label></div>
+   {!cadreEligible&&<p className="muted" role="status">PVPA, engagement et autonomie : primes réservées aux GF 12 et plus. Leur sélection est désactivée pour ce GF.</p>}
   </div>
   {base===null?<p role="status">Aucun montant disponible pour cette combinaison de grille, majoration, NR et échelon. Sélectionnez une valeur présente dans les références validées.</p>:<>
    <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(260px,1fr))',gap:16}}>
