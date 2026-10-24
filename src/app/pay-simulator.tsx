@@ -2,7 +2,7 @@
 import {useEffect,useMemo,useState} from 'react';
 import type {PayrollReference} from '../lib/payroll-reference';
 import {selectReference} from '../lib/payroll-reference';
-import {PVPA_2025_BY_GF_CENTS,cadreMonthlyBonuses} from '../lib/agent-payroll';
+import {PVPA_2025_BY_GF_CENTS} from '../lib/agent-payroll';
 
 const euros=(c:number|null)=>c===null?'Non calculable':new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR'}).format(c/100);
 const numeric=(v:unknown)=>Number.isFinite(Number(v))?Number(v):0;
@@ -23,6 +23,12 @@ export default function PaySimulator({revision=0}:{revision?:number}){
  const [engagement,setEngagement]=useState(true);
  const [autonomie,setAutonomie]=useState(true);
  const [extra,setExtra]=useState(0);
+ const [primeDefaults,setPrimeDefaults]=useState({engagementRate:3.5,autonomieRate:4,asctMonthly:54.67,afeMonthly:113.63,familialMonthly:116.56});
+ const [primeValues,setPrimeValues]=useState({engagementRate:3.5,autonomieRate:4,asctMonthly:54.67,afeMonthly:113.63,familialMonthly:116.56});
+ const [asct,setAsct]=useState(false);
+ const [afe,setAfe]=useState(false);
+ const [familial,setFamilial]=useState(false);
+ useEffect(()=>{const c=new AbortController();fetch('/api/prime-settings',{signal:c.signal,cache:'no-store'}).then(async r=>{const d=await r.json();if(!r.ok)throw Error(d.error||'Paramètres des primes indisponibles');setPrimeDefaults(d.settings);setPrimeValues(d.settings);}).catch(e=>{if(e.name!=='AbortError')setError(e.message);});return()=>c.abort();},[revision]);
  useEffect(()=>{const c=new AbortController();fetch('/api/payroll',{signal:c.signal,cache:'no-store'}).then(async r=>{if(!r.ok)throw Error('Références salariales indisponibles ('+r.status+').');return r.json();}).then(d=>setRefs(d.references||[])).catch(e=>{if(e.name!=='AbortError')setError(e.message);});return()=>c.abort();},[revision]);
  const grids=useMemo(()=>refs.filter(r=>r.kind==='grid'&&r.status==='validated').sort((a,b)=>b.date.localeCompare(a.date)),[refs]);
  const bonuses=useMemo(()=>refs.filter(r=>r.kind==='bonuses'&&r.status==='validated').sort((a,b)=>b.date.localeCompare(a.date)),[refs]);
@@ -39,12 +45,14 @@ export default function PaySimulator({revision=0}:{revision?:number}){
  const cadreEligible=Number(gf)>=12;
  const rpcAnnual=rpc&&bonus?.payload?.bonuses?.[gf]!=null?Number(bonus.payload.bonuses[gf]):0;
  const pvpaAnnual=cadreEligible&&pvpa&&Number(grid?.date.slice(0,4))>=2025?PVPA_2025_BY_GF_CENTS[gf]||0:0;
- const cadrePrimes=cadreMonthlyBonuses(base,Number(gf)>=12&&Number(gf)<=19?'cadres':'');
- const engagementMonthly=cadreEligible&&engagement?cadrePrimes.engagementMonthlyCents:0;
- const autonomieMonthly=cadreEligible&&autonomie?cadrePrimes.autonomieMonthlyCents:0;
+ const engagementMonthly=base!==null&&cadreEligible&&engagement?Math.round(base*primeValues.engagementRate/100):0;
+ const autonomieMonthly=base!==null&&cadreEligible&&autonomie?Math.round(base*primeValues.autonomieRate/100):0;
+ const asctAnnual=asct?Math.round(primeValues.asctMonthly*100)*12:0;
+ const afeAnnual=afe?Math.round(primeValues.afeMonthly*100)*12:0;
+ const familialAnnual=familial?Math.round(primeValues.familialMonthly*100)*12:0;
  const engagementAnnual=engagementMonthly*12;
  const autonomieAnnual=autonomieMonthly*12;
- const annualBonus=rpcAnnual+pvpaAnnual+engagementAnnual+autonomieAnnual+Math.round(extra*100);
+ const annualBonus=rpcAnnual+pvpaAnnual+engagementAnnual+autonomieAnnual+asctAnnual+afeAnnual+familialAnnual+Math.round(extra*100);
  const annualGross=base===null?null:base*months+annualBonus;
  // Les scenarios "sans primes" excluent RPC/RPEM, PVPA, engagement, autonomie et autres primes.
  // Les chiffres mensuels "avec primes" sont des moyennes annuelles sur 12 mois.
@@ -71,6 +79,13 @@ export default function PaySimulator({revision=0}:{revision?:number}){
    </div>
    <div style={{display:'flex',flexWrap:'wrap',gap:18,marginTop:18}}><label><input type="checkbox" checked={rpc} onChange={e=>setRpc(e.target.checked)}/> Inclure RPC / RPEM</label><label><input type="checkbox" disabled={!cadreEligible} checked={cadreEligible&&pvpa} onChange={e=>setPvpa(e.target.checked)}/> Inclure PVPA (référence 2025)</label><label><input type="checkbox" disabled={!cadreEligible} checked={cadreEligible&&engagement} onChange={e=>setEngagement(e.target.checked)}/> Prime d’engagement · 3,5 % (cadres)</label><label><input type="checkbox" disabled={!cadreEligible} checked={cadreEligible&&autonomie} onChange={e=>setAutonomie(e.target.checked)}/> Prime d’autonomie · 4 % (cadres)</label></div>
    {!cadreEligible&&<p className="muted" role="status">PVPA, engagement et autonomie : primes réservées aux GF 12 et plus. Leur sélection est désactivée pour ce GF.</p>}
+   <div style={{display:'grid',gap:12,marginTop:18}}><h3>Primes complémentaires · 12 mois</h3><p className="muted">Ces trois primes sont facultatives, ouvertes à tous les GF dans ce simulateur uniquement. Cochez une prime pour l'ajouter, puis personnalisez son montant mensuel si nécessaire.</p>
+   <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(200px,1fr))',gap:12}}>
+    {(['asct','afe','familial'] as const).map(key=>{const field=key==='asct'?'asctMonthly':key==='afe'?'afeMonthly':'familialMonthly';const selected=key==='asct'?asct:key==='afe'?afe:familial;const setSelected=key==='asct'?setAsct:key==='afe'?setAfe:setFamilial;return <div className="panel" key={key} style={{padding:12,display:'grid',gap:8}}><label><input type="checkbox" checked={selected} onChange={e=>setSelected(e.target.checked)}/> {key==='asct'?'ASCT':key==='afe'?'AFE':'Sursalaire familial'}</label><label style={{display:'grid',gap:5}}>Montant mensuel (€)<input type="number" min={0} max={100000} step={0.01} value={primeValues[field]} onChange={e=>setPrimeValues(v=>({...v,[field]:Math.min(100000,Math.max(0,numeric(e.target.value)))}))}/></label><small>Valeur par défaut : {primeDefaults[field].toLocaleString('fr-FR',{minimumFractionDigits:2})} € · 12 mois</small></div>;})}
+   </div>
+   <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(210px,1fr))',gap:12}}>
+    {(['engagementRate','autonomieRate'] as const).map(key=><label key={key} style={{display:'grid',gap:6}}>Taux personnalisé · {key==='engagementRate'?'Engagement':'Autonomie'} (%)<input type="number" min={0} max={100} step={0.01} value={primeValues[key]} onChange={e=>setPrimeValues(v=>({...v,[key]:Math.min(100,Math.max(0,numeric(e.target.value)))}))}/><small>Taux par défaut : {primeDefaults[key].toLocaleString('fr-FR')} % · GF 12 à 19 uniquement</small></label>)}
+   </div></div>
   </div>
   {base===null?<p role="status">Aucun montant disponible pour cette combinaison de grille, majoration, NR et échelon. Sélectionnez une valeur présente dans les références validées.</p>:<>
    <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(260px,1fr))',gap:16}}>
@@ -99,8 +114,8 @@ export default function PaySimulator({revision=0}:{revision?:number}){
      {card('Net annuel après impôt',netAfterTax(annualGross))}
     </div>
    </div>
-   <p className="muted">Les montants mensuels avec primes sont des moyennes sur 12 mois. Les montants sans primes excluent les quatre primes sélectionnables et les autres primes annuelles ; l'annualisation du salaire de base reste réglable. Le PAS et les cotisations estimées s'appliquent aux deux scénarios.</p>
-   <div className="panel"><h3>Détail annuel</h3><p>Base : {euros(base)} × {months} mensualités = {euros(base*months)}. RPC/RPEM : {euros(rpcAnnual)} ; PVPA : {euros(pvpaAnnual)} ; engagement : {euros(engagementAnnual)} ; autonomie : {euros(autonomieAnnual)} ; autres primes : {euros(Math.round(extra*100))}.</p><p>Frais professionnels et remboursements : <strong>0 € inclus</strong> dans le brut ou le net simulé. PAS sélectionné : <strong>{tax.toLocaleString('fr-FR')} %</strong>. Le taux s'applique ici au net estimé avant impôt à titre simplifié ; le net fiscal exact peut différer.</p><p>Sources : {grid?.name} ({grid?.date}) ; {bonus?.name||'aucune grille de primes'} ({bonus?.date||'sans date'}). La PVPA utilise la moyenne 2025 intégrée aux calculs de masse salariale, lorsqu'elle est applicable. Pour les GF 12 à 19, les primes fixes engagement/autonomie sont calculées sur le brut mensuel de base, puis versées sur 12 mois indépendamment de l'annualisation sélectionnée. Leur calcul ne dépend d'aucune grille de primes annuelle.</p><p><strong>Important :</strong> le net est une estimation calculée à partir de taux modifiables, sans prise en compte détaillée des cotisations, plafonds, avantages, absences ou de la situation fiscale individuelle. Le net après impôt applique un taux simplifié au net estimé et ne remplace pas le calcul réglementaire du prélèvement à la source. Les primes peuvent être versées à des dates différentes de la moyenne affichée.</p></div>
+   <p className="muted">Les montants mensuels avec primes sont des moyennes sur 12 mois. Les montants sans primes excluent toutes les primes sélectionnables et les autres primes annuelles ; l'annualisation du salaire de base reste réglable. Le PAS et les cotisations estimées s'appliquent aux deux scénarios.</p>
+   <div className="panel"><h3>Détail annuel</h3><p>Base : {euros(base)} × {months} mensualités = {euros(base*months)}. RPC/RPEM : {euros(rpcAnnual)} ; PVPA : {euros(pvpaAnnual)} ; engagement : {euros(engagementAnnual)} ; autonomie : {euros(autonomieAnnual)} ; ASCT : {euros(asctAnnual)} ; AFE : {euros(afeAnnual)} ; sursalaire familial : {euros(familialAnnual)} ; autres primes : {euros(Math.round(extra*100))}.</p><p>Frais professionnels et remboursements : <strong>0 € inclus</strong> dans le brut ou le net simulé. PAS sélectionné : <strong>{tax.toLocaleString('fr-FR')} %</strong>. Le taux s'applique ici au net estimé avant impôt à titre simplifié ; le net fiscal exact peut différer.</p><p>Sources : {grid?.name} ({grid?.date}) ; {bonus?.name||'aucune grille de primes'} ({bonus?.date||'sans date'}). La PVPA utilise la moyenne 2025 intégrée aux calculs de masse salariale, lorsqu'elle est applicable. Pour les GF 12 à 19, les primes fixes engagement/autonomie sont calculées selon les taux personnalisables sur le brut mensuel de base, puis versées sur 12 mois indépendamment de l'annualisation sélectionnée. ASCT, AFE et sursalaire familial sont des primes facultatives sur 12 mois, réservées à cette simulation. Leur calcul ne dépend d'aucune grille de primes annuelle.</p><p><strong>Important :</strong> le net est une estimation calculée à partir de taux modifiables, sans prise en compte détaillée des cotisations, plafonds, avantages, absences ou de la situation fiscale individuelle. Le net après impôt applique un taux simplifié au net estimé et ne remplace pas le calcul réglementaire du prélèvement à la source. Les primes peuvent être versées à des dates différentes de la moyenne affichée.</p></div>
   </>}
  </section>;
 }
