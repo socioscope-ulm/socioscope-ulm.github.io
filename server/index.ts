@@ -17,6 +17,7 @@ import * as route13 from '../src/app/api/review/[id]/route';
 import * as route14 from '../src/app/api/rows/route';
 import * as route15 from '../src/app/api/rup/route';
 import {db,bucket,projectURL,serviceKey} from './storage';
+import {cachedAgentRead} from './private-cache';
 import {loadSeeds} from './seeds';import {seedsForPath} from './seed-loader';import {initializeBase} from '../src/lib/store';
 const CLIENT_ORIGIN='https://socioscope-ulm.github.io';
 // All authenticated app operations now originate from the autonomous site only.
@@ -83,11 +84,13 @@ export async function handler(req:Request){
  }
  if(path.startsWith('/sources/')){const key=path.slice(1);if(key.includes('..')||key.split('/').length!==2)return finish(json({error:'Fichier invalide.'},400));const f=await bucket.get(key);if(!f)return finish(json({error:'Fichier introuvable.'},404));const h=new Headers();f.writeHttpMetadata(h);h.set('Content-Disposition',"attachment; filename*=UTF-8''"+encodeURIComponent(path.split('/').at(-1)!));return finish(new Response(f.body,{headers:h}));}
  for(const [pattern,route]of routes){const match=path.match(pattern);if(!match)continue;const fn=route[req.method];if(!fn)return finish(json({error:'Méthode non autorisée.'},405));
-  const requiredSeeds=seedsForPath(path);await loadSeeds(requiredSeeds);if(requiredSeeds.includes('seed'))initializeBase();
   const h=new Headers(req.headers);h.delete('oai-authenticated-user-id');h.delete('oai-authenticated-user-email');h.delete('x-socioscope-role');h.set('oai-authenticated-user-id',user.id);h.set('oai-authenticated-user-email',email);h.set('x-socioscope-role',member.role);
   const trustedOrigin=origin&&ALLOWED_ORIGINS.has(origin)?origin:CLIENT_ORIGIN;
   const internal=new Request(trustedOrigin+path+u.search,{method:req.method,headers:h,...(!['GET','HEAD'].includes(req.method)?{body:await req.arrayBuffer()}:{})});
-  return finish(await fn(internal,{params:Promise.resolve({id:match[1]?decodeURIComponent(match[1]):''})}));
+  return finish(await cachedAgentRead(internal,path,user.id+':'+member.role,async()=>{
+   const requiredSeeds=seedsForPath(path);await loadSeeds(requiredSeeds);if(requiredSeeds.includes('seed'))initializeBase();
+   return await fn(internal,{params:Promise.resolve({id:match[1]?decodeURIComponent(match[1]):''})});
+  }));
  }
  return finish(json({error:'Page introuvable.'},404));
  }catch(error){console.error('Socioscope request failed',error instanceof Error?error.name:'Error');return finish(json({error:'Service momentanément indisponible. Réessayer dans quelques instants.'},503));}
