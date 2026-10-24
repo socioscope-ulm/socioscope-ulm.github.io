@@ -40,8 +40,40 @@ export function careerSeniority(records:AgentRecord[],sources:AgentSource[],asof
  const same=anchors.filter(r=>(r.seniorityDate||refs.get(r.source)!.seniorityDate)===start);const conflict=same.some(r=>Math.abs(r.iegYears!-base)>0.01);
  return {years:conflict?null:years,completedYears:conflict?null:Math.floor(years+1e-8),asof,start,base,method:rupProblem?method+' · RUP à vérifier':method,estimated:method.startsWith('Première'),conflict,evidence:{source:evidence.source,row:evidence.row},firstSeen:rows.map(r=>refs.get(r.source)!.date).sort()[0]};
 }
-export function unpackAgentSeed(p:any):AgentData{const decode=(v:any):any=>typeof v==='number'&&v<0?p.strings[-v-1]:Array.isArray(v)?v.map(decode):v&&typeof v==='object'?('number'in v?v.number:Object.fromEntries(Object.entries(v).map(([k,x])=>[k,decode(x)]))):v;const unpack=(fields:string[],r:any[])=>Object.fromEntries(fields.flatMap((k,i)=>r[i]===null?[]:[[k,decode(r[i])]]));return {...p,strings:undefined,recordFields:undefined,eventFields:undefined,records:p.records.map((r:any[])=>{const record=unpack(p.recordFields,r);if(['s2022jan','s2022dec'].includes(record.source)&&!record.college&&typeof record.gf==='number'&&record.gf>=12)record.college='cadres';return record;}),events:p.events.map((r:any[])=>unpack(p.eventFields,r))};}
-export function snapshot(data:AgentData,source:string){const grouped=new Map<string,AgentRecord[]>();for(const r of data.records.filter(r=>r.source===source)){const rows=grouped.get(r.agentId)||[];rows.push(r);grouped.set(r.agentId,rows);}return [...grouped].map(([agentId,rows])=>{const out:any={...rows[0],agentId,situations:rows.length,conflicts:[]};for(const field of ['nr','gf','nrYears','gfYears','iegYears','coefficient','agency','college','gfDate','nrDate','seniorityDate','m3e']){const values=[...new Set(rows.map(r=>(r as any)[field]).filter(v=>v!==undefined&&v!==''))];if(values.length>1){out[field]=undefined;out.conflicts.push(field);}else out[field]=values[0];}return out as AgentRecord&{situations:number;conflicts:string[]};});}
+export function unpackAgentSeed(p:any):AgentData{
+ const decode=(v:any):any=>typeof v==='number'&&v<0?p.strings[-v-1]:Array.isArray(v)?v.map(decode):v&&typeof v==='object'?('number'in v?v.number:Object.fromEntries(Object.entries(v).map(([k,x])=>[k,decode(x)]))):v;
+ const unpack=(fields:string[],values:any[])=>{
+  const record:any={};
+  for(let i=0;i<fields.length;i++){
+   if(values[i]===null)continue;
+   const key=fields[i],value=decode(values[i]);
+   if(key==='__proto__')Object.defineProperty(record,key,{value,enumerable:true,writable:true,configurable:true});
+   else record[key]=value;
+  }
+  return record;
+ };
+ return {...p,strings:undefined,recordFields:undefined,eventFields:undefined,records:p.records.map((r:any[])=>{
+  const record=unpack(p.recordFields,r);
+  if(['s2022jan','s2022dec'].includes(record.source)&&!record.college&&typeof record.gf==='number'&&record.gf>=12)record.college='cadres';
+  return record;
+ }),events:p.events.map((r:any[])=>unpack(p.eventFields,r))};
+}
+const snapshotFields=['nr','gf','nrYears','gfYears','iegYears','coefficient','agency','college','gfDate','nrDate','seniorityDate','m3e'] as const;
+export function snapshot(data:AgentData,source:string){
+ const grouped=new Map<string,AgentRecord[]>();
+ for(const r of data.records){if(r.source!==source)continue;const rows=grouped.get(r.agentId)||[];rows.push(r);grouped.set(r.agentId,rows);}
+ return [...grouped].map(([agentId,rows])=>{
+  const out:any={...rows[0],agentId,situations:rows.length,conflicts:[]};
+  // Most agents have one line per photograph. No conflict sets or temporary
+  // arrays are needed for those rows. Empty fields retain the same semantics.
+  if(rows.length===1){for(const field of snapshotFields)out[field]=out[field]===''?undefined:out[field];}
+  else for(const field of snapshotFields){
+   const values=[...new Set(rows.map(r=>(r as any)[field]).filter(v=>v!==undefined&&v!==''))];
+   if(values.length>1){out[field]=undefined;out.conflicts.push(field);}else out[field]=values[0];
+  }
+  return out as AgentRecord&{situations:number;conflicts:string[]};
+ });
+}
 // The preferred previous photograph is the latest older *date*, not just
 // whichever version happens to be marked primary. On the same date the
 // December 2024 "onglets mis en forme" workbook takes precedence.

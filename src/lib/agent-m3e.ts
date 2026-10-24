@@ -28,18 +28,28 @@ export const m3eLabel=(key:string)=>{
  const p=M3E_RANGES.find(p=>p.id===key);
  return p?`${p.id} · GF ${p.min} à ${p.max}`:key==='__missing'?'Non renseignée':key==='__conflict'?'Plage divergente · à vérifier':`${key} · plage non reconnue`;
 };
-export function m3eOptions(rows:AgentRecord[]){
- const keys=[...new Set(rows.map(m3eKey))];
+// Normalize a row's range once, then reuse its cohort for options and means.
+function groupM3e(rows:AgentRecord[]){
+ const groups=new Map<string,AgentRecord[]>();
+ for(const row of rows){const key=m3eKey(row);let members=groups.get(key);if(!members){members=[];groups.set(key,members);}if(row.nni)members.push(row);}
+ return groups;
+}
+function optionsFor(groups:Map<string,AgentRecord[]>){
+ const keys=[...groups.keys()];
  return [...M3E_RANGES.map(p=>p.id),...keys.filter(k=>!M3E_RANGES.some(p=>p.id===k)).sort()].map(id=>{
-  const members=rows.filter(r=>r.nni&&m3eKey(r)===id);
+  const members=groups.get(id)||[];
   const gfs=[...new Set(members.map(r=>r.gf).filter((v):v is number=>typeof v==='number'&&Number.isFinite(v)))].sort((a,b)=>a-b);
   const range=M3E_RANGES.find(p=>p.id===id);
   const outside=range?members.filter(r=>typeof r.gf==='number'&&(r.gf<range.min||r.gf>range.max)).length:0;
   return {id,label:m3eLabel(id),gfs,min:range?.min,max:range?.max,outside};
  });
 }
-export function m3eMeans(rows:AgentRecord[]){return m3eOptions(rows).map(({id,label,gfs,outside})=>{
- const members=rows.filter(r=>r.nni&&m3eKey(r)===id);
- const average=(key:'gf'|'nr')=>{const values=members.map(r=>r[key]).filter((v):v is number=>typeof v==='number'&&Number.isFinite(v));return {mean:values.length?values.reduce((a,b)=>a+b,0)/values.length:null,count:values.length};};
- return {id,label,gfs,outside,agents:members.length,gf:average('gf'),nr:average('nr')};
-});}
+export function m3eOptions(rows:AgentRecord[]){return optionsFor(groupM3e(rows));}
+export function m3eMeans(rows:AgentRecord[]){
+ const groups=groupM3e(rows);
+ return optionsFor(groups).map(({id,label,gfs,outside})=>{
+  const members=groups.get(id)||[];
+  const average=(key:'gf'|'nr')=>{const values=members.map(r=>r[key]).filter((v):v is number=>typeof v==='number'&&Number.isFinite(v));return {mean:values.length?values.reduce((a,b)=>a+b,0)/values.length:null,count:values.length};};
+  return {id,label,gfs,outside,agents:members.length,gf:average('gf'),nr:average('nr')};
+ });
+}
