@@ -47,9 +47,12 @@ export default function PaySimulator({revision=0}:{revision?:number}){
  const autonomieAnnual=autonomieMonthly*12;
  const annualBonus=rpcAnnual+pvpaAnnual+engagementAnnual+autonomieAnnual+Math.round(extra*100);
  const annualGross=base===null?null:base*months+annualBonus;
- const avgGross=annualGross===null?null:annualGross/12;
- const annualNet=annualGross===null?null:annualGross*(1-contrib/100);
- const annualNetTax=annualNet===null?null:annualNet*(1-tax/100);
+ // Les scenarios "sans primes" excluent RPC/RPEM, PVPA, engagement, autonomie et autres primes.
+ // Les chiffres mensuels "avec primes" sont des moyennes annuelles sur 12 mois.
+ const annualBaseGross=base===null?null:base*months;
+ const monthlyWithGross=annualGross===null?null:annualGross/12;
+ const netBeforeTax=(gross:number|null)=>gross===null?null:gross*(1-contrib/100);
+ const netAfterTax=(gross:number|null)=>{const net=netBeforeTax(gross);return net===null?null:net*(1-tax/100);};
  const input=(label:string,node:React.ReactNode)=><label style={{display:'flex',flexDirection:'column',gap:5,fontWeight:600}}>{label}{node}</label>;
  const numberInput=(value:number,set:(v:number)=>void,min:number,max:number,step=1)=><input type="number" min={min} max={max} step={step} value={value} onChange={e=>set(Math.min(max,Math.max(min,numeric(e.target.value))))}/>;
  const card=(label:string,value:number|null)=><div className="panel" style={{padding:18}}><div style={{fontSize:13,color:'#596e68'}}>{label}</div><strong style={{fontSize:23}}>{euros(value)}</strong></div>;
@@ -71,10 +74,33 @@ export default function PaySimulator({revision=0}:{revision?:number}){
    <div style={{display:'flex',flexWrap:'wrap',gap:18,marginTop:18}}><label><input type="checkbox" checked={rpc} onChange={e=>setRpc(e.target.checked)}/> Inclure RPC / RPEM</label><label><input type="checkbox" checked={pvpa} onChange={e=>setPvpa(e.target.checked)}/> Inclure PVPA (référence 2025)</label><label><input type="checkbox" checked={engagement} onChange={e=>setEngagement(e.target.checked)}/> Prime d’engagement · 3,5 % (cadres)</label><label><input type="checkbox" checked={autonomie} onChange={e=>setAutonomie(e.target.checked)}/> Prime d’autonomie · 4 % (cadres)</label></div>
   </div>
   {base===null?<p role="status">Aucun montant disponible pour cette combinaison de grille, majoration, NR et échelon. Sélectionnez une valeur présente dans les références validées.</p>:<>
-   <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(190px,1fr))',gap:14}}>
-    {card('Brut mensuel de base',base)}{card('Engagement mensuel · 3,5 %',engagementMonthly)}{card('Autonomie mensuelle · 4 %',autonomieMonthly)}{card('Brut mensuel moyen avec primes',avgGross)}{card('Net mensuel moyen avant impôt',annualNet===null?null:annualNet/12)}{card('Net mensuel moyen après impôt',annualNetTax===null?null:annualNetTax/12)}
-    {card('Engagement annuel · 12 mois',engagementAnnual)}{card('Autonomie annuelle · 12 mois',autonomieAnnual)}{card('Brut annuel, primes comprises',annualGross)}{card('Net annuel estimé avant impôt',annualNet)}{card('Net annuel estimé après impôt',annualNetTax)}
+   <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(260px,1fr))',gap:16}}>
+    <div className="panel" style={{display:'grid',gap:10}}>
+     <h3>Mensuel · sans primes</h3>
+     {card('Brut de base',base)}
+     {card('Net avant impôt',netBeforeTax(base))}
+     {card('Net après impôt',netAfterTax(base))}
+    </div>
+    <div className="panel" style={{display:'grid',gap:10}}>
+     <h3>Mensuel · avec primes</h3>
+     {card('Brut moyen avec primes',monthlyWithGross)}
+     {card('Net moyen avant impôt',netBeforeTax(monthlyWithGross))}
+     {card('Net moyen après impôt',netAfterTax(monthlyWithGross))}
+    </div>
+    <div className="panel" style={{display:'grid',gap:10}}>
+     <h3>Annuel · sans primes</h3>
+     {card('Brut de base annuel',annualBaseGross)}
+     {card('Net annuel avant impôt',netBeforeTax(annualBaseGross))}
+     {card('Net annuel après impôt',netAfterTax(annualBaseGross))}
+    </div>
+    <div className="panel" style={{display:'grid',gap:10}}>
+     <h3>Annuel · avec primes</h3>
+     {card('Brut annuel avec primes',annualGross)}
+     {card('Net annuel avant impôt',netBeforeTax(annualGross))}
+     {card('Net annuel après impôt',netAfterTax(annualGross))}
+    </div>
    </div>
+   <p className="muted">Les montants mensuels avec primes sont des moyennes sur 12 mois. Les montants sans primes excluent les quatre primes sélectionnables et les autres primes annuelles ; l'annualisation du salaire de base reste réglable. Le PAS et les cotisations estimées s'appliquent aux deux scénarios.</p>
    <div className="panel"><h3>Détail annuel</h3><p>Base : {euros(base)} × {months} mensualités = {euros(base*months)}. RPC/RPEM : {euros(rpcAnnual)} ; PVPA : {euros(pvpaAnnual)} ; engagement : {euros(engagementAnnual)} ; autonomie : {euros(autonomieAnnual)} ; autres primes : {euros(Math.round(extra*100))}.</p><p>Frais professionnels et remboursements : <strong>0 € inclus</strong> dans le brut ou le net simulé. PAS sélectionné : <strong>{tax.toLocaleString('fr-FR')} %</strong>. Le taux s'applique ici au net estimé avant impôt à titre simplifié ; le net fiscal exact peut différer.</p><p>Sources : {grid?.name} ({grid?.date}) ; {bonus?.name||'aucune grille de primes'} ({bonus?.date||'sans date'}). La PVPA utilise la moyenne 2025 intégrée aux calculs de masse salariale, lorsqu'elle est applicable. Pour les GF 12 à 19, les primes fixes engagement/autonomie sont calculées sur le brut mensuel de base, puis versées sur 12 mois indépendamment de l'annualisation sélectionnée. Leur calcul ne dépend d'aucune grille de primes annuelle.</p><p><strong>Important :</strong> le net est une estimation calculée à partir de taux modifiables, sans prise en compte détaillée des cotisations, plafonds, avantages, absences ou de la situation fiscale individuelle. Le net après impôt applique un taux simplifié au net estimé et ne remplace pas le calcul réglementaire du prélèvement à la source. Les primes peuvent être versées à des dates différentes de la moyenne affichée.</p></div>
   </>}
  </section>;
