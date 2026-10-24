@@ -21,7 +21,10 @@ test('Default payroll preserves unfiltered totals and original salary levels',()
  assert.equal(all.total,4);
  assert.equal(all.covered,4);
  assert.equal(all.monthlyCents,20000+23000+14000+14000);
- assert.equal(all.annualBonusCents,6000+6000+4000+4000);
+ assert.equal(all.annualBonusCents,90200+92900+4000+4000);
+ assert.equal(all.engagementAnnualCents,700*12+805*12);
+ assert.equal(all.autonomieAnnualCents,800*12+920*12);
+ assert.equal(all.pvpaBonusCents,66200*2);
  assert.equal(all.annual13Cents,all.monthlyCents*13);
  assert.equal(all.annual13WithBonusesCents,all.annual13Cents+all.annualBonusCents);
  assert.equal(all.rows.length,4);
@@ -30,8 +33,9 @@ test('Selecting a college recalculates all payroll totals and groups',()=>{
  const cadres=calc('cadres');
  assert.equal(cadres.total,2);
  assert.equal(cadres.monthlyCents,43000);
- assert.equal(cadres.annualBonusCents,12000);
- assert.equal(cadres.annual12WithBonusesCents,43000*12+12000);
+ assert.equal(cadres.annualBonusCents,90200+92900);
+ assert.equal(cadres.annual12WithBonusesCents,43000*12+90200+92900);
+ assert.equal(cadres.annual13WithBonusesCents-cadres.annual12WithBonusesCents,43000);
  assert.equal(cadres.colleges.length,1);
  assert.equal(cadres.colleges[0].label,'cadres');
  assert.equal(cadres.colleges[0].agents,2);
@@ -43,8 +47,10 @@ test('Selecting sex and college applies the same subset to totals, detailed rows
  assert.equal(femaleCadres.total,1);
  assert.equal(femaleCadres.covered,1);
  assert.equal(femaleCadres.monthlyCents,20000);
- assert.equal(femaleCadres.annualBonusCents,6000);
- assert.equal(femaleCadres.annual13WithBonusesCents,20000*13+6000);
+ assert.equal(femaleCadres.annualBonusCents,90200);
+ assert.equal(femaleCadres.rows[0].engagementMonthlyCents,700);
+ assert.equal(femaleCadres.rows[0].autonomieMonthlyCents,800);
+ assert.equal(femaleCadres.annual13WithBonusesCents,20000*13+90200);
  assert.deepEqual(femaleCadres.rows.map(r=>r.nni),['A12345']);
  assert.equal(femaleCadres.rows[0].sex,'femmes');
  const maleCadres=calc('cadres','hommes');
@@ -55,6 +61,9 @@ test('Unknown sexes are excluded from sex-specific calculations without inventin
  const femaleMaitrise=calc('maitrise','femmes');
  assert.equal(femaleMaitrise.monthlyCents,14000);
  assert.equal(femaleMaitrise.total,1);
+ assert.equal(femaleMaitrise.engagementAnnualCents,0);
+ assert.equal(femaleMaitrise.autonomieAnnualCents,0);
+ assert.equal(femaleMaitrise.pvpaBonusCents,0);
  assert.equal(femaleMaitrise.sexKnown,1);
  assert.equal(femaleMaitrise.sexTotal,2);
  const maleMaitrise=calc('maitrise','hommes');
