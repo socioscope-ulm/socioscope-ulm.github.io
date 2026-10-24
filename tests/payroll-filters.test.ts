@@ -87,3 +87,13 @@ test('Global filters are forwarded to employment analyses and payroll while pres
  assert.match(route,/college:p\.get\('college'\)\|\|'',sex:p\.get\('sex'\)\|\|''/);
  assert.match(route,/if\(result&&p\.get\('agent'\)\)/);
 });
+
+test('Les primes fixes cadres exigent GF 12 au minimum meme avec college cadres',()=>{
+ const custom={...fixture,records:fixture.records.map((r,i)=>i===2?{...r,college:'cadres'}:r)};
+ const result=agentPayroll(custom as any,'s2025','agency',config,{})!;
+ const gf8=result.rows.find(r=>r.agentId==='C12345')!;
+ assert.equal(gf8.gf,8);
+ assert.equal(gf8.engagementAnnualCents,0);
+ assert.equal(gf8.autonomieAnnualCents,0);
+ assert.equal(gf8.pvpaBonusCents,0);
+});
