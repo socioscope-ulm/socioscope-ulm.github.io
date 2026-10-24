@@ -102,7 +102,7 @@ export default function AgentRemuneration({agentId,source,grid,bonus,residence}:
  const amount=(label:string,centimes:number|null)=><div className="panel" style={{padding:12}}><small>{label}</small><strong style={{display:'block',fontSize:19}}>{money(centimes)}</strong></div>;
  if(!data)return <section className="panel"><h2>Rémunération estimée</h2><p role={error?'alert':'status'}>{error||'Chargement des éléments de rémunération…'}</p>{error&&<button className="btn" disabled={loading} onClick={()=>setRetry(v=>v+1)}>Réessayer le calcul</button>}</section>;
  if(!row)return <section className="panel"><h2>Rémunération estimée</h2><p>Aucune situation salariale calculable dans la photographie retenue. Vérifier le fichier de situation et les références sélectionnées.</p><button className="btn" onClick={()=>setRetry(v=>v+1)}>Actualiser</button></section>;
- return <section className="panel" style={{display:'grid',gap:16}}>
+ return <section className="panel agent-remuneration" aria-label="Rémunération estimée" tabIndex={0} style={{display:'grid',gap:16}}>
   <div className="panel-heading"><div><h2>Rémunération estimée</h2><p>Situation au {date(data.referenceDate)} · grille du {date(data.gridDate)} · simulation individuelle basée sur les mêmes hypothèses que le simulateur de paie.</p></div><button className="btn" onClick={download}>Exporter la rémunération (CSV)</button></div>
   {row.reason&&<div className="notice" role="status">Salaire indisponible : {row.reason}. Les montants impossibles à calculer ne sont pas remplacés par zéro.</div>}
   <div className="analysis-options" style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(190px,1fr))',alignItems:'start',gap:14}}>
