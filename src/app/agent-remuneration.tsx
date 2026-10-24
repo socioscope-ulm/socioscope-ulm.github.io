@@ -17,8 +17,6 @@ export default function AgentRemuneration({agentId,source,grid,bonus,residence}:
  const [months,setMonths]=useState(13);
  const [contrib,setContrib]=useState(21);
  const [pas,setPas]=useState(0);
- const [pasCustom,setPasCustom]=useState(false);
- const pasOptions=[0,2,5,8,10,12.1,12.3,15,20,25,30];
  useEffect(()=>{
   let active=true;
   const controller=new AbortController();
@@ -110,8 +108,7 @@ export default function AgentRemuneration({agentId,source,grid,bonus,residence}:
   <div className="analysis-options">
    <label>Annualisation<select value={months} onChange={e=>setMonths(Number(e.target.value))}><option value={12}>12 mois</option><option value={13}>13 mois</option></select></label>
    <label>Cotisations estimées (%)<input type="number" min={0} max={70} step={0.1} value={contrib} onChange={e=>setContrib(Math.max(0,Math.min(70,Number(e.target.value)||0)))}/></label>
-   <label>Taux de PAS<select value={pasCustom?'custom':String(pas)} onChange={e=>{if(e.target.value==='custom'){setPasCustom(true);}else{setPasCustom(false);setPas(Number(e.target.value));}}}>{pasOptions.map(t=><option value={String(t)} key={t}>{pct(t)} %</option>)}<option value="custom">Taux personnalisé</option></select></label>
-   {pasCustom&&<label>Mon taux de PAS (%)<input type="number" min={0} max={60} step={0.1} value={pas} onChange={e=>setPas(Math.max(0,Math.min(60,Number(e.target.value)||0)))}/></label>}
+   <label>Taux de PAS personnalisé (%)<input type="number" min={0} max={60} step={0.1} value={pas} onChange={e=>setPas(Math.max(0,Math.min(60,Number(e.target.value)||0)))}/><small>Taux indicatifs : 0 %, 2 %, 5 %, 8 %, 10 %, 12,1 %, 12,3 %, 15 %, 20 %, 25 %, 30 %.</small></label>
   </div>
   <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(250px,1fr))',gap:14}}>
    {summaries.map(item=><div className="panel" key={item.label} style={{display:'grid',gap:9,padding:12}}>
