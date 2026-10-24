@@ -28,6 +28,10 @@ export default function AgentRemuneration({agentId,source,grid,bonus,residence}:
   ['Mois supplémentaire inclus dans le brut annuel',money(monthly)],
   ['RPC / RPEM annuelles estimées · moyenne du GF',money(row.rpcRpemBonusCents)],
   ['PVPA annuelle estimée · moyenne du GF',money(row.pvpaBonusCents)],
+  ['Prime d’engagement mensuelle · 3,5 % cadres',money(row.engagementMonthlyCents)],
+  ['Prime d’engagement annuelle · 12 mois',money(row.engagementAnnualCents)],
+  ['Prime d’autonomie mensuelle · 4 % cadres',money(row.autonomieMonthlyCents)],
+  ['Prime d’autonomie annuelle · 12 mois',money(row.autonomieAnnualCents)],
   ['Total des primes annuelles estimées',money(annualBonus)],
   ['Brut annuel avec primes · 13 mois',money(annual===null||annualBonus===null?null:annual+annualBonus)],
   ['Taux horaire hors primes',rate(hourly.withoutBonuses)],
@@ -42,8 +46,8 @@ export default function AgentRemuneration({agentId,source,grid,bonus,residence}:
   {row.reason&&<div className="notice">Calcul du salaire indisponible : {row.reason}.</div>}
   <div className="agent-detail-grid">{items.map(([label,value])=><div key={label}><small>{label}</small><b>{value}</b></div>)}</div>
   <p>GF {row.gf??'non renseigné'} · NR {row.nr??'non renseigné'} · échelon estimé {row.level??'non calculable'} · ancienneté retenue : {typeof row.years==='number'?new Intl.NumberFormat('fr-FR',{maximumFractionDigits:2}).format(row.years)+' ans':'non calculable'}.</p>
-  <p>Majoration résidentielle : {new Intl.NumberFormat('fr-FR',{maximumFractionDigits:2}).format((Number(row.residence)-1)*100)} %{row.residenceProvisional?' (provisoire pour cette agence)':''}. Primes : référence {data.bonusReferenceYear}, moyennes RPC / RPEM par GF. {annualBonus===null?'Prime inconnue : le montant avec primes ne peut pas être chiffré.':''}</p>
+  <p>Majoration résidentielle : {new Intl.NumberFormat('fr-FR',{maximumFractionDigits:2}).format((Number(row.residence)-1)*100)} %{row.residenceProvisional?' (provisoire pour cette agence)':''}. Primes : référence {data.bonusReferenceYear}, moyennes RPC / RPEM par GF. Pour le collège cadres, prime d’engagement de 3,5 % et prime d’autonomie de 4 % du brut mensuel de base, chacune versée sur 12 mois, indépendamment des grilles annuelles. {annualBonus===null?'Prime inconnue : le montant avec primes ne peut pas être chiffré.':''}</p>
   <p className="gap-method">Estimation à temps plein, au NR et à l’échelon de la photographie. L’échelon est déduit de l’ancienneté ({row.method}) et ne tient pas compte des évolutions postérieures au fichier. Les références de grille et de primes sont celles sélectionnées dans « Masse salariale ». La date de calcul de carrière de la fiche ne modifie pas cette estimation.</p>
-  <p className="gap-method">Taux horaire hors primes = brut mensuel ÷ 151,6667 h, sans 13ᵉ mois. Équivalent avec primes = (brut mensuel + primes annuelles ÷ 12) ÷ 151,6667 h ; cet équivalent n’est pas un taux de paie. JDD, PVPA, autres primes, heures supplémentaires, indemnités et cotisations patronales sont exclus.</p>
+  <p className="gap-method">Taux horaire hors primes = brut mensuel ÷ 151,6667 h, sans 13ᵉ mois. Équivalent avec primes = (brut mensuel + primes annuelles ÷ 12) ÷ 151,6667 h ; cet équivalent n’est pas un taux de paie. JDD, autres primes non référencées, heures supplémentaires, indemnités et cotisations patronales sont exclus ; PVPA, engagement et autonomie sont inclus dans le montant avec primes lorsqu’applicables.</p>
  </section>;
 }
