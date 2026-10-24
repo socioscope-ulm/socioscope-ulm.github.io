@@ -42,7 +42,7 @@ export function agentPayroll(data:AgentData,sourceId:string,residence='agency',c
   const rates=allRates[residential.residence];
   const salary=r.nr!==undefined&&level!==null?rates?.[String(r.nr)]?.[level-1]:undefined;
   const reason=!r.nni?'NNI non rapproché':r.conflicts.includes('nr')?'NR divergent':!rates?'Majoration résidentielle absente de la grille':!rates[String(r.nr)]?'NR absent de la grille':level===null?(career?.method||'Ancienneté non calculable'):salary==null?'Échelon absent de la grille':undefined;
-  const cadrePrimes=cadreMonthlyBonuses(reason?null:salary??null,r.college);
+  const cadrePrimes=cadreMonthlyBonuses(reason?null:salary??null,r.gf!==undefined&&r.gf>=12&&r.gf<=19?r.college:'');
   return {...cadrePrimes,...residential,family:teams.get(r.agentId)?.size===1?[...teams.get(r.agentId)!][0]:'Rattachement divergent',m3e:m3eKey(r),gfLabel:r.gf===undefined?'GF non renseigné':'GF '+r.gf,agentId:r.agentId,nni:r.nni,name:r.name,sex:normalizeAgentSex(r.sex),nr:r.nr,gf:r.gf,college:r.college||'non renseigne',agency:r.agency||'Non renseignée',years:career?.years,level,method:career?.method,firstSeenEstimate:!!career?.estimated,manualPresence:!!r.manualPresence,rpcRpemBonusCents:r.gf!==undefined?config.bonuses[String(r.gf)]??null:null,pvpaBonusCents:r.gf!==undefined&&r.gf>=12&&r.gf<=19?(PVPA_2025_BY_GF_CENTS[String(r.gf)]??null):0,annualBonusCents:r.gf!==undefined&&config.bonuses[String(r.gf)]!==undefined?config.bonuses[String(r.gf)]+(r.gf>=12&&r.gf<=19?(PVPA_2025_BY_GF_CENTS[String(r.gf)]??0):0)+cadrePrimes.engagementAnnualCents+cadrePrimes.autonomieAnnualCents:null,monthlyCents:reason?null:salary??null,reason};
  });
  const included=rows.filter(r=>r.monthlyCents!==null);
