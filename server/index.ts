@@ -44,6 +44,30 @@ export async function handler(req:Request){
  if(!member.user_id)await db.prepare('UPDATE members SET user_id=? WHERE email=? AND user_id IS NULL').bind(user.id,email).run();
  const u=new URL(req.url);const path=u.pathname.replace(/^\/socioscope-api(?=\/|$)/,'').replace(/^\/functions\/v1\/socioscope-api(?=\/|$)/,'')||'/';
  if(path==='/api/session')return finish(json({email,role:member.role,...(member.role==='admin'?{serverVersion:currentServerVersion()}:{})}));
+
+ if(path==='/api/prime-settings'){
+  const defaults={engagementRate:3.5,autonomieRate:4,asctMonthly:54.67,afeMonthly:113.63,familialMonthly:116.56};
+  if(req.method==='GET'){
+   const record=await db.prepare("SELECT settings,updated_at FROM prime_settings WHERE key='current'").first<any>();
+   return finish(json({settings:{...defaults,...(record?.settings||{})},updatedAt:record?.updated_at||null}));
+  }
+  if(req.method==='PATCH'){
+   if(member.role!=='admin')return finish(json({error:'Réservé à l’administration.'},403));
+   const incoming=await req.json().catch(()=>({}));const proposed=incoming?.settings;
+   if(!proposed||typeof proposed!=='object'||Array.isArray(proposed)||Object.keys(proposed).sort().join(',')!==Object.keys(defaults).sort().join(','))return finish(json({error:'Les cinq paramètres de primes sont requis.'},400));
+   const settings:any={};
+   for(const key of Object.keys(defaults)){
+    const value=proposed[key];
+    const max=key.endsWith('Rate')?100:100000;
+    if(typeof value!=='number'||!Number.isFinite(value)||value<0||value>max)return finish(json({error:'Valeur non valide pour '+key+'.'},400));
+    settings[key]=Math.round(value*100)/100;
+   }
+   await db.prepare("INSERT INTO prime_settings(key,settings,updated_at) VALUES ('current',?::jsonb,now()) ON CONFLICT(key) DO UPDATE SET settings=excluded.settings,updated_at=now()").bind(JSON.stringify(settings)).run();
+   return finish(json({settings,updated:true}));
+  }
+  return finish(json({error:'Méthode non autorisée.'},405));
+ }
+
  if(!['GET','HEAD'].includes(req.method)&&member.role!=='admin')return finish(json({error:'Modification réservée à l’administrateur.'},403));
  if(path==='/api/members/link'&&req.method==='POST'){
   if(member.role!=='admin')return finish(json({error:'Administration uniquement.'},403));
