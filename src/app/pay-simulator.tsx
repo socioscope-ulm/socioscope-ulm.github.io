@@ -18,6 +18,8 @@ export default function PaySimulator({revision=0}:{revision?:number}){
  const [months,setMonths]=useState(12);
  const [contrib,setContrib]=useState(23);
  const [tax,setTax]=useState(0);
+ const [taxCustom,setTaxCustom]=useState(false);
+ const pasOptions=[0,2,5,8,10,12.1,12.3,15,20,25,30];
  const [pvpa,setPvpa]=useState(true);
  const [rpc,setRpc]=useState(true);
  const [extra,setExtra]=useState(0);
@@ -45,7 +47,7 @@ export default function PaySimulator({revision=0}:{revision?:number}){
  const numberInput=(value:number,set:(v:number)=>void,min:number,max:number,step=1)=><input type="number" min={min} max={max} step={step} value={value} onChange={e=>set(Math.min(max,Math.max(min,numeric(e.target.value))))}/>;
  const card=(label:string,value:number|null)=><div className="panel" style={{padding:18}}><div style={{fontSize:13,color:'#596e68'}}>{label}</div><strong style={{fontSize:23}}>{euros(value)}</strong></div>;
  return <section aria-label="Simulateur de paie" style={{display:'grid',gap:18}}>
-  <div className="panel"><h2>Simulateur de paie</h2><p>Simulation indicative à partir des grilles et primes validées dans les documents Socioscope. Tous les paramètres sont modifiables ; aucune fiche individuelle n'est modifiée.</p>{error&&<p role="alert">{error}</p>}
+  <div className="panel"><h2>Simulateur de paie</h2><p>Simulation indicative à partir des grilles et primes validées dans les documents Socioscope. Tous les paramètres sont modifiables ; aucune fiche individuelle n'est modifiée.</p><p><strong>Remboursements de frais neutralisés :</strong> les frais de déplacement, de séjour, de transport, de péage ou de véhicule ne sont ni ajoutés au salaire brut simulé ni au net affiché. Les régularisations de mois antérieurs ne sont pas reconduites automatiquement. Une prime ou indemnité salariale n'est incluse que si elle est prévue parmi les éléments de rémunération sélectionnés.</p>{error&&<p role="alert">{error}</p>}
    <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(190px,1fr))',gap:16}}>
     {input('Grille de rémunération',<select value={grid?.id||''} onChange={e=>{setGridId(e.target.value);setNr('');}}>{grids.map(r=><option key={r.id} value={r.id}>{r.name} · {r.date}</option>)}</select>)}
     {input('Grille de primes',<select value={bonus?.id||''} onChange={e=>setBonusId(e.target.value)}>{bonuses.map(r=><option key={r.id} value={r.id}>{r.name} · {r.date}</option>)}</select>)}
@@ -55,7 +57,8 @@ export default function PaySimulator({revision=0}:{revision?:number}){
     {input('Échelon',<select value={level} onChange={e=>setLevel(Number(e.target.value))}>{Array.from({length:12},(_,i)=>i+1).map(v=><option key={v} value={v}>Échelon {v}</option>)}</select>)}
     {input('Nombre de mensualités de base par an',numberInput(months,setMonths,1,13))}
     {input('Cotisations salariales estimées (%)',numberInput(contrib,setContrib,0,70,.1))}
-    {input('Prélèvement à la source estimé (%)',numberInput(tax,setTax,0,60,.1))}
+    {input('Taux de prélèvement à la source (PAS)',<select aria-label="Choisir le taux de PAS" value={taxCustom?'custom':String(tax)} onChange={e=>{if(e.target.value==='custom'){setTaxCustom(true);}else{setTaxCustom(false);setTax(Number(e.target.value));}}}>{pasOptions.map(v=><option value={String(v)} key={v}>{v.toLocaleString('fr-FR')} %</option>)}<option value="custom">Autre taux (personnalisé)…</option></select>)}
+    {taxCustom&&input('Saisir mon taux de PAS (%)',numberInput(tax,setTax,0,60,.1))}
     {input('Autres primes brutes annuelles (€)',numberInput(extra,setExtra,0,1000000,.01))}
    </div>
    <div style={{display:'flex',flexWrap:'wrap',gap:18,marginTop:18}}><label><input type="checkbox" checked={rpc} onChange={e=>setRpc(e.target.checked)}/> Inclure RPC / RPEM</label><label><input type="checkbox" checked={pvpa} onChange={e=>setPvpa(e.target.checked)}/> Inclure PVPA (référence 2025)</label></div>
@@ -65,7 +68,7 @@ export default function PaySimulator({revision=0}:{revision?:number}){
     {card('Brut mensuel de base',base)}{card('Brut mensuel moyen avec primes',avgGross)}{card('Net mensuel moyen avant impôt',annualNet===null?null:annualNet/12)}{card('Net mensuel moyen après impôt',annualNetTax===null?null:annualNetTax/12)}
     {card('Brut annuel, primes comprises',annualGross)}{card('Net annuel estimé avant impôt',annualNet)}{card('Net annuel estimé après impôt',annualNetTax)}
    </div>
-   <div className="panel"><h3>Détail annuel</h3><p>Base : {euros(base)} × {months} mensualités = {euros(base*months)}. RPC/RPEM : {euros(rpcAnnual)} ; PVPA : {euros(pvpaAnnual)} ; autres primes : {euros(Math.round(extra*100))}.</p><p>Sources : {grid?.name} ({grid?.date}) ; {bonus?.name||'aucune grille de primes'} ({bonus?.date||'sans date'}). La PVPA utilise la moyenne 2025 intégrée aux calculs de masse salariale, lorsqu'elle est applicable.</p><p><strong>Important :</strong> le net est une estimation calculée à partir de taux modifiables, sans prise en compte détaillée des cotisations, plafonds, avantages, absences ou de la situation fiscale individuelle. Le net après impôt applique un taux simplifié au net estimé et ne remplace pas le calcul réglementaire du prélèvement à la source. Les primes peuvent être versées à des dates différentes de la moyenne affichée.</p></div>
+   <div className="panel"><h3>Détail annuel</h3><p>Base : {euros(base)} × {months} mensualités = {euros(base*months)}. RPC/RPEM : {euros(rpcAnnual)} ; PVPA : {euros(pvpaAnnual)} ; autres primes : {euros(Math.round(extra*100))}.</p><p>Frais professionnels et remboursements : <strong>0 € inclus</strong> dans le brut ou le net simulé. PAS sélectionné : <strong>{tax.toLocaleString('fr-FR')} %</strong>. Le taux s'applique ici au net estimé avant impôt à titre simplifié ; le net fiscal exact peut différer.</p><p>Sources : {grid?.name} ({grid?.date}) ; {bonus?.name||'aucune grille de primes'} ({bonus?.date||'sans date'}). La PVPA utilise la moyenne 2025 intégrée aux calculs de masse salariale, lorsqu'elle est applicable.</p><p><strong>Important :</strong> le net est une estimation calculée à partir de taux modifiables, sans prise en compte détaillée des cotisations, plafonds, avantages, absences ou de la situation fiscale individuelle. Le net après impôt applique un taux simplifié au net estimé et ne remplace pas le calcul réglementaire du prélèvement à la source. Les primes peuvent être versées à des dates différentes de la moyenne affichée.</p></div>
   </>}
  </section>;
 }
