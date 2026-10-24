@@ -63,9 +63,9 @@ export default function AgentRemuneration({agentId,source,grid,bonus,residence}:
  const primeItems:[string,number|null|undefined][]=[
   ['RPC / RPEM · annuel',row?.rpcRpemBonusCents],
   ['PVPA · annuel',row?.pvpaBonusCents],
-  ['Engagement · mensuel (3,5 %, cadres)',row?.engagementMonthlyCents],
+  [`Engagement · mensuel (${data.engagementRate??3.5} %, cadres)`,row?.engagementMonthlyCents],
   ['Engagement · annuel (12 mois)',row?.engagementAnnualCents],
-  ['Autonomie · mensuel (4 %, cadres)',row?.autonomieMonthlyCents],
+  [`Autonomie · mensuel (${data.autonomieRate??4} %, cadres)`,row?.autonomieMonthlyCents],
   ['Autonomie · annuel (12 mois)',row?.autonomieAnnualCents],
   ['Total des primes annuelles',bonusAnnual],
  ];
@@ -122,6 +122,6 @@ export default function AgentRemuneration({agentId,source,grid,bonus,residence}:
   <div><h3>Détail des primes</h3><div className="agent-detail-grid">{primeItems.map(([label,value])=><div key={label}><small>{label}</small><b>{money(value)}</b></div>)}</div></div>
   <div><h3>Compléments du calcul</h3><div className="agent-detail-grid"><div><small>Taux horaire hors primes</small><b>{rate(hourly?.withoutBonuses)}</b></div><div><small>Équivalent horaire avec primes</small><b>{rate(hourly?.withBonuses)}</b></div></div></div>
   <p>GF {row.gf??'non renseigné'} · NR {row.nr??'non renseigné'} · échelon estimé {row.level??'non calculable'} · ancienneté retenue : {typeof row.years==='number'?new Intl.NumberFormat('fr-FR',{maximumFractionDigits:2}).format(row.years)+' ans':'non calculable'} · majoration résidentielle : {pct((Number(row.residence)-1)*100)} %.</p>
-  <p className="gap-method">RPC / RPEM selon la référence {data.bonusReferenceYear} ; PVPA selon le GF lorsqu'éligible. Les primes fixes cadres engagement (3,5 %) et autonomie (4 %) sont calculées sur le brut mensuel de base, pour 12 versements. Les remboursements de frais ne sont pas ajoutés. Les hypothèses sont des simulations et non des bulletins de paie.</p>
+  <p className="gap-method">RPC / RPEM selon la référence {data.bonusReferenceYear} ; PVPA selon le GF lorsqu'éligible. Les primes fixes cadres engagement ({data.engagementRate??3.5} %) et autonomie ({data.autonomieRate??4} %) sont calculées sur le brut mensuel de base, pour 12 versements. Les remboursements de frais ne sont pas ajoutés. Les hypothèses sont des simulations et non des bulletins de paie.</p>
  </section>;
 }
