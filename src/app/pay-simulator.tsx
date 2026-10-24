@@ -83,9 +83,7 @@ export default function PaySimulator({revision=0}:{revision?:number}){
    <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(200px,1fr))',gap:12}}>
     {(['asct','afe','familial'] as const).map(key=>{const field=key==='asct'?'asctMonthly':key==='afe'?'afeMonthly':'familialMonthly';const selected=key==='asct'?asct:key==='afe'?afe:familial;const setSelected=key==='asct'?setAsct:key==='afe'?setAfe:setFamilial;return <div className="panel" key={key} style={{padding:12,display:'grid',gap:8}}><label><input type="checkbox" checked={selected} onChange={e=>setSelected(e.target.checked)}/> {key==='asct'?'ASCT':key==='afe'?'AFE':'Sursalaire familial'}</label><label style={{display:'grid',gap:5}}>Montant mensuel (€)<input type="number" min={0} max={100000} step={0.01} value={primeValues[field]} onChange={e=>setPrimeValues(v=>({...v,[field]:Math.min(100000,Math.max(0,numeric(e.target.value)))}))}/></label><small>Valeur par défaut : {primeDefaults[field].toLocaleString('fr-FR',{minimumFractionDigits:2})} € · 12 mois</small></div>;})}
    </div>
-   <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(210px,1fr))',gap:12}}>
-    {(['engagementRate','autonomieRate'] as const).map(key=><label key={key} style={{display:'grid',gap:6}}>Taux personnalisé · {key==='engagementRate'?'Engagement':'Autonomie'} (%)<input type="number" min={0} max={100} step={0.01} value={primeValues[key]} onChange={e=>setPrimeValues(v=>({...v,[key]:Math.min(100,Math.max(0,numeric(e.target.value)))}))}/><small>Taux par défaut : {primeDefaults[key].toLocaleString('fr-FR')} % · GF 12 à 19 uniquement</small></label>)}
-   </div></div>
+</div>
   </div>
   {base===null?<p role="status">Aucun montant disponible pour cette combinaison de grille, majoration, NR et échelon. Sélectionnez une valeur présente dans les références validées.</p>:<>
    <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(260px,1fr))',gap:16}}>
