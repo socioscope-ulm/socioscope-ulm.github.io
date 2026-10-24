@@ -2,7 +2,7 @@
 import {useEffect,useMemo,useState} from 'react';
 import type {PayrollReference} from '../lib/payroll-reference';
 import {selectReference} from '../lib/payroll-reference';
-import {PVPA_2025_BY_GF_CENTS} from '../lib/agent-payroll';
+import {PVPA_2025_BY_GF_CENTS,cadreMonthlyBonuses} from '../lib/agent-payroll';
 
 const euros=(c:number|null)=>c===null?'Non calculable':new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR'}).format(c/100);
 const numeric=(v:unknown)=>Number.isFinite(Number(v))?Number(v):0;
@@ -22,6 +22,8 @@ export default function PaySimulator({revision=0}:{revision?:number}){
  const pasOptions=[0,2,5,8,10,12.1,12.3,15,20,25,30];
  const [pvpa,setPvpa]=useState(true);
  const [rpc,setRpc]=useState(true);
+ const [engagement,setEngagement]=useState(true);
+ const [autonomie,setAutonomie]=useState(true);
  const [extra,setExtra]=useState(0);
  useEffect(()=>{const c=new AbortController();fetch('/api/payroll',{signal:c.signal,cache:'no-store'}).then(async r=>{if(!r.ok)throw Error('Références salariales indisponibles ('+r.status+').');return r.json();}).then(d=>setRefs(d.references||[])).catch(e=>{if(e.name!=='AbortError')setError(e.message);});return()=>c.abort();},[revision]);
  const grids=useMemo(()=>refs.filter(r=>r.kind==='grid'&&r.status==='validated').sort((a,b)=>b.date.localeCompare(a.date)),[refs]);
@@ -38,7 +40,12 @@ export default function PaySimulator({revision=0}:{revision?:number}){
  const base=typeof value==='number'&&Number.isFinite(value)?value:null;
  const rpcAnnual=rpc&&bonus?.payload?.bonuses?.[gf]!=null?Number(bonus.payload.bonuses[gf]):0;
  const pvpaAnnual=pvpa&&Number(grid?.date.slice(0,4))>=2025?PVPA_2025_BY_GF_CENTS[gf]||0:0;
- const annualBonus=rpcAnnual+pvpaAnnual+Math.round(extra*100);
+ const cadrePrimes=cadreMonthlyBonuses(base,Number(gf)>=12&&Number(gf)<=19?'cadres':'');
+ const engagementMonthly=engagement?cadrePrimes.engagementMonthlyCents:0;
+ const autonomieMonthly=autonomie?cadrePrimes.autonomieMonthlyCents:0;
+ const engagementAnnual=engagementMonthly*12;
+ const autonomieAnnual=autonomieMonthly*12;
+ const annualBonus=rpcAnnual+pvpaAnnual+engagementAnnual+autonomieAnnual+Math.round(extra*100);
  const annualGross=base===null?null:base*months+annualBonus;
  const avgGross=annualGross===null?null:annualGross/12;
  const annualNet=annualGross===null?null:annualGross*(1-contrib/100);
@@ -61,14 +68,14 @@ export default function PaySimulator({revision=0}:{revision?:number}){
     {taxCustom&&input('Saisir mon taux de PAS (%)',numberInput(tax,setTax,0,60,.1))}
     {input('Autres primes brutes annuelles (€)',numberInput(extra,setExtra,0,1000000,.01))}
    </div>
-   <div style={{display:'flex',flexWrap:'wrap',gap:18,marginTop:18}}><label><input type="checkbox" checked={rpc} onChange={e=>setRpc(e.target.checked)}/> Inclure RPC / RPEM</label><label><input type="checkbox" checked={pvpa} onChange={e=>setPvpa(e.target.checked)}/> Inclure PVPA (référence 2025)</label></div>
+   <div style={{display:'flex',flexWrap:'wrap',gap:18,marginTop:18}}><label><input type="checkbox" checked={rpc} onChange={e=>setRpc(e.target.checked)}/> Inclure RPC / RPEM</label><label><input type="checkbox" checked={pvpa} onChange={e=>setPvpa(e.target.checked)}/> Inclure PVPA (référence 2025)</label><label><input type="checkbox" checked={engagement} onChange={e=>setEngagement(e.target.checked)}/> Prime d’engagement · 3,5 % (cadres)</label><label><input type="checkbox" checked={autonomie} onChange={e=>setAutonomie(e.target.checked)}/> Prime d’autonomie · 4 % (cadres)</label></div>
   </div>
   {base===null?<p role="status">Aucun montant disponible pour cette combinaison de grille, majoration, NR et échelon. Sélectionnez une valeur présente dans les références validées.</p>:<>
    <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(190px,1fr))',gap:14}}>
-    {card('Brut mensuel de base',base)}{card('Brut mensuel moyen avec primes',avgGross)}{card('Net mensuel moyen avant impôt',annualNet===null?null:annualNet/12)}{card('Net mensuel moyen après impôt',annualNetTax===null?null:annualNetTax/12)}
-    {card('Brut annuel, primes comprises',annualGross)}{card('Net annuel estimé avant impôt',annualNet)}{card('Net annuel estimé après impôt',annualNetTax)}
+    {card('Brut mensuel de base',base)}{card('Engagement mensuel · 3,5 %',engagementMonthly)}{card('Autonomie mensuelle · 4 %',autonomieMonthly)}{card('Brut mensuel moyen avec primes',avgGross)}{card('Net mensuel moyen avant impôt',annualNet===null?null:annualNet/12)}{card('Net mensuel moyen après impôt',annualNetTax===null?null:annualNetTax/12)}
+    {card('Engagement annuel · 12 mois',engagementAnnual)}{card('Autonomie annuelle · 12 mois',autonomieAnnual)}{card('Brut annuel, primes comprises',annualGross)}{card('Net annuel estimé avant impôt',annualNet)}{card('Net annuel estimé après impôt',annualNetTax)}
    </div>
-   <div className="panel"><h3>Détail annuel</h3><p>Base : {euros(base)} × {months} mensualités = {euros(base*months)}. RPC/RPEM : {euros(rpcAnnual)} ; PVPA : {euros(pvpaAnnual)} ; autres primes : {euros(Math.round(extra*100))}.</p><p>Frais professionnels et remboursements : <strong>0 € inclus</strong> dans le brut ou le net simulé. PAS sélectionné : <strong>{tax.toLocaleString('fr-FR')} %</strong>. Le taux s'applique ici au net estimé avant impôt à titre simplifié ; le net fiscal exact peut différer.</p><p>Sources : {grid?.name} ({grid?.date}) ; {bonus?.name||'aucune grille de primes'} ({bonus?.date||'sans date'}). La PVPA utilise la moyenne 2025 intégrée aux calculs de masse salariale, lorsqu'elle est applicable.</p><p><strong>Important :</strong> le net est une estimation calculée à partir de taux modifiables, sans prise en compte détaillée des cotisations, plafonds, avantages, absences ou de la situation fiscale individuelle. Le net après impôt applique un taux simplifié au net estimé et ne remplace pas le calcul réglementaire du prélèvement à la source. Les primes peuvent être versées à des dates différentes de la moyenne affichée.</p></div>
+   <div className="panel"><h3>Détail annuel</h3><p>Base : {euros(base)} × {months} mensualités = {euros(base*months)}. RPC/RPEM : {euros(rpcAnnual)} ; PVPA : {euros(pvpaAnnual)} ; engagement : {euros(engagementAnnual)} ; autonomie : {euros(autonomieAnnual)} ; autres primes : {euros(Math.round(extra*100))}.</p><p>Frais professionnels et remboursements : <strong>0 € inclus</strong> dans le brut ou le net simulé. PAS sélectionné : <strong>{tax.toLocaleString('fr-FR')} %</strong>. Le taux s'applique ici au net estimé avant impôt à titre simplifié ; le net fiscal exact peut différer.</p><p>Sources : {grid?.name} ({grid?.date}) ; {bonus?.name||'aucune grille de primes'} ({bonus?.date||'sans date'}). La PVPA utilise la moyenne 2025 intégrée aux calculs de masse salariale, lorsqu'elle est applicable. Pour les GF 12 à 19, les primes fixes engagement/autonomie sont calculées sur le brut mensuel de base, puis versées sur 12 mois indépendamment de l'annualisation sélectionnée. Leur calcul ne dépend d'aucune grille de primes annuelle.</p><p><strong>Important :</strong> le net est une estimation calculée à partir de taux modifiables, sans prise en compte détaillée des cotisations, plafonds, avantages, absences ou de la situation fiscale individuelle. Le net après impôt applique un taux simplifié au net estimé et ne remplace pas le calcul réglementaire du prélèvement à la source. Les primes peuvent être versées à des dates différentes de la moyenne affichée.</p></div>
   </>}
  </section>;
 }
