@@ -52,7 +52,7 @@ export default function PaySimulator({revision=0}:{revision?:number}){
  const monthlyWithGross=annualGross===null?null:annualGross/12;
  const netBeforeTax=(gross:number|null)=>gross===null?null:gross*(1-contrib/100);
  const netAfterTax=(gross:number|null)=>{const net=netBeforeTax(gross);return net===null?null:net*(1-tax/100);};
- const input=(label:string,node:React.ReactNode)=><label style={{display:'flex',flexDirection:'column',gap:5,fontWeight:600}}>{label}{node}</label>;
+ const input=(label:string,node:React.ReactNode)=><label style={{display:'flex',flexDirection:'column',gap:5,fontWeight:600,minWidth:0}}><span style={{minHeight:'2.6em',display:'flex',alignItems:'flex-end'}}>{label}</span>{node}</label>;
  const numberInput=(value:number,set:(v:number)=>void,min:number,max:number,step=1)=><input type="number" min={min} max={max} step={step} value={value} onChange={e=>set(Math.min(max,Math.max(min,numeric(e.target.value))))}/>;
  const card=(label:string,value:number|null)=><div className="panel" style={{padding:18}}><div style={{fontSize:13,color:'#596e68'}}>{label}</div><strong style={{fontSize:23}}>{euros(value)}</strong></div>;
  return <section aria-label="Simulateur de paie" style={{display:'grid',gap:18}}>
