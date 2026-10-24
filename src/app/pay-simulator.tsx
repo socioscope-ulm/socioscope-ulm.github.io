@@ -18,8 +18,6 @@ export default function PaySimulator({revision=0}:{revision?:number}){
  const [months,setMonths]=useState(12);
  const [contrib,setContrib]=useState(21);
  const [tax,setTax]=useState(0);
- const [taxCustom,setTaxCustom]=useState(false);
- const pasOptions=[0,2,5,8,10,12.1,12.3,15,20,25,30];
  const [pvpa,setPvpa]=useState(true);
  const [rpc,setRpc]=useState(true);
  const [engagement,setEngagement]=useState(true);
@@ -68,8 +66,7 @@ export default function PaySimulator({revision=0}:{revision?:number}){
     {input('Échelon',<select value={level} onChange={e=>setLevel(Number(e.target.value))}>{Array.from({length:12},(_,i)=>i+1).map(v=><option key={v} value={v}>Échelon {v}</option>)}</select>)}
     {input('Nombre de mensualités de base par an',numberInput(months,setMonths,1,13))}
     {input('Cotisations salariales estimées (%)',numberInput(contrib,setContrib,0,70,.1))}
-    {input('Taux de prélèvement à la source (PAS)',<select aria-label="Choisir le taux de PAS" value={taxCustom?'custom':String(tax)} onChange={e=>{if(e.target.value==='custom'){setTaxCustom(true);}else{setTaxCustom(false);setTax(Number(e.target.value));}}}>{pasOptions.map(v=><option value={String(v)} key={v}>{v.toLocaleString('fr-FR')} %</option>)}<option value="custom">Autre taux (personnalisé)…</option></select>)}
-    {taxCustom&&input('Saisir mon taux de PAS (%)',numberInput(tax,setTax,0,60,.1))}
+    {input('Taux de prélèvement à la source personnalisé (PAS, %)',<><input type="number" min={0} max={60} step={0.1} value={tax} onChange={e=>setTax(Math.min(60,Math.max(0,numeric(e.target.value))))}/><small style={{fontWeight:400,color:'#596e68'}}>Taux indicatifs : 0 %, 2 %, 5 %, 8 %, 10 %, 12,1 %, 12,3 %, 15 %, 20 %, 25 %, 30 %.</small></>)}
     {input('Autres primes brutes annuelles (€)',numberInput(extra,setExtra,0,1000000,.01))}
    </div>
    <div style={{display:'flex',flexWrap:'wrap',gap:18,marginTop:18}}><label><input type="checkbox" checked={rpc} onChange={e=>setRpc(e.target.checked)}/> Inclure RPC / RPEM</label><label><input type="checkbox" disabled={!cadreEligible} checked={cadreEligible&&pvpa} onChange={e=>setPvpa(e.target.checked)}/> Inclure PVPA (référence 2025)</label><label><input type="checkbox" disabled={!cadreEligible} checked={cadreEligible&&engagement} onChange={e=>setEngagement(e.target.checked)}/> Prime d’engagement · 3,5 % (cadres)</label><label><input type="checkbox" disabled={!cadreEligible} checked={cadreEligible&&autonomie} onChange={e=>setAutonomie(e.target.checked)}/> Prime d’autonomie · 4 % (cadres)</label></div>
