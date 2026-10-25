@@ -16,7 +16,8 @@ import * as route12 from '../src/app/api/payroll/route';
 import * as route13 from '../src/app/api/review/[id]/route';
 import * as route14 from '../src/app/api/rows/route';
 import * as route15 from '../src/app/api/rup/route';
-import {db,bucket,projectURL,serviceKey} from './storage';
+import {suspensionMessage} from './usage';
+import {db,bucket,projectURL,serviceKey,usage} from './storage';
 import {cachedAgentRead} from './private-cache';
 import {loadSeeds} from './seeds';import {seedsForPath} from './seed-loader';import {initializeBase} from '../src/lib/store';
 const CLIENT_ORIGIN='https://socioscope-ulm.github.io';
@@ -30,7 +31,17 @@ const routes:any[]=[[new RegExp('^/api/agents/decision$'),route1],[new RegExp('^
 const json=(body:any,status=200)=>Response.json(body,{status});
 export async function handler(req:Request){
  const origin=req.headers.get('origin');const cors:any={'Access-Control-Allow-Origin':origin&&ALLOWED_ORIGINS.has(origin)?origin:CLIENT_ORIGIN,'Access-Control-Allow-Headers':'authorization,apikey,content-type','Access-Control-Allow-Methods':'GET,POST,PUT,PATCH,DELETE,OPTIONS','Access-Control-Expose-Headers':'Content-Disposition,Content-Type','Cache-Control':'no-store','Vary':'Origin'};
- const finish=(r:Response)=>{const h=new Headers(r.headers);for(const [k,v]of Object.entries(cors))h.set(k,String(v));return new Response(r.body,{status:r.status,headers:h});};
+ let meter=false;
+ const finish=async(r:Response)=>{
+  if(meter){
+   try{
+    const size=r.headers.get('content-length');
+    const bytes=size!==null&&/^\d+$/.test(size)?Number(size):r.headers.get('content-type')?.includes('application/json')?(await r.clone().arrayBuffer()).byteLength:r.body===null?0:undefined;
+    usage.record('api',bytes);await usage.flush();
+   }catch{ /* Estimates must never prevent access to the application. */ }
+  }
+  const h=new Headers(r.headers);for(const [k,v]of Object.entries(cors))h.set(k,String(v));return new Response(r.body,{status:r.status,headers:h});
+ };
  if(origin&&!ALLOWED_ORIGINS.has(origin))return finish(json({error:'Origine non autorisée.'},403));
  if(req.method==='OPTIONS')return finish(new Response(null,{status:204}));
  try{
@@ -42,9 +53,23 @@ export async function handler(req:Request){
  const email=String(user.email||'').toLowerCase();
  const member=await db.prepare('SELECT email,role,enabled,user_id FROM members WHERE email=?').bind(email).first<any>();
  if(!member?.enabled || member.user_id&&member.user_id!==user.id)return finish(json({error:'Votre adresse ne dispose pas d’un accès au Socioscope.'},403));
+ meter=true;
  if(!member.user_id)await db.prepare('UPDATE members SET user_id=? WHERE email=? AND user_id IS NULL').bind(user.id,email).run();
  const u=new URL(req.url);const path=u.pathname.replace(/^\/socioscope-api(?=\/|$)/,'').replace(/^\/functions\/v1\/socioscope-api(?=\/|$)/,'')||'/';
- if(path==='/api/session')return finish(json({email,role:member.role,...(member.role==='admin'?{serverVersion:currentServerVersion()}:{})}));
+ if(path==='/api/session')return finish(json({email,role:member.role,consultationSuspended:member.role==='admin'?false:(await usage.control()).suspended,...(member.role==='admin'?{serverVersion:currentServerVersion()}:{})}));
+ if(path==='/api/usage'){
+  if(member.role!=='admin')return finish(json({error:'Administration uniquement.'},403));
+  if(req.method==='GET')return finish(json(await usage.report()));
+  if(req.method==='PATCH'){
+   const body=await req.json().catch(()=>null);
+   if(!body||typeof body.suspended!=='boolean'||Object.keys(body).length!==1)return finish(json({error:'Paramètre de suspension invalide.'},400));
+   return finish(json({settings:await usage.setSuspended(body.suspended)}));
+  }
+  return finish(json({error:'Méthode non autorisée.'},405));
+ }
+ // Check the current database role and suspension before files, calculations
+ // or saved results. An administrator can always reopen consultation.
+ if(member.role!=='admin'&&(await usage.control()).suspended)return finish(json({code:'CONSULTATION_SUSPENDED',error:suspensionMessage},423));
 
  if(path==='/api/prime-settings'){
   const defaults={engagementRate:3.5,autonomieRate:4,asctMonthly:54.67,afeMonthly:113.63,familialMonthly:116.56};

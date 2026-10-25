@@ -10,6 +10,7 @@ test('real handler checks session, membership and current role before any cached
    b.onResolve({filter:/\/(storage|private-cache|seeds)(\.ts)?$/},args=>({path:args.path.split('/').at(-1)!.replace('.ts',''),namespace:'cache-test'}));
    b.onLoad({filter:/.*/,namespace:'cache-test'},args=>({contents:args.path==='storage'?`
     export const db={prepare(){return {bind(){return {async first(){const m=globalThis.__cacheAuthTest;return {email:'fixture@example.test',role:m.role,enabled:m.enabled,user_id:'fixture-user'};}};}};}};
+    export const usage={record(){},async flush(){},async control(){return {suspended:false};}};
     export const bucket={};export const projectURL='https://fixture.supabase.co';export const serviceKey='fixture';export const env={DB:db,BUCKET:bucket};
    `:args.path==='private-cache'?`
     export async function cachedAgentRead(req,path,scope,compute){globalThis.__cacheAuthTest.cacheCalls++;return Response.json({cached:true,scope});}
