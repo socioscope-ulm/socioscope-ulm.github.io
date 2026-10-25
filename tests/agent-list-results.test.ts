@@ -24,6 +24,7 @@ test('explicit complete search returns every matching row, while existing pagina
  for(const query of ['agency=Est','gf=8','nr=100&agency=Est']){
   const filtered=await read('view=list&all=1&'+query);assert.equal(filtered.total,150);assert.equal(filtered.records.length,150);assert.ok(filtered.records.every((r:any)=>r.agency==='Est'));
  }
+ const exported=await read('view=export&agency=Est');assert.equal(exported.total,150);assert.equal(exported.records.length,150);assert.equal(exported.details.length,150);assert.ok(exported.details.every((d:any)=>d.date==='2025-12-31'));
  const empty=await read('view=list&all=1&gf=99');assert.equal(empty.total,0);assert.deepEqual(empty.records,[]);
  const analysis=await read('view=analysis&all=1');assert.equal(analysis.records.length,100);
 });

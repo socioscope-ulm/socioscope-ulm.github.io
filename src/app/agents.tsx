@@ -159,30 +159,13 @@ const fetchCompleteList=async():Promise<AgentRecord[]>=>{
 const exportAllAgents=async()=>{
  if(exportBusy)return;setExportBusy(true);setNotice('');setExportProgress('Chargement des fiches…');
  try{
-  const rows=await fetchCompleteList();
-  const selectedDate=active?.date||'';
-  if(!/^\d{4}-\d{2}-\d{2}$/.test(selectedDate))throw Error('Date de photographie invalide : export annulé.');
-  const details:Array<{published:number|null;years:number|null;method:string;date:string}> = new Array(rows.length);
-  // Retrieve each full profile: the table row alone does not contain the historical
-  // observations and validated RUP corrections required by careerSeniority.
-  let current=0,finished=0;
-  const worker=async()=>{
-   while(current<rows.length){
-    const idx=current++;
-    const row=rows[idx];
-    let profileData:any;
-    for(let attempt=0;attempt<3;attempt++){
-     try{profileData=await api('/api/agents/'+encodeURIComponent(row.agentId));break;}
-     catch(e){if(attempt===2)throw Error('Impossible de récupérer la fiche de '+row.name+' : '+(e as Error).message);await new Promise(resolve=>setTimeout(resolve,500*(attempt+1)));}
-    }
-    const historical:AgentRecord[]=profileData.records||[];
-    const career=careerSeniority(historical,sources,selectedDate,source);
-    const published=typeof row.iegYears==='number'?row.iegYears:null;
-    details[idx]={published,years:typeof career?.years==='number'&&Number.isFinite(career.years)?career.years:null,method:career?.method||'Non calculable',date:selectedDate};
-    finished++;if(finished%25===0||finished===rows.length)setExportProgress(finished+' / '+rows.length+' fiches traitées');
-   }
-  };
-  await Promise.all(Array.from({length:Math.min(4,rows.length)},()=>worker()));
+  if(!searchReady)throw Error('Lancer la recherche avant de récupérer les fiches.');
+  const params=new URLSearchParams({source,view:'export',q,agency,college,sex:'',gf,nr,m3e,years,sort,archive:archive?'1':'0'});
+  setExportProgress('Préparation de l’export complet…');
+  const data=await api('/api/agents?'+params);
+  const rows:AgentRecord[]=data.records;
+  const details:Array<{published:number|null;years:number|null;method:string;date:string}>=data.details;
+  if(data.source?.id!==source||!Array.isArray(rows)||!Array.isArray(details)||rows.length!==data.total||details.length!==rows.length)throw Error('Export incomplet : aucun fichier généré.');
   const csvRows=rows.map((r:AgentRecord,i:number)=>({r,detail:details[i]})).sort((a,b)=>
   String(sources.find(s=>s.id===a.r.source)?.date||'').localeCompare(String(sources.find(s=>s.id===b.r.source)?.date||''))||
   String(a.r.name||'').localeCompare(String(b.r.name||''),'fr',{sensitivity:'base'})||
