@@ -1,5 +1,6 @@
 'use client';
 import {useEffect,useState,useMemo} from 'react';
+import {loadAgentCatalog} from '../lib/agent-catalog';
 import {useScreen,navigate,back} from '../lib/use-screen';
 import {Users,Search,ArrowLeft,FileText,Download,Upload,Check,AlertCircle,RefreshCw,UserRound,History,ShieldCheck} from 'lucide-react';
 import {LineChart,Line,BarChart,Bar,XAxis,YAxis,CartesianGrid,Tooltip,Legend,ResponsiveContainer} from 'recharts';
@@ -17,6 +18,7 @@ const date=(v?:string)=>v?new Intl.DateTimeFormat('fr-FR',{dateStyle:'medium',ti
 const decisionNote=(value:string)=>{try{const parsed=JSON.parse(value);return parsed.presence?parsed.note:value;}catch{return value;}};
 const colleges:Record<string,string>={cadres:'Cadres',maitrise:'Maîtrise',execution:'Exécution'};
 async function api(url:string,init?:RequestInit){
+ if(url==='/api/agents?view=meta')return loadAgentCatalog();
  let res:Response;
  try{res=await fetch(url,{cache:'no-store',...init});}
  catch(e){if((e as Error).name==='AbortError')throw e;throw Error('Connexion au serveur impossible. Vérifiez votre connexion puis réessayez.');}
