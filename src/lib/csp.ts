@@ -10,10 +10,12 @@ export type CspPreview=CspEvent&{state:string;problem:string;before?:Partial<Age
 export function validDate(v:unknown):v is string {if(typeof v!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(v))return false;const d=new Date(v+'T12:00:00Z');return Number.isFinite(+d)&&d.toISOString().slice(0,10)===v&&v>='2000-01-01'&&v<='2100-12-31';}
 export const parisToday=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Paris',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
 const nameKey=(name:string)=>normalName(name).split(' ').sort().join(' ');
+// A salary measure is one NR step unless an explicit count or absolute NR is supplied.
+export const cspNRSteps=(e:CspEvent)=>e.nrSteps??(e.kind==='mesure'&&e.nrAfter===undefined?1:undefined);
 export function cspKey(e:CspEvent){
- const identity=[e.agentId||nameKey(e.name),e.kind,e.effective];
+ const identity=[e.agentId||nameKey(e.name),e.kind,e.effective],nrSteps=cspNRSteps(e);
  if(e.kind==='reclassement')return JSON.stringify([...identity,e.gfDelta??null]);
- if(['avancement','mesure','posthume'].includes(e.kind))return JSON.stringify([...identity,e.nrSteps??(e.nrBefore!==undefined&&e.nrAfter!==undefined?(e.nrAfter-e.nrBefore)/5:null),e.nrSteps===undefined&&e.nrBefore===undefined?e.nrAfter??null:null]);
+ if(['avancement','mesure','posthume'].includes(e.kind))return JSON.stringify([...identity,nrSteps??(e.nrBefore!==undefined&&e.nrAfter!==undefined?(e.nrAfter-e.nrBefore)/5:null),nrSteps===undefined&&e.nrBefore===undefined?e.nrAfter??null:null]);
  if(e.kind==='titularisation')return JSON.stringify(identity);
  if(e.kind==='nomination'&&e.reference)return JSON.stringify([...identity,e.reference]);
  return JSON.stringify([...identity,e.gfDelta??null,e.nrSteps??null,e.gfAfter??null,e.nrAfter??null,normalName(e.agency),normalName(e.job),normalName(e.team),e.m3e||'',e.reference||'']);
@@ -24,13 +26,16 @@ export function validateCspEvent(e:any):e is CspEvent {
 }
 export function latestAnnual(data:AgentData,asOf='2100-12-31'){const candidates=data.sources.filter(s=>!s.kind?.startsWith('csp')&&s.status!=='review'&&!s.status?.startsWith('disabled')&&s.date<=asOf);const complete=candidates.filter(s=>s.primary);return (complete.length?complete:candidates.filter(s=>s.status==='validated')).sort((a,b)=>b.date.localeCompare(a.date)||Number(formattedSnapshot(b))-Number(formattedSnapshot(a))||a.id.localeCompare(b.id))[0];}
 function applyEvent(row:AgentRecord|undefined,e:CspEvent):{row?:AgentRecord;problem:string}{
- if(row&&(row as any).conflicts?.length)return {problem:'La photographie présente des valeurs contradictoires pour cet agent.'};
+ const nrSteps=cspNRSteps(e);
+ const required=new Set<string>();if(nrSteps||e.kind==='reclassement')required.add('nr');if(e.gfDelta||e.kind==='reclassement')required.add('gf');if(e.gfBefore!==undefined)required.add('gf');if(e.nrBefore!==undefined)required.add('nr');
+ const conflicts=((row as any)?.conflicts||[]).filter((field:string)=>required.has(field));
+ if(conflicts.length)return {problem:'Valeur de départ contradictoire : '+conflicts.map((s:string)=>s.toUpperCase()).join(', ')+'. Renseigner une situation de référence fiable avant ce mouvement.'};
  if(!row&&!e.newAgent)return {problem:'Agent absent de la photographie : confirmer une arrivée dans l’ULM et renseigner son NNI.'};
  if(!row&&!['admission','nomination'].includes(e.kind))return {problem:'Ce mouvement ne permet pas de créer une arrivée.'};
  if(!row&&(!e.agentId||!e.agency||!e.job))return {problem:'Une arrivée exige un NNI, une agence et un emploi de destination.'};
  const after:AgentRecord={...(row||{id:'csp:'+e.id,agentId:e.agentId!,nni:e.agentId!,name:e.name,source:CSP_SOURCE,row:e.page}),name:row?.name||e.name};
  for(const [field,before] of [['gf',e.gfBefore],['nr',e.nrBefore]] as const)if(row&&before!==undefined&&row[field]!==before)return {problem:`${field.toUpperCase()} avant (${before}) différent de la situation connue (${row?.[field]??'inconnue'}). Vérifier l’ordre et les décisions déjà incluses.`};
- if(['avancement','mesure','posthume'].includes(e.kind)&&!e.nrSteps&&e.nrAfter===undefined)return {problem:'Nombre de NR non renseigné.'};
+ if(['avancement','mesure','posthume'].includes(e.kind)&&!nrSteps&&e.nrAfter===undefined)return {problem:'Nombre de NR non renseigné.'};
  if(e.kind==='mutation'&&e.gfDelta===undefined&&e.gfAfter===undefined)return {problem:'Évolution du GF non renseignée.'};
  let gf=row?.gf??(e.newAgent?e.gfBefore:undefined),nr=row?.nr??(e.newAgent?e.nrBefore:undefined);
  if(e.kind==='reclassement'){
@@ -38,10 +43,10 @@ function applyEvent(row:AgentRecord|undefined,e:CspEvent):{row?:AgentRecord;prob
   gf+=delta;nr+=delta*10;
  }else{
   if(e.gfDelta){if(gf===undefined)return {problem:'GF de départ inconnu.'};gf+=e.gfDelta;}
-  if(e.nrSteps){if(nr===undefined)return {problem:'NR de départ inconnu.'};nr+=e.nrSteps*5;}
+  if(nrSteps){if(nr===undefined)return {problem:'NR de départ inconnu.'};nr+=nrSteps*5;}
  }
  if(e.gfAfter!==undefined){if((e.gfDelta||e.kind==='reclassement')&&gf!==e.gfAfter)return {problem:'Le GF après contredit la progression indiquée.'};gf=e.gfAfter;}
- if(e.nrAfter!==undefined){if((e.nrSteps||e.kind==='reclassement')&&nr!==e.nrAfter)return {problem:'Le NR après contredit la progression indiquée.'};nr=e.nrAfter;}
+ if(e.nrAfter!==undefined){if((nrSteps||e.kind==='reclassement')&&nr!==e.nrAfter)return {problem:'Le NR après contredit la progression indiquée.'};nr=e.nrAfter;}
  if(e.nrConfirmed&&nr===undefined)return {problem:'Impossible de confirmer un NR inchangé sans NR de départ connu.'};
  if(e.kind==='nomination'&&e.nrAfter===undefined&&!e.nrConfirmed)return {problem:'Nomination : renseigner le NR après ou confirmer explicitement un NR inchangé.'};
  if(e.kind==='mutation'&&e.gfDelta&&e.nrAfter===undefined&&!e.nrConfirmed)return {problem:'Mutation avec gain de GF : renseigner le NR après.'};

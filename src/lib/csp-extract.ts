@@ -44,7 +44,7 @@ export function extractCspPages(pages:CspPage[]){
     const val=cell(kind==='reclassement'?.75:.70,kind==='reclassement'?.835:.82).match(/\b\d+\b/);if(val){if(kind==='reclassement')e.gfDelta=+val[0];else e.nrSteps=+val[0];}
     if(!val)e.note='Nombre de GF/NR non reconnu : à renseigner.';
    }else if(kind==='mesure'||kind==='posthume'){
-    e.nrSteps=Number(cell(.70,.84).match(/\b\d+\b/)?.[0])||undefined;
+    e.nrSteps=Number(cell(.70,.84).match(/\b\d+\b/)?.[0])||(kind==='mesure'?1:undefined);
     // These location columns describe an observation, not a mutation; keep existing assignment.
    }else if(kind==='admission'){
     e.agency=cell(.20,.43).replace(/^UNITE LOGISTIQUE MAINTENANCE\s*\/\s*/i,'');e.team=cell(.43,.65).split('/')[0].trim();e.job=cell(.77,.91);e.gfAfter=Number(cell(.91,1).match(/\d+/)?.[0])||undefined;

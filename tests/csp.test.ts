@@ -71,3 +71,18 @@ test('partial validation publishes only approved events and retains legacy fully
  const p=projectCsp(base,[imported(activeCspEvents(detail))],'2026-06-01');assert.equal(current(p.data).nr,205);assert.equal(current(p.data).gf,9);assert.equal(p.issues.length,0);
  assert.equal(activeCspEvents({events:[ready,pending]}).length,2);assert.equal(activeCspEvents(detail).length,1);
 });
+
+test('one salary measure defaults to one NR and ignores unrelated snapshot conflicts',()=>{
+ const measure=event({kind:'mesure',gfDelta:undefined,nrSteps:undefined});
+ assert.equal(prepareCsp(base,[measure])[0].state,'ready');assert.equal(prepareCsp(base,[measure])[0].after?.nr,205);
+ const conflicting={...base,records:[...base.records,{...base.records[0],id:'different-date',gfDate:'2022-01-01',m3e:'F'}]};
+ const result=prepareCsp(conflicting,[measure])[0];assert.equal(result.state,'ready');assert.equal(result.after?.nr,205);
+ assert.equal(prepareCsp(base,[{...measure,nrSteps:2}])[0].after?.nr,210);
+ const badNR={...base,records:[...base.records,{...base.records[0],id:'different-nr',nr:205}]};assert.equal(prepareCsp(badNR,[measure])[0].state,'blocked');assert.match(prepareCsp(badNR,[measure])[0].problem,/NR/);
+});
+test('admission can be integrated without inventing an entry NR; identity and confirmed arrival remain necessary',()=>{
+ const admission=event({name:'NOUVELLE CLAIRE',agentId:'C12345',kind:'admission',newAgent:true,gfDelta:undefined,gfAfter:8,agency:'AMTE',job:'Technicien'});
+ assert.equal(prepareCsp(base,[admission])[0].state,'ready');assert.equal(prepareCsp(base,[admission])[0].after?.nr,undefined);
+ assert.equal(prepareCsp(base,[{...admission,nrAfter:160}])[0].after?.nr,160);
+ assert.equal(prepareCsp(base,[{...admission,newAgent:false}])[0].state,'blocked');assert.equal(prepareCsp(base,[{...admission,agentId:undefined}])[0].state,'blocked');
+});
