@@ -53,3 +53,5 @@
 /* Keep the two Agents situation tabs on one row, including on phones. */
 .segmented.agent-tabs[aria-label="Mode de consultation des agents"]{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0}
 .segmented.agent-tabs[aria-label="Mode de consultation des agents"]>button{min-width:0;justify-content:center;text-align:center;white-space:normal;line-height:1.35;padding:10px 8px}
+
+.csp-import tr.csp-approved{background:#f0f8f3}.csp-import tr.csp-approved .badge{white-space:nowrap}
