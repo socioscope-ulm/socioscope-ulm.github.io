@@ -63,3 +63,11 @@ test('invalid date, values, identifiers and an incomplete relative decision cann
  assert.equal(validDate('2026-02-30'),false);assert.equal(validateCspEvent(event({agentId:'arbitrary'})),false);assert.equal(validateCspEvent(event({gfDelta:-1})),false);assert.equal(validateCspEvent(event({selected:false,effective:''})),true);
  assert.equal(prepareCsp(base,[event({gfDelta:undefined})])[0].state,'blocked');assert.equal(prepareCsp(base,[event({kind:'avancement',gfDelta:undefined,nrSteps:undefined})])[0].state,'blocked');
 });
+
+test('partial validation publishes only approved events and retains legacy fully validated imports',async()=>{
+ const {activeCspEvents,cspProgress}=await import('../src/lib/csp-validation.ts');
+ const ready=event({kind:'avancement',gfDelta:undefined,nrSteps:1,approved:true});const pending=event({id:'pending',kind:'nomination',effective:'2026-04-01',gfDelta:1});
+ const detail={perEventValidation:true,events:[ready,pending]};assert.deepEqual(cspProgress('validated',detail),{approved:1,pending:1,partial:true});
+ const p=projectCsp(base,[imported(activeCspEvents(detail))],'2026-06-01');assert.equal(current(p.data).nr,205);assert.equal(current(p.data).gf,9);assert.equal(p.issues.length,0);
+ assert.equal(activeCspEvents({events:[ready,pending]}).length,2);assert.equal(activeCspEvents(detail).length,1);
+});

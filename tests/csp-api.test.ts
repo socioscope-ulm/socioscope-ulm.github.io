@@ -38,4 +38,30 @@ test('CSP API validates roles, previews without writes, saves one PDF, rejects i
  assert.equal((await route.PATCH(request({id:saved.id,action:'enable',checked:true},'PATCH'))).status,200);
  assert.equal((await route.PATCH(request({id:saved.id,action:'revise'},'PATCH'))).status,200);assert.equal(m.rows[0].status,'review');
  assert.equal(m.puts.length,1);assert.ok(m.queries.filter(q=>q.startsWith('UPDATE')).every(q=>q.includes('WHERE id=?')&&q.includes('detail=?')));
+ // Mixed RD: commit ready decisions without publishing the unresolved nomination.
+ m.rows=[];m.puts=[];
+ const ready={id:'advance',name:'TEST ALICE',agentId:'A12345',kind:'avancement',effective:'2026-01-01',nrSteps:1,page:1,selected:true};
+ const pending={...e,id:'appointment',agentId:'A12345',effective:'2026-03-01'};
+ const form=new FormData();form.append('file',new File(['%PDF-batch-fixture'],'rd-batch.pdf',{type:'application/pdf'}));form.append('extraction',JSON.stringify({date:'2026-03-24',events:[ready,pending],reports:[]}));const uploadHeaders=new Headers(headers);uploadHeaders.delete('Content-Type');
+ const batch=await (await route.POST(new Request('https://fixture.test/api/csp',{method:'POST',headers:uploadHeaders,body:form}))).json();
+ let response=await route.PATCH(request({id:batch.id,action:'validate-state',state:'blocked',checked:true,events:[ready,pending]},'PATCH'));assert.equal(response.status,400);
+ response=await route.PATCH(request({id:batch.id,action:'validate-state',state:'ready',checked:true,events:[ready,pending]},'PATCH'));assert.equal(response.status,200);let report=await response.json();assert.equal(report.validated,1);assert.equal(report.approved,1);assert.equal(report.pending,1);assert.equal(report.partial,true);
+ let stored=JSON.parse(m.rows[0].detail);assert.equal(stored.events[0].approved,true);assert.equal(stored.events[0].recordedAfter.nr,205);assert.equal(stored.events[1].approved,undefined);assert.equal(stored.events[1].selected,true);assert.equal(m.rows[0].status,'validated');assert.equal(m.puts.length,1);
+ const listing=await (await route.GET(new Request('https://fixture.test/api/csp',{headers}))).json();assert.equal(listing.records.length,1);assert.equal(listing.records[0].id,'advance');assert.equal(listing.imports[0].partial,true);
+ const checked=await (await route.POST(request({id:batch.id,date:'2026-03-24',events:stored.events}))).json();assert.equal(checked.events[0].state,'validated');assert.equal(checked.events[1].state,'blocked');
+ const tampered=stored.events.map((e:any)=>e.approved?{...e,nrSteps:2}:e);assert.equal((await route.PATCH(request({id:batch.id,action:'save',events:tampered},'PATCH'))).status,409);
+ assert.equal((await route.PATCH(request({id:batch.id,action:'save',events:stored.events},'PATCH'))).status,200);assert.equal(m.rows[0].status,'validated');
+ const corrected=stored.events.map((e:any)=>e.id==='appointment'?{...e,nrAfter:210}:e);
+ response=await route.PATCH(request({id:batch.id,action:'validate-state',state:'ready',checked:true,events:corrected},'PATCH'));assert.equal(response.status,200);report=await response.json();assert.equal(report.validated,1);assert.equal(report.pending,0);assert.equal(report.approved,2);assert.equal(report.partial,false);
+ stored=JSON.parse(m.rows[0].detail);assert.equal(stored.events[0].recordedAfter.nr,205);assert.equal(stored.events[1].recordedBefore.nr,205);assert.equal(stored.events[1].recordedAfter.nr,210);assert.equal(m.puts.length,1);
+ // Existing approved data is kept when reactivating a partially validated RD.
+ stored.events[1].approved=false;m.rows[0].detail=JSON.stringify(stored);
+ assert.equal((await route.PATCH(request({id:batch.id,action:'disable'},'PATCH'))).status,200);
+ response=await route.PATCH(request({id:batch.id,action:'enable',checked:true},'PATCH'));assert.equal(response.status,200);assert.equal((await response.json()).pending,1);assert.equal(JSON.parse(m.rows[0].detail).events[1].approved,false);
+
+ // A future group cannot depend on an earlier ready decision still in draft.
+ const future={...pending,id:'future',effective:'2099-01-01',nrAfter:220};
+ m.rows[0].status='review';m.rows[0].detail=JSON.stringify({kind:'csp',events:[ready,future],reports:[]});
+ response=await route.PATCH(request({id:batch.id,action:'validate-state',state:'scheduled',checked:true,events:[ready,future]},'PATCH'));assert.equal(response.status,400);assert.equal(m.rows[0].status,'review');assert.match((await response.json()).error,/dépend/);
+
 });
