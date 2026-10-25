@@ -43,3 +43,8 @@
 
 /* Keep wide remuneration content reachable inside its panel on touch screens. */
 .agent-remuneration{min-width:0;max-width:100%;grid-template-columns:minmax(0,1fr);overflow-x:auto;overscroll-behavior-x:contain;-webkit-overflow-scrolling:touch}
+
+
+.csp-editor{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-top:12px;padding:14px;background:#f3f7f5;min-width:260px;max-width:620px;border-radius:10px;white-space:normal}.csp-editor label{display:grid;gap:5px;font-size:12px}.csp-editor input,.csp-editor textarea{width:100%;min-width:0}.csp-editor .check-label{display:flex;align-items:flex-start;gap:8px}.csp-editor input[type=checkbox]{width:auto;margin-top:3px}
+
+.csp-import .check-label{display:flex;align-items:flex-start;gap:8px;margin:14px 0;line-height:1.5}.csp-import .check-label input[type=checkbox]{width:auto;flex:0 0 auto;margin-top:3px}

@@ -9,7 +9,7 @@ const pct=(value:number)=>new Intl.NumberFormat('fr-FR',{maximumFractionDigits:2
 const csvCell=(value:unknown)=>'"'+String(value??'').replaceAll('"','""')+'"';
 
 type Summary={label:string;gross:number|null;net:number|null;afterTax:number|null};
-export default function AgentRemuneration({agentId,source,grid,bonus,residence}:{agentId:string;source:string;grid:string;bonus:string;residence:string}){
+export default function AgentRemuneration({agentId,source,grid,bonus,residence,asOf}:{asOf?:string;agentId:string;source:string;grid:string;bonus:string;residence:string}){
  const [data,setData]=useState<any>(null);
  const [error,setError]=useState('');
  const [loading,setLoading]=useState(false);
@@ -23,7 +23,7 @@ export default function AgentRemuneration({agentId,source,grid,bonus,residence}:
   setData(null);setError('');setLoading(true);
   const load=async()=>{
    // Une erreur 546/503 transitoire ne doit pas laisser la fiche bloquée en chargement.
-   const query=new URLSearchParams({view:'payroll',source,agent:agentId,grid,bonus,residence});
+   const query=new URLSearchParams({view:'payroll',asof:asOf||'',source,agent:agentId,grid,bonus,residence});
    for(let attempt=0;attempt<2;attempt++){
     try{
      const response=await fetch('/api/agents?'+query,{signal:controller.signal,cache:'no-store'});
@@ -44,7 +44,7 @@ export default function AgentRemuneration({agentId,source,grid,bonus,residence}:
   };
   void load().finally(()=>{if(active)setLoading(false);});
   return()=>{active=false;controller.abort();};
- },[agentId,source,grid,bonus,residence,retry]);
+ },[agentId,source,grid,bonus,residence,retry,asOf]);
  const row=data?.row;
  const monthly=typeof row?.monthlyCents==='number'&&Number.isFinite(row.monthlyCents)?row.monthlyCents:null;
  const bonusAnnual=typeof row?.annualBonusCents==='number'&&Number.isFinite(row.annualBonusCents)?row.annualBonusCents:null;
@@ -125,3 +125,4 @@ export default function AgentRemuneration({agentId,source,grid,bonus,residence}:
   <p className="gap-method">RPC / RPEM selon la référence {data.bonusReferenceYear} ; PVPA selon le GF lorsqu'éligible. Les primes fixes cadres engagement ({data?.engagementRate??3.5} %) et autonomie ({data?.autonomieRate??4} %) sont calculées sur le brut mensuel de base, pour 12 versements. Les remboursements de frais ne sont pas ajoutés. Les hypothèses sont des simulations et non des bulletins de paie.</p>
  </section>;
 }
+

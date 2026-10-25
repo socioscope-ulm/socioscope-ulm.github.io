@@ -7,12 +7,12 @@ export interface ResultStore{
 }
 
 export function cacheableAgentRead(method:string,path:string){
- return method==='GET'&&(path==='/api/agents'||/^\/api\/agents\/[^/]+$/.test(path)&&!['import','decision','files'].includes(path.split('/').at(-1)!));
+ return method==='GET'&&(path==='/api/csp'||path==='/api/agents'||/^\/api\/agents\/[^/]+$/.test(path)&&!['import','decision','files'].includes(path.split('/').at(-1)!));
 }
 
 export async function resultCacheKey(namespace:string,path:string,query:string,scope:string){
  const params=new URLSearchParams(query);params.sort();
- const bytes=new TextEncoder().encode(JSON.stringify([namespace,scope,path,params.toString()]));
+ const bytes=new TextEncoder().encode(JSON.stringify([namespace,new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Paris'}).format(new Date()),scope,path,params.toString()]));
  return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)),b=>b.toString(16).padStart(2,'0')).join('');
 }
 
@@ -61,3 +61,4 @@ export function createCachedRead(store:ResultStore,namespace:string,options:{sle
   return mark(response,'MISS');
  };
 }
+

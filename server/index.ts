@@ -1,5 +1,6 @@
 import {createAccountLink} from './invite';
 import {parseDeploymentVersion} from './version';
+import * as cspRoute from '../src/app/api/csp/route';
 import * as route0 from '../src/app/api/agents/[id]/route';
 import * as route1 from '../src/app/api/agents/decision/route';
 import * as route2 from '../src/app/api/agents/files/[id]/route';
@@ -27,7 +28,7 @@ const ALLOWED_ORIGINS=new Set([CLIENT_ORIGIN]);
 // Supabase documents DENO_DEPLOYMENT_ID as: project_ref_function_id_version.
 // Read the deployed version at runtime rather than keeping a hard-coded number.
 const currentServerVersion=()=>parseDeploymentVersion(Deno.env.get('DENO_DEPLOYMENT_ID'));
-const routes:any[]=[[new RegExp('^/api/agents/decision$'),route1],[new RegExp('^/api/agents/import$'),route4],[new RegExp('^/api/payroll/import$'),route11],[new RegExp('^/api/agents$'),route5],[new RegExp('^/api/data$'),route6],[new RegExp('^/api/import$'),route8],[new RegExp('^/api/payroll$'),route12],[new RegExp('^/api/rows$'),route14],[new RegExp('^/api/rup$'),route15],[new RegExp('^/api/agents/files/([^/]+)$'),route2],[new RegExp('^/api/agents/import/([^/]+)$'),route3],[new RegExp('^/api/payroll/files/([^/]+)$'),route9],[new RegExp('^/api/payroll/import/([^/]+)$'),route10],[new RegExp('^/api/agents/([^/]+)$'),route0],[new RegExp('^/api/files/([^/]+)$'),route7],[new RegExp('^/api/review/([^/]+)$'),route13]];
+const routes:any[]=[[new RegExp('^/api/csp$'),cspRoute],[new RegExp('^/api/agents/decision$'),route1],[new RegExp('^/api/agents/import$'),route4],[new RegExp('^/api/payroll/import$'),route11],[new RegExp('^/api/agents$'),route5],[new RegExp('^/api/data$'),route6],[new RegExp('^/api/import$'),route8],[new RegExp('^/api/payroll$'),route12],[new RegExp('^/api/rows$'),route14],[new RegExp('^/api/rup$'),route15],[new RegExp('^/api/agents/files/([^/]+)$'),route2],[new RegExp('^/api/agents/import/([^/]+)$'),route3],[new RegExp('^/api/payroll/files/([^/]+)$'),route9],[new RegExp('^/api/payroll/import/([^/]+)$'),route10],[new RegExp('^/api/agents/([^/]+)$'),route0],[new RegExp('^/api/files/([^/]+)$'),route7],[new RegExp('^/api/review/([^/]+)$'),route13]];
 const json=(body:any,status=200)=>Response.json(body,{status});
 export async function handler(req:Request){
  const origin=req.headers.get('origin');const cors:any={'Access-Control-Allow-Origin':origin&&ALLOWED_ORIGINS.has(origin)?origin:CLIENT_ORIGIN,'Access-Control-Allow-Headers':'authorization,apikey,content-type','Access-Control-Allow-Methods':'GET,POST,PUT,PATCH,DELETE,OPTIONS','Access-Control-Expose-Headers':'Content-Disposition,Content-Type','Cache-Control':'no-store','Vary':'Origin'};
@@ -113,7 +114,7 @@ export async function handler(req:Request){
   const trustedOrigin=origin&&ALLOWED_ORIGINS.has(origin)?origin:CLIENT_ORIGIN;
   const internal=new Request(trustedOrigin+path+u.search,{method:req.method,headers:h,...(!['GET','HEAD'].includes(req.method)?{body:await req.arrayBuffer()}:{})});
   return finish(await cachedAgentRead(internal,path,user.id+':'+member.role,async()=>{
-   const requiredSeeds=seedsForPath(path);await loadSeeds(requiredSeeds);if(requiredSeeds.includes('seed'))initializeBase();
+   const requiredSeeds:import('./seed-loader').SeedName[]=path==='/api/csp'&&req.method!=='GET'?['agents-seed']:seedsForPath(path);await loadSeeds([...requiredSeeds]);if(requiredSeeds.includes('seed'))initializeBase();
    return await fn(internal,{params:Promise.resolve({id:match[1]?decodeURIComponent(match[1]):''})});
   }));
  }
@@ -121,3 +122,4 @@ export async function handler(req:Request){
  }catch(error){console.error('Socioscope request failed',error instanceof Error?error.name:'Error');return finish(json({error:'Service momentanément indisponible. Réessayer dans quelques instants.'},503));}
 }
 Deno.serve(handler);
+

@@ -1,5 +1,5 @@
 import type {RupData,RupCareer} from './rup.ts';
-export type AgentSource={id:string;name:string;hash:string;date:string;label:string;sheet:string;primary:boolean;confidence:string;seniorityDate:string;rows:number;agents:number;status?:string};
+export type AgentSource={kind?:string;baseSource?:string;id:string;name:string;hash:string;date:string;label:string;sheet:string;primary:boolean;confidence:string;seniorityDate:string;rows:number;agents:number;status?:string};
 export type AgentRecord={rupCareer?:RupCareer;id:string;agentId:string;nni?:string;source:string;row:number;name:string;gf?:number;nr?:number;gfYears?:number;nrYears?:number;iegYears?:number;gfDate?:string;nrDate?:string;entryIEG?:string;entryCompany?:string;entryUnit?:string;college?:string;sex?:string;age?:number;coefficient?:number;agency?:string;team?:string;job?:string;m3e?:string;presence?:string;contract?:string;seniorityDate?:string;candidateNNIs?:string[];matchStatus?:string;manualPresence?:boolean;presenceNote?:string;originalSource?:string};
 export type AgentEvent={agentId:string;date:string;kind:string;motif:string;nrRaw?:string;gf?:number;legacyNR?:boolean;numberNR?:number;contextNR?:number;duration?:number;end?:string;openEnd?:boolean;evidence:{source:string;sheet:string;row:number;column?:number}[]};
 export type AgentData={rup?:RupData;sources:AgentSource[];records:AgentRecord[];events:AgentEvent[];issues:any[];updated:string};
@@ -87,7 +87,7 @@ export function preferredOlderPhotograph(current:AgentSource,sources:AgentSource
    a.id.localeCompare(b.id))[0];
 }
 export function defaultMovementPhotographs(sources:AgentSource[]):{latest?:AgentSource;previous?:AgentSource}{
- const available=sources.filter(s=>s.status!=='review'&&!!s.date);
+ const available=sources.filter(s=>!s.kind?.startsWith('csp')&&s.status!=='review'&&!!s.date);
  const byDate=(a:AgentSource,b:AgentSource)=>b.date.localeCompare(a.date)||Number(!!b.primary)-Number(!!a.primary)||a.id.localeCompare(b.id);
  const latest=available.filter(s=>s.primary).sort(byDate)[0]||available.sort(byDate)[0];
  return {latest,previous:latest?preferredOlderPhotograph(latest,available):undefined};
@@ -164,3 +164,4 @@ export function withConfirmedPresence(data:AgentData,decisions:any[]):AgentData{
  }
  return {...data,records:[...data.records,...added]};
 }
+
