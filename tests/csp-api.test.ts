@@ -74,4 +74,33 @@ test('CSP API validates roles, previews without writes, saves one PDF, rejects i
  assert.equal(JSON.parse(m.rows[0].detail).events[0].newAgent,true);assert.equal(JSON.parse(m.rows[0].detail).events[0].agentId,'C12345');
  response=await route.PATCH(request({id:arrival.id,action:'validate-state',state:'ready',checked:true,events:[admitted]},'PATCH'));assert.equal(response.status,200);const approvedAdmission=JSON.parse(m.rows[0].detail).events[0];assert.equal(approvedAdmission.approved,true);assert.equal(approvedAdmission.newAgent,true);assert.equal(approvedAdmission.identityMethod,'rup');assert.equal(approvedAdmission.recordedAfter.gf,8);assert.equal(approvedAdmission.recordedAfter.nr,undefined);
 
+ // Validate a single decision in an existing draft; preserve all notes and other rows.
+ (m as any).identities=[];
+ const individualId='csp-individual';
+ const annotated={...pending,note:'NR à confirmer auprès du document',agency:'Agence saisie manuellement'};
+ m.rows=[{id:individualId,name:'Brouillon conservé.pdf',date:'2026-03-24',status:'review',count:2,detail:JSON.stringify({kind:'csp',events:[ready,annotated],reports:[{page:1,note:'Contrôle déjà saisi'}]})}];
+ const originalDetail=m.rows[0].detail,originalPuts=m.puts.length;
+ response=await route.PATCH(request({id:individualId,action:'validate-event',eventId:annotated.id,checked:true,events:[ready,annotated]},'PATCH'));assert.equal(response.status,400);assert.equal(m.rows[0].detail,originalDetail);
+ response=await route.PATCH(request({id:individualId,action:'validate-event',eventId:'missing',checked:true,events:[ready,annotated]},'PATCH'));assert.equal(response.status,409);
+ response=await route.PATCH(request({id:individualId,action:'validate-event',eventId:ready.id,checked:false,events:[ready,annotated]},'PATCH'));assert.equal(response.status,400);
+ response=await route.PATCH(request({id:individualId,action:'validate-event',eventId:ready.id,checked:true,events:[ready,annotated]},'PATCH','viewer'));assert.equal(response.status,403);
+ response=await route.PATCH(request({id:individualId,action:'validate-event',eventId:ready.id,checked:true,events:[ready,annotated]},'PATCH'));assert.equal(response.status,200);report=await response.json();assert.equal(report.validated,1);assert.equal(report.pending,1);
+ stored=JSON.parse(m.rows[0].detail);for(const [key,value] of Object.entries(annotated))assert.deepEqual(stored.events[1][key],value);assert.equal(stored.events[1].approved,undefined);assert.equal(stored.reports[0].note,'Contrôle déjà saisi');assert.equal(stored.events[0].recordedAfter.nr,205);assert.equal(m.puts.length,originalPuts);
+ const oneCorrected=stored.events.map((event:any)=>event.id===annotated.id?{...event,nrAfter:210}:event);
+ response=await route.PATCH(request({id:individualId,action:'validate-event',eventId:annotated.id,checked:true,events:oneCorrected},'PATCH'));assert.equal(response.status,200);assert.equal((await response.json()).pending,0);
+ stored=JSON.parse(m.rows[0].detail);assert.equal(stored.events[1].note,annotated.note);assert.equal(stored.events[1].agency,annotated.agency);assert.equal(stored.events[0].recordedAfter.nr,205);
+ response=await route.PATCH(request({id:individualId,action:'validate-event',eventId:ready.id,checked:true,events:stored.events},'PATCH'));assert.equal(response.status,409);
+ // Scheduled and historical decisions can also be approved individually.
+ for(const effective of ['2099-01-01','2025-01-01']){
+  const target={...ready,effective};m.rows=[{id:individualId,date:'2026-03-24',status:'review',count:1,detail:JSON.stringify({kind:'csp',events:[target]})}];
+  response=await route.PATCH(request({id:individualId,action:'validate-event',eventId:target.id,checked:true,events:[target]},'PATCH'));assert.equal(response.status,200);assert.equal((await response.json()).validated,1);
+ }
+ // A single future decision must not borrow an unapproved prerequisite.
+ m.rows=[{id:individualId,date:'2026-03-24',status:'review',count:2,detail:JSON.stringify({kind:'csp',events:[ready,future]})}];
+ response=await route.PATCH(request({id:individualId,action:'validate-event',eventId:future.id,checked:true,events:[ready,future]},'PATCH'));assert.equal(response.status,400);assert.match((await response.json()).error,/dépend/);
+ // A duplicate is acknowledged without losing the original approved record.
+ const prior={...m.rows[0],id:'csp-prior',status:'validated',detail:JSON.stringify({kind:'csp',events:[{...ready,approved:true}]})};
+ m.rows=[prior,{id:individualId,date:'2026-03-24',status:'review',count:1,detail:JSON.stringify({kind:'csp',events:[ready]})}];
+ response=await route.PATCH(request({id:individualId,action:'validate-event',eventId:ready.id,checked:true,events:[ready]},'PATCH'));assert.equal(response.status,200);assert.equal(JSON.parse(m.rows[1].detail).events[0].approved,true);
+
 });

@@ -43,7 +43,7 @@ export async function PATCH(request:Request){try{
   const changed=await db.prepare("UPDATE agent_imports SET status='disabled:validated' WHERE id=? AND status='validated' AND detail=?").bind(b.id,JSON.stringify(row.detail)).run();if(changed.meta.changes!==1)fail('Le relevé a changé. Recharger avant de réessayer.',409);return Response.json({ok:true});
  }
  const progress=cspProgress(row.status,row.detail);const partial=row.status==='validated'&&row.detail.perEventValidation===true&&progress.pending>0;
- if(['validate','validate-state'].includes(b.action)&&row.status!=='review'&&!partial)fail('Ce relevé est déjà validé ou désactivé. Recharger.',409);
+ if(['validate','validate-state','validate-event'].includes(b.action)&&row.status!=='review'&&!partial)fail('Ce relevé est déjà validé ou désactivé. Recharger.',409);
  if(b.action==='enable'&&row.status!=='disabled:validated')fail('Ce relevé n’est pas désactivé.',409);
  if(b.action==='revise'){
   if(!['validated','disabled:validated'].includes(row.status))fail('Le relevé est déjà en cours de vérification.',409);
@@ -51,15 +51,21 @@ export async function PATCH(request:Request){try{
   const changed=await db.prepare('UPDATE agent_imports SET detail=?,status=?,count=? WHERE id=? AND status=? AND detail=?').bind(JSON.stringify(detail),'review',row.count,b.id,row.status,JSON.stringify(row.detail)).run();
   if(changed.meta.changes!==1)fail('Le relevé a changé. Recharger.',409);return Response.json({ok:true});
  }
- if(!['save','validate','validate-state','enable'].includes(b.action))fail('Action inconnue.');
+ if(!['save','validate','validate-state','validate-event','enable'].includes(b.action))fail('Action inconnue.');
  if(b.action==='save'&&row.status!=='review'&&!partial)fail('Utiliser « Corriger » pour modifier des décisions déjà validées.',409);
  const events=b.action==='enable'?row.detail.events:preserveApproved(input({date:row.date,events:b.events}),row.detail.events||[],partial);
  const {data:baseData,cspImports}=await agentData(true,undefined,parisToday(),false);const data=await cspIdentityData(baseData,events);const others=cspImports.filter(i=>i.id!==b.id);
  const preview=prepareCsp(data,b.action==='enable'&&row.detail.perEventValidation?events.map((e:CspEvent)=>({...e,selected:e.selected&&e.approved===true})):events,others,row.date);
  let chosen=new Set<string>();
- if(['validate','validate-state','enable'].includes(b.action)){
+ if(['validate','validate-state','validate-event','enable'].includes(b.action)){
   if(b.checked!==true)fail('Confirmer la vérification des pages et des situations avant/après.');
-  if(b.action==='validate-state'){
+  if(b.action==='validate-event'){
+   if(typeof b.eventId!=='string')fail('Choisir la décision à valider.');
+   const event=preview.find(e=>e.id===b.eventId);
+   if(!event||!event.selected||event.approved)fail('Cette décision est absente, écartée ou déjà validée. Actualiser le relevé.',409);
+   if(!['ready','scheduled','covered','duplicate'].includes(event.state))fail('Cette décision reste à vérifier : '+event.problem);
+   chosen=new Set([event.id]);
+  }else if(b.action==='validate-state'){
    if(!['ready','scheduled','covered','duplicate'].includes(b.state))fail('Les décisions « À vérifier » doivent être corrigées avant validation.');
    chosen=new Set(preview.filter(e=>e.selected&&!e.approved&&e.state===b.state).map(e=>e.id));
    if(!chosen.size)fail('Aucune décision restante dans cet état. Actualiser la vérification.',409);
