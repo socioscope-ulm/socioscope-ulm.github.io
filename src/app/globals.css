@@ -50,3 +50,6 @@
 .csp-import .check-label{display:flex;align-items:flex-start;gap:8px;margin:14px 0;line-height:1.5}.csp-import .check-label input[type=checkbox]{width:auto;flex:0 0 auto;margin-top:3px}
 
 .agent-source-help{display:block;margin:8px 0 14px;color:var(--muted);font-size:12px;line-height:1.6}.agent-source-picker .analysis-options{margin-bottom:8px}.agent-source-picker select{width:100%;max-width:100%}
+/* Keep the two Agents situation tabs on one row, including on phones. */
+.segmented.agent-tabs[aria-label="Mode de consultation des agents"]{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0}
+.segmented.agent-tabs[aria-label="Mode de consultation des agents"]>button{min-width:0;justify-content:center;text-align:center;white-space:normal;line-height:1.35;padding:10px 8px}
