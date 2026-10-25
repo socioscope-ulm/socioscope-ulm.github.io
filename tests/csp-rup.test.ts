@@ -28,3 +28,11 @@ test('posthumous decisions are ready from historical identity without resurrecti
  const projected=projectCsp(base,[{id:'rd',name:'RD',date:'2026-03-24',status:'validated',events:[p]}],'2026-06-01');assert.equal(projected.issues.length,0);assert.equal(snapshot(projected.data,CSP_SOURCE).length,1);assert.equal(snapshot(projected.data,CSP_SOURCE)[0].agentId,'A12345');
  const historical=prepareCsp(base,[{...e,effective:'2025-12-01'}])[0];assert.equal(historical.state,'ready');assert.match(historical.problem,/sans réapplication/);
 });
+
+test('mutation d’office is ready with GF/NR preserved and destination applied, including older drafts',()=>{
+ const e:CspEvent={id:'mutation',name:'TEST ALICE',kind:'mutation',effective:'2026-04-01',agency:'AMTE',job:'Nouvel emploi',page:1,selected:true,note:'Évolution GF non reconnue : vérifier la ligne.'};
+ const p=prepareCsp(base,[e])[0];assert.equal(p.state,'ready');assert.equal(p.gfDelta,0);assert.equal(p.note,undefined);assert.equal(p.after?.gf,9);assert.equal(p.after?.nr,200);assert.equal(p.after?.nrProvisional,undefined);assert.equal(p.after?.job,'Nouvel emploi');assert.match(p.problem,/GF et NR conservés/);
+ const projected=projectCsp(base,[{id:'rd',name:'RD',date:'2026-04-01',status:'validated',events:[p]}],'2026-06-01');assert.equal(projected.issues.length,0);const r=snapshot(projected.data,CSP_SOURCE)[0];assert.equal(r.gf,9);assert.equal(r.nr,200);assert.equal(r.agency,'AMTE');assert.equal(r.job,'Nouvel emploi');
+ for(const patch of [{gfDelta:1},{nrSteps:1},{gfAfter:10},{nrAfter:205}]){assert.equal(prepareCsp(base,[{...e,...patch}])[0].state,'blocked');}
+ assert.equal(prepareCsp(base,[{...e,name:'INCONNU TEST'}])[0].state,'blocked');
+});

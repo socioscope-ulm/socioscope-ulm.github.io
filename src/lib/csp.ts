@@ -19,7 +19,7 @@ export function cspKey(e:CspEvent){
  if(['avancement','mesure','posthume'].includes(e.kind))return JSON.stringify([...identity,nrSteps??(e.nrBefore!==undefined&&e.nrAfter!==undefined?(e.nrAfter-e.nrBefore)/5:null),nrSteps===undefined&&e.nrBefore===undefined?e.nrAfter??null:null]);
  if(e.kind==='titularisation')return JSON.stringify(identity);
  if(e.kind==='nomination'&&e.reference)return JSON.stringify([...identity,e.reference]);
- return JSON.stringify([...identity,e.gfDelta??null,e.nrSteps??null,e.gfAfter??null,e.nrAfter??null,normalName(e.agency),normalName(e.job),normalName(e.team),e.m3e||'',e.reference||'']);
+ return JSON.stringify([...identity,e.gfDelta??(e.kind==='mutation'?0:null),e.nrSteps??null,e.gfAfter??null,e.nrAfter??null,normalName(e.agency),normalName(e.job),normalName(e.team),e.m3e||'',e.reference||'']);
 }
 export function deduplicateCsp(events:CspEvent[]){const unique=new Map<string,CspEvent>();for(const e of events){const k=cspKey(e),prior=unique.get(k);if(prior)prior.pages=[...new Set([...(prior.pages||[prior.page]),...(e.pages||[e.page])])].sort((a,b)=>a-b);else unique.set(k,{...e,pages:e.pages||[e.page]});}return [...unique.values()];}
 export function validateCspEvent(e:any):e is CspEvent {
@@ -37,7 +37,7 @@ function applyEvent(row:AgentRecord|undefined,e:CspEvent):{row?:AgentRecord;prob
  const after:AgentRecord={...(row||{id:'csp:'+e.id,agentId:e.agentId!,nni:e.agentId!,name:e.name,source:CSP_SOURCE,row:e.page}),name:row?.name||e.name};
  for(const [field,before] of [['gf',e.gfBefore],['nr',e.nrBefore]] as const)if(row&&before!==undefined&&row[field]!==before)return {problem:`${field.toUpperCase()} avant (${before}) différent de la situation connue (${row?.[field]??'inconnue'}). Vérifier l’ordre et les décisions déjà incluses.`};
  if(['avancement','mesure','posthume'].includes(e.kind)&&!nrSteps&&e.nrAfter===undefined)return {problem:'Nombre de NR non renseigné.'};
- if(e.kind==='mutation'&&e.gfDelta===undefined&&e.gfAfter===undefined)return {problem:'Évolution du GF non renseignée.'};
+ if(e.kind==='mutation'&&(e.gfDelta||nrSteps||(e.gfAfter!==undefined&&e.gfAfter!==row?.gf)||(e.nrAfter!==undefined&&e.nrAfter!==row?.nr)))return {problem:'Mutation d’office : le GF et le NR sont conservés. Vérifier les valeurs contradictoires renseignées.'};
  let gf=row?.gf??(e.newAgent?e.gfBefore:undefined),nr=row?.nr??(e.newAgent?e.nrBefore:undefined);
  if(e.kind==='reclassement'){
   const delta=e.gfDelta??0;if(delta<1||gf===undefined||nr===undefined)return {problem:'GF et NR de départ nécessaires pour le reclassement.'};
@@ -48,17 +48,16 @@ function applyEvent(row:AgentRecord|undefined,e:CspEvent):{row?:AgentRecord;prob
  }
  if(e.gfAfter!==undefined){if((e.gfDelta||e.kind==='reclassement')&&gf!==e.gfAfter)return {problem:'Le GF après contredit la progression indiquée.'};gf=e.gfAfter;}
  if(e.nrAfter!==undefined){if((nrSteps||e.kind==='reclassement')&&nr!==e.nrAfter)return {problem:'Le NR après contredit la progression indiquée.'};nr=e.nrAfter;}
- if(['nomination','mutation'].includes(e.kind)&&e.gfDelta===0&&gf===undefined)return {problem:'GF de départ inconnu : impossible de confirmer un GF constant.'};
+ if(e.kind==='nomination'&&e.gfDelta===0&&gf===undefined)return {problem:'GF de départ inconnu : impossible de confirmer un GF constant.'};
  if(e.nrConfirmed&&nr===undefined)return {problem:'Impossible de confirmer un NR inchangé sans NR de départ connu.'};
  if(e.kind==='nomination'&&e.gfDelta!==0&&e.nrAfter===undefined&&!e.nrConfirmed)return {problem:'Nomination : renseigner le NR après ou confirmer explicitement un NR inchangé.'};
- if(e.kind==='mutation'&&e.gfDelta&&e.nrAfter===undefined&&!e.nrConfirmed)return {problem:'Mutation avec gain de GF : renseigner le NR après.'};
  if(!row&&gf===undefined)return {problem:'Renseigner le GF avant ou après de la personne arrivant dans l’ULM.'};
  if(e.kind==='admission'&&gf===undefined)return {problem:'GF d’admission à renseigner.'};
  if(gf!==undefined&&(gf<1||gf>30)||nr!==undefined&&(nr<1||nr>999))return {problem:'GF ou NR calculé hors limites.'};
  if(gf!==undefined){after.gf=gf;after.college=gf>=12?'cadres':gf>=7?'maitrise':'execution';if(row?.gf!==gf){after.gfDate=e.effective;after.gfYears=0;}}
  if(nr!==undefined){after.nr=nr;if(row?.nr!==nr){after.nrDate=e.effective;after.nrYears=0;}}
  if(['admission','mutation','nomination'].includes(e.kind)){if(e.agency)after.agency=e.agency;if(e.job){if(row?.job&&normalName(row.job)!==normalName(e.job)&&!e.m3e)delete after.m3e;after.job=e.job;}if(e.team)after.team=e.team;if(e.m3e)after.m3e=e.m3e;}
- if(['mutation','nomination'].includes(e.kind)&&e.gfDelta===0&&e.nrAfter===undefined&&e.nrSteps===undefined&&!e.nrConfirmed&&nr!==undefined)after.nrProvisional=true;
+ if(e.kind==='nomination'&&e.gfDelta===0&&e.nrAfter===undefined&&e.nrSteps===undefined&&!e.nrConfirmed&&nr!==undefined)after.nrProvisional=true;
  if(e.nrAfter!==undefined||e.nrSteps!==undefined||e.nrConfirmed)delete after.nrProvisional;
  if(e.kind==='titularisation')after.presence='Titulaire';
  if(!row){after.entryUnit=e.effective;if(e.kind==='admission')after.presence='Stagiaire';}
@@ -75,7 +74,7 @@ export function prepareCsp(data:AgentData,events:CspEvent[],prior:CspImport[]=[]
   const candidates=[...(names.get(nameKey(e.name))||[])].map(id=>({id,name:histories.get(id)?.name||e.name,agency:histories.get(id)?.agency||evidence.get(nameKey(e.name)+'|'+id)?.agency}));
   const automatic=e.identityMethod==='rup'||e.identityMethod==='annual';const agentId=e.approved?e.agentId:!automatic&&e.agentId?e.agentId:candidates.length===1?candidates[0].id:undefined;
   const proof=agentId?evidence.get(nameKey(e.name)+'|'+agentId):undefined;const certain=candidates.length===1&&candidates[0].id===agentId;
-  return {...e,agentId,candidates,...(!e.approved&&certain?{identityMethod:(e.identityMethod==='manual'&&e.agentId?'manual':proof?'rup':'annual') as CspEvent['identityMethod'],identitySource:proof?.source,identityDate:proof?.date,...(e.kind==='admission'?{newAgent:true}:{})}:{})};
+  return {...e,...(!e.approved&&e.kind==='mutation'?{gfDelta:e.gfDelta??0,...(e.note==='Évolution GF non reconnue : vérifier la ligne.'?{note:undefined}:{})}:{}),agentId,candidates,...(!e.approved&&certain?{identityMethod:(e.identityMethod==='manual'&&e.agentId?'manual':proof?'rup':'annual') as CspEvent['identityMethod'],identitySource:proof?.source,identityDate:proof?.date,...(e.kind==='admission'?{newAgent:true}:{})}:{})};
  });
  const existing=[...prior].sort((a,b)=>(a.created||'').localeCompare(b.created||'')).filter(i=>i.status==='validated').flatMap(i=>i.events.filter(e=>e.selected));const known=new Map(existing.map(e=>[cspKey(e),e]));
  const state=new Map(snapshot(data,base.id).map(r=>[r.agentId,r as AgentRecord]));
@@ -87,8 +86,8 @@ export function prepareCsp(data:AgentData,events:CspEvent[],prior:CspImport[]=[]
   if(!e.selected){out.state='excluded';out.problem='Écarté de cet import.';}
   else if(!e.agentId){out.state='blocked';out.problem=(e as CspPreview).candidates?.length?'Plusieurs agents possibles : choisir le NNI.':'Agent non rapproché : choisir le NNI ou confirmer une arrivée.';}
   else if(known.has(key)||seen.has(key)){const old=known.get(key);const conflict=old&&['gfAfter','nrAfter'].some(k=>{const prior=(old as any)[k]??(old.recordedAfter as any)?.[k==='gfAfter'?'gf':'nr'];return (e as any)[k]!==undefined&&prior!==undefined&&(e as any)[k]!==prior;});out.state=conflict?'blocked':'duplicate';out.problem=conflict?'Une autre version de cette décision indique une situation après différente. Corriger le relevé existant.':'Décision identique déjà présente : aucun cumul.';}
-  else if(e.effective<=base.date){out.state=['admission','posthume'].includes(e.kind)||e.gfDelta===0?'ready':'covered';out.problem='Antérieure ou égale à la photographie : conservée dans l’historique, sans réapplication.';}
-  else {const applied=applyEvent(before,e);if(applied.problem){out.state='blocked';out.problem=applied.problem;}else{out.after=summary(applied.row!);if(e.kind!=='posthume'||state.has(e.agentId!))state.set(e.agentId!,applied.row!);seen.add(key);if(e.effective>parisToday()){out.state='scheduled';out.problem='S’appliquera à sa date d’effet.';}else if(applied.row?.nrProvisional)out.problem='GF constant : NR non précisé dans le RD, dernière valeur connue conservée.';}}
+  else if(e.effective<=base.date){out.state=['admission','posthume','mutation'].includes(e.kind)||e.gfDelta===0?'ready':'covered';out.problem='Antérieure ou égale à la photographie : conservée dans l’historique, sans réapplication.';}
+  else {const applied=applyEvent(before,e);if(applied.problem){out.state='blocked';out.problem=applied.problem;}else{out.after=summary(applied.row!);if(e.kind!=='posthume'||state.has(e.agentId!))state.set(e.agentId!,applied.row!);seen.add(key);if(e.effective>parisToday()){out.state='scheduled';out.problem='S’appliquera à sa date d’effet.';}else if(e.kind==='mutation')out.problem='Mutation d’office : GF et NR conservés.';else if(applied.row?.nrProvisional)out.problem='GF constant : NR non précisé dans le RD, dernière valeur connue conservée.';}}
   results.set(e.id,out);
  }
  // The projected set is intentionally not returned: preview contains changed fields only.
@@ -113,4 +112,4 @@ function cspHistoricalRecord(data:AgentData,agentId:string,asOf:string){
  const sources=data.sources.filter(s=>!s.kind?.startsWith('csp')&&s.status!=='review'&&!s.status?.startsWith('disabled')&&s.date<=asOf).sort((a,b)=>b.date.localeCompare(a.date)||Number(b.primary)-Number(a.primary));
  for(const source of sources){const rows=data.records.filter(r=>r.agentId===agentId&&r.source===source.id);if(rows.length)return snapshot({...data,records:rows},source.id)[0];}
 }
-export function cspResolvedEvent(e:CspEvent,p:CspPreview):CspEvent{return {...e,agentId:p.agentId,newAgent:p.newAgent,identityMethod:p.identityMethod,identitySource:p.identitySource,identityDate:p.identityDate};}
+export function cspResolvedEvent(e:CspEvent,p:CspPreview):CspEvent{return {...e,...(!e.approved&&e.kind==='mutation'?{gfDelta:p.gfDelta,note:p.note}:{}),agentId:p.agentId,newAgent:p.newAgent,identityMethod:p.identityMethod,identitySource:p.identitySource,identityDate:p.identityDate};}

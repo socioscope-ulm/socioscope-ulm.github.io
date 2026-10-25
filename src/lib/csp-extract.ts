@@ -52,8 +52,7 @@ export function extractCspPages(pages:CspPage[]){
     // Titularisation date is not an arrival date and does not alter GF/NR.
    }else if(kind==='mutation'){
     e.job=cell(.43,.56);e.location=cell(.70,.815);const loc=e.location.split('/').map(s=>s.trim());if(loc.length>=2&&normalName(loc[0]).includes('UNITE LOGISTIQUE MAINTENANCE')){e.agency=loc[1];e.team=loc[2]||'';}
-    const gf=cell(.815,.895);e.gfDelta=/GF constant/i.test(gf)?0:Number(gf.match(/\d+/)?.[0])||undefined;
-    if(e.gfDelta===undefined)e.note='Évolution GF non reconnue : vérifier la ligne.';
+    const gf=cell(.815,.895);e.gfDelta=/GF constant/i.test(gf)?0:Number(gf.match(/\d+/)?.[0])||0;
    }else if(kind==='nomination'){
     const aptitude=cell(.80,1);if(!/CANDIDATURE RETENUE/.test(normalName(aptitude))){e.selected=false;e.note='Candidature non retenue : aucun changement.';}
     e.reference=reference;e.job=destJob;e.agency=destAgency;e.team=destTeam;if(destM3e)e.m3e=destM3e;e.location=cell(.54,.80);
