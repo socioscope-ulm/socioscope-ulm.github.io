@@ -16,7 +16,7 @@ test('real individual payroll route matches the full payroll including corrected
  const refs=[{id:'grid',kind:'grid',status:'validated',date:'2026-01-01',created:'',payload:{rates}},{id:'bonus',kind:'bonuses',status:'validated',date:'2025-01-01',created:'',payload:{bonuses:{'8':4000,'15':6000}}}];
  const result=await build({stdin:{contents:`export {GET} from './src/app/api/agents/route.ts'; export {agentData} from './src/lib/agents-store.ts';`,resolveDir:new URL('..',import.meta.url).pathname},bundle:true,write:false,platform:'node',format:'esm',plugins:[{name:'individual-payroll-fixture',setup(b){
   b.onResolve({filter:/\/(seeds|store|payroll-store)(\.ts)?$/},a=>({path:a.path.split('/').at(-1)!.replace('.ts',''),namespace:'individual-test'}));
-  b.onLoad({filter:/.*/,namespace:'individual-test'},a=>({contents:a.path==='seeds'?`export const packedText=${JSON.stringify(JSON.stringify(packed))};export const rupSeedText=${JSON.stringify(JSON.stringify(rup))};`:a.path==='payroll-store'?`export async function payrollReferences(){return ${JSON.stringify(refs)};}`:`
+  b.onLoad({filter:/.*/,namespace:'individual-test'},a=>({contents:a.path==='seeds'?`export async function loadSeeds(){throw Error("Unexpected seed reload in payroll");}export const packedText=${JSON.stringify(JSON.stringify(packed))};export const rupSeedText=${JSON.stringify(JSON.stringify(rup))};`:a.path==='payroll-store'?`export async function payrollReferences(){return ${JSON.stringify(refs)};}`:`
    export function resources(){return {
     db:{prepare(query){return {async all(){return {results:query.includes('agent_imports')?${JSON.stringify(imports)}:query.includes('agent_decisions')?${JSON.stringify(decisions)}:[]};},async first(){return {settings:{engagementRate:3.5,autonomieRate:4}};}};}},
     bucket:{async get(key){if(key==='agents/import/records.json')return {async json(){return ${JSON.stringify(imported)};}};throw Error('Unexpected object');}}
@@ -39,3 +39,4 @@ test('real individual payroll route matches the full payroll including corrected
  const presence=await (await call('agent=B12345')).json();assert.equal(presence.row.manualPresence,true);
  const bad=await GET(new Request('https://fixture.test/api/agents?view=payroll&source=unknown&agent=A12345',{headers:{'oai-authenticated-user-id':'fixture-user'}}));assert.equal(bad.status,404);
 });
+

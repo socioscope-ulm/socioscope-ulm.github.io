@@ -1,15 +1,16 @@
+import {cspNameKey} from './csp-rup.ts';
 import {normalName,normalizeNNI,snapshot,formattedSnapshot} from './agents.ts';
 import type {AgentData,AgentRecord,AgentSource} from './agents.ts';
 
 export const CSP_SOURCE='csp-current';
 export const cspKinds={admission:'Admission au stage',titularisation:'Titularisation',mutation:'Mutation d’office',reclassement:'Reclassement',avancement:'Avancement au choix',posthume:'Avancement à titre posthume',mesure:'Mesure salariale',nomination:'Nomination'};
 export type CspKind=keyof typeof cspKinds;
-export type CspEvent={id:string;name:string;agentId?:string;kind:CspKind;effective:string;page:number;pages?:number[];agency?:string;job?:string;team?:string;m3e?:string;location?:string;reference?:string;gfDelta?:number;nrSteps?:number;gfBefore?:number;gfAfter?:number;nrBefore?:number;nrAfter?:number;selected:boolean;approved?:boolean;approvedAt?:string;note?:string;nrConfirmed?:boolean;newAgent?:boolean;recordedBefore?:Partial<AgentRecord>;recordedAfter?:Partial<AgentRecord>};
+export type CspEvent={id:string;name:string;agentId?:string;kind:CspKind;effective:string;page:number;pages?:number[];agency?:string;job?:string;team?:string;m3e?:string;location?:string;reference?:string;gfDelta?:number;nrSteps?:number;gfBefore?:number;gfAfter?:number;nrBefore?:number;nrAfter?:number;identityMethod?:'rup'|'annual'|'manual';identitySource?:string;identityDate?:string;selected:boolean;approved?:boolean;approvedAt?:string;note?:string;nrConfirmed?:boolean;newAgent?:boolean;recordedBefore?:Partial<AgentRecord>;recordedAfter?:Partial<AgentRecord>};
 export type CspImport={id:string;name:string;date:string;status:string;created?:string;events:CspEvent[]};
 export type CspPreview=CspEvent&{state:string;problem:string;before?:Partial<AgentRecord>;after?:Partial<AgentRecord>;candidates?:{id:string;name:string;agency?:string}[]};
 export function validDate(v:unknown):v is string {if(typeof v!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(v))return false;const d=new Date(v+'T12:00:00Z');return Number.isFinite(+d)&&d.toISOString().slice(0,10)===v&&v>='2000-01-01'&&v<='2100-12-31';}
 export const parisToday=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Paris',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
-const nameKey=(name:string)=>normalName(name).split(' ').sort().join(' ');
+const nameKey=cspNameKey;
 // A salary measure is one NR step unless an explicit count or absolute NR is supplied.
 export const cspNRSteps=(e:CspEvent)=>e.nrSteps??(e.kind==='mesure'&&e.nrAfter===undefined?1:undefined);
 export function cspKey(e:CspEvent){
@@ -47,8 +48,9 @@ function applyEvent(row:AgentRecord|undefined,e:CspEvent):{row?:AgentRecord;prob
  }
  if(e.gfAfter!==undefined){if((e.gfDelta||e.kind==='reclassement')&&gf!==e.gfAfter)return {problem:'Le GF après contredit la progression indiquée.'};gf=e.gfAfter;}
  if(e.nrAfter!==undefined){if((nrSteps||e.kind==='reclassement')&&nr!==e.nrAfter)return {problem:'Le NR après contredit la progression indiquée.'};nr=e.nrAfter;}
+ if(['nomination','mutation'].includes(e.kind)&&e.gfDelta===0&&gf===undefined)return {problem:'GF de départ inconnu : impossible de confirmer un GF constant.'};
  if(e.nrConfirmed&&nr===undefined)return {problem:'Impossible de confirmer un NR inchangé sans NR de départ connu.'};
- if(e.kind==='nomination'&&e.nrAfter===undefined&&!e.nrConfirmed)return {problem:'Nomination : renseigner le NR après ou confirmer explicitement un NR inchangé.'};
+ if(e.kind==='nomination'&&e.gfDelta!==0&&e.nrAfter===undefined&&!e.nrConfirmed)return {problem:'Nomination : renseigner le NR après ou confirmer explicitement un NR inchangé.'};
  if(e.kind==='mutation'&&e.gfDelta&&e.nrAfter===undefined&&!e.nrConfirmed)return {problem:'Mutation avec gain de GF : renseigner le NR après.'};
  if(!row&&gf===undefined)return {problem:'Renseigner le GF avant ou après de la personne arrivant dans l’ULM.'};
  if(e.kind==='admission'&&gf===undefined)return {problem:'GF d’admission à renseigner.'};
@@ -56,6 +58,8 @@ function applyEvent(row:AgentRecord|undefined,e:CspEvent):{row?:AgentRecord;prob
  if(gf!==undefined){after.gf=gf;after.college=gf>=12?'cadres':gf>=7?'maitrise':'execution';if(row?.gf!==gf){after.gfDate=e.effective;after.gfYears=0;}}
  if(nr!==undefined){after.nr=nr;if(row?.nr!==nr){after.nrDate=e.effective;after.nrYears=0;}}
  if(['admission','mutation','nomination'].includes(e.kind)){if(e.agency)after.agency=e.agency;if(e.job){if(row?.job&&normalName(row.job)!==normalName(e.job)&&!e.m3e)delete after.m3e;after.job=e.job;}if(e.team)after.team=e.team;if(e.m3e)after.m3e=e.m3e;}
+ if(['mutation','nomination'].includes(e.kind)&&e.gfDelta===0&&e.nrAfter===undefined&&e.nrSteps===undefined&&!e.nrConfirmed&&nr!==undefined)after.nrProvisional=true;
+ if(e.nrAfter!==undefined||e.nrSteps!==undefined||e.nrConfirmed)delete after.nrProvisional;
  if(e.kind==='titularisation')after.presence='Titulaire';
  if(!row){after.entryUnit=e.effective;if(e.kind==='admission')after.presence='Stagiaire';}
  return {row:after,problem:''};
@@ -65,31 +69,38 @@ export function prepareCsp(data:AgentData,events:CspEvent[],prior:CspImport[]=[]
  const histories=new Map<string,AgentRecord>();const dateById=new Map(data.sources.map(s=>[s.id,s.date]));
  for(const r of [...data.records].sort((a,b)=>(dateById.get(a.source)||'').localeCompare(dateById.get(b.source)||'')))if(r.nni)histories.set(r.agentId,r);
  const names=new Map<string,Set<string>>();for(const r of data.records)if(r.nni){const k=nameKey(r.name),ids=names.get(k)||new Set();ids.add(r.agentId);names.set(k,ids);}
- const resolved=events.map(e=>{const candidates=[...(names.get(nameKey(e.name))||[])].map(id=>({id,name:histories.get(id)!.name,agency:histories.get(id)?.agency}));return {...e,agentId:e.agentId||(candidates.length===1?candidates[0].id:undefined),candidates};});
+ const evidence=new Map<string,NonNullable<AgentData['cspIdentities']>[number]>();
+ for(const identity of data.cspIdentities||[]){const k=nameKey(identity.name),ids=names.get(k)||new Set<string>();ids.add(identity.nni);names.set(k,ids);evidence.set(k+'|'+identity.nni,identity);}
+ const resolved=events.map(e=>{
+  const candidates=[...(names.get(nameKey(e.name))||[])].map(id=>({id,name:histories.get(id)?.name||e.name,agency:histories.get(id)?.agency||evidence.get(nameKey(e.name)+'|'+id)?.agency}));
+  const automatic=e.identityMethod==='rup'||e.identityMethod==='annual';const agentId=e.approved?e.agentId:!automatic&&e.agentId?e.agentId:candidates.length===1?candidates[0].id:undefined;
+  const proof=agentId?evidence.get(nameKey(e.name)+'|'+agentId):undefined;const certain=candidates.length===1&&candidates[0].id===agentId;
+  return {...e,agentId,candidates,...(!e.approved&&certain?{identityMethod:(e.identityMethod==='manual'&&e.agentId?'manual':proof?'rup':'annual') as CspEvent['identityMethod'],identitySource:proof?.source,identityDate:proof?.date,...(e.kind==='admission'?{newAgent:true}:{})}:{})};
+ });
  const existing=[...prior].sort((a,b)=>(a.created||'').localeCompare(b.created||'')).filter(i=>i.status==='validated').flatMap(i=>i.events.filter(e=>e.selected));const known=new Map(existing.map(e=>[cspKey(e),e]));
  const state=new Map(snapshot(data,base.id).map(r=>[r.agentId,r as AgentRecord]));
  const combined=[...existing.map(e=>({event:e,prior:true})),...resolved.map(e=>({event:e,prior:false}))].sort((a,b)=>a.event.effective.localeCompare(b.event.effective)||Number(b.prior)-Number(a.prior));
  const results=new Map<string,CspPreview>();const seen=new Set<string>();
  for(const {event:e,prior:isPrior} of combined){
   const key=cspKey(e);if(isPrior){if(e.effective>base.date&&!seen.has(key)){seen.add(key);const a=applyEvent(state.get(e.agentId!),e);if(a.row)state.set(e.agentId!,a.row);}continue;}
-  const before=state.get(e.agentId!);const out:CspPreview={...e,before:before?summary(before):undefined,state:'ready',problem:''};
+  const before=state.get(e.agentId!)||(e.kind==='posthume'?cspHistoricalRecord(data,e.agentId!,e.effective):undefined);const out:CspPreview={...e,before:before?summary(before):undefined,state:'ready',problem:''};
   if(!e.selected){out.state='excluded';out.problem='Écarté de cet import.';}
   else if(!e.agentId){out.state='blocked';out.problem=(e as CspPreview).candidates?.length?'Plusieurs agents possibles : choisir le NNI.':'Agent non rapproché : choisir le NNI ou confirmer une arrivée.';}
   else if(known.has(key)||seen.has(key)){const old=known.get(key);const conflict=old&&['gfAfter','nrAfter'].some(k=>{const prior=(old as any)[k]??(old.recordedAfter as any)?.[k==='gfAfter'?'gf':'nr'];return (e as any)[k]!==undefined&&prior!==undefined&&(e as any)[k]!==prior;});out.state=conflict?'blocked':'duplicate';out.problem=conflict?'Une autre version de cette décision indique une situation après différente. Corriger le relevé existant.':'Décision identique déjà présente : aucun cumul.';}
-  else if(e.effective<=base.date){out.state='covered';out.problem='Antérieure ou égale à la photographie : conservée dans l’historique, sans réapplication.';}
-  else {const applied=applyEvent(before,e);if(applied.problem){out.state='blocked';out.problem=applied.problem;}else{out.after=summary(applied.row!);state.set(e.agentId!,applied.row!);seen.add(key);if(e.effective>parisToday()){out.state='scheduled';out.problem='S’appliquera à sa date d’effet.';}}}
+  else if(e.effective<=base.date){out.state=['admission','posthume'].includes(e.kind)||e.gfDelta===0?'ready':'covered';out.problem='Antérieure ou égale à la photographie : conservée dans l’historique, sans réapplication.';}
+  else {const applied=applyEvent(before,e);if(applied.problem){out.state='blocked';out.problem=applied.problem;}else{out.after=summary(applied.row!);if(e.kind!=='posthume'||state.has(e.agentId!))state.set(e.agentId!,applied.row!);seen.add(key);if(e.effective>parisToday()){out.state='scheduled';out.problem='S’appliquera à sa date d’effet.';}else if(applied.row?.nrProvisional)out.problem='GF constant : NR non précisé dans le RD, dernière valeur connue conservée.';}}
   results.set(e.id,out);
  }
  // The projected set is intentionally not returned: preview contains changed fields only.
  void meetingDate;
  return resolved.map(e=>results.get(e.id)!);
 }
-export function summary(r:Partial<AgentRecord>){return {gf:r.gf,nr:r.nr,agency:r.agency,job:r.job,team:r.team};}
+export function summary(r:Partial<AgentRecord>){return {gf:r.gf,nr:r.nr,agency:r.agency,job:r.job,team:r.team,...(r.nrProvisional?{nrProvisional:true}:{})};}
 export function projectCsp(data:AgentData,imports:CspImport[],asOf=parisToday(),attach=true):{data:AgentData;issues:{event:CspEvent;problem:string}[];base?:AgentSource}{
  const base=latestAnnual(data,asOf),active=imports.filter(i=>i.status==='validated');if(!base||!active.length||asOf<base.date)return {data,issues:[],base};
  const state=new Map(snapshot(data,base.id).map(r=>[r.agentId,r as AgentRecord]));const stages=new Map<string,Map<string,AgentRecord>>();const seen=new Set<string>();const issues:{event:CspEvent;problem:string}[]=[];
  const events=[...active].sort((a,b)=>(a.created||'').localeCompare(b.created||'')).flatMap((i,order)=>i.events.filter(e=>e.selected).map((e,index)=>({...e,importId:i.id,order,index}))).sort((a,b)=>a.effective.localeCompare(b.effective)||a.order-b.order||a.index-b.index);
- for(const e of events){if(e.effective<=base.date||e.effective>asOf)continue;const key=cspKey(e);if(seen.has(key))continue;seen.add(key);const result=applyEvent(state.get(e.agentId!),e);if(result.row){state.set(e.agentId!,result.row);const rows=stages.get(e.effective)||new Map<string,AgentRecord>();rows.set(e.agentId!,result.row);stages.set(e.effective,rows);}else issues.push({event:e,problem:result.problem});}
+ for(const e of events){if(e.effective<=base.date||e.effective>asOf)continue;const key=cspKey(e);if(seen.has(key))continue;seen.add(key);const present=state.has(e.agentId!);const before=state.get(e.agentId!)||(e.kind==='posthume'?cspHistoricalRecord(data,e.agentId!,e.effective):undefined);const result=applyEvent(before,e);if(result.row){if(e.kind==='posthume'&&!present)continue;state.set(e.agentId!,result.row);const rows=stages.get(e.effective)||new Map<string,AgentRecord>();rows.set(e.agentId!,result.row);stages.set(e.effective,rows);}else issues.push({event:e,problem:result.problem});}
  if(!attach)return {data,issues,base};
  const source:AgentSource={...base,id:CSP_SOURCE,kind:'csp',baseSource:base.id,name:'Situation actualisée par les CSP',label:'Situation actualisée au '+asOf+' · CSP',date:asOf,seniorityDate:asOf,hash:'',primary:false,status:'validated',confidence:'Photographie du '+base.date+' + décisions CSP ; sorties non couvertes',rows:state.size,agents:state.size,sheet:'Décisions CSP'};
  const records=[...state.values()].map(r=>({...r,id:CSP_SOURCE+':'+r.agentId,source:CSP_SOURCE,originalSource:r.source,gfYears:r.gfDate?Math.max(0,(+new Date(asOf)-+new Date(r.gfDate))/(365.2425*86400000)):r.gfYears,nrYears:r.nrDate?Math.max(0,(+new Date(asOf)-+new Date(r.nrDate))/(365.2425*86400000)):r.nrYears,seniorityDate:r.seniorityDate||base.seniorityDate}));
@@ -97,3 +108,9 @@ export function projectCsp(data:AgentData,imports:CspImport[],asOf=parisToday(),
  for(const [date,rows] of stages){const id='csp-date:'+date;stageSources.push({...source,id,kind:'csp-event',date,seniorityDate:date,label:'Décisions CSP · effet au '+date,primary:false,rows:rows.size,agents:rows.size});for(const r of rows.values())stageRecords.push({...r,id:id+':'+r.agentId,source:id,originalSource:r.source,seniorityDate:r.seniorityDate||base.seniorityDate});}
  return {data:{...data,sources:[...data.sources,...stageSources,source],records:[...data.records,...stageRecords,...records]},issues,base};
 }
+
+function cspHistoricalRecord(data:AgentData,agentId:string,asOf:string){
+ const sources=data.sources.filter(s=>!s.kind?.startsWith('csp')&&s.status!=='review'&&!s.status?.startsWith('disabled')&&s.date<=asOf).sort((a,b)=>b.date.localeCompare(a.date)||Number(b.primary)-Number(a.primary));
+ for(const source of sources){const rows=data.records.filter(r=>r.agentId===agentId&&r.source===source.id);if(rows.length)return snapshot({...data,records:rows},source.id)[0];}
+}
+export function cspResolvedEvent(e:CspEvent,p:CspPreview):CspEvent{return {...e,agentId:p.agentId,newAgent:p.newAgent,identityMethod:p.identityMethod,identitySource:p.identitySource,identityDate:p.identityDate};}

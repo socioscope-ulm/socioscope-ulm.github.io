@@ -7,6 +7,7 @@ test('CSP API validates roles, previews without writes, saves one PDF, rejects i
    import {accessError} from '${new URL('../src/lib/access.ts',import.meta.url).pathname}';
    export async function agentAuth(req,write=false){const error=accessError(req,write);if(error)throw Object.assign(Error((await error.json()).error),{status:error.status});}
    export const agentError=e=>Response.json({error:e.message},{status:e.status||500});
+   export async function cspIdentityData(data){return {...data,cspIdentities:globalThis.__cspAPI.identities||[]};}
    export async function agentData(){return {cspImports:globalThis.__cspAPI.rows.map(r=>({...r,...JSON.parse(r.detail)})),data:{sources:[{id:'annual',primary:true,date:'2025-12-31',seniorityDate:'2025-12-31',label:'Annual'}],records:[{id:'one',agentId:'A12345',nni:'A12345',name:'TEST ALICE',source:'annual',row:1,gf:9,nr:200,agency:'AMTC'}],events:[],issues:[],updated:''}};}
   `:`
    export function resources(){const m=globalThis.__cspAPI;return {bucket:{async put(key){m.puts.push(key);}},db:{prepare(query){let args=[];const stmt={bind(...a){args=a;return stmt;},async all(){m.queries.push(query);return {results:m.rows};},async first(){m.queries.push(query);return query.includes('hash=')?m.rows.find(r=>r.hash===args[0]):m.rows.find(r=>r.id===args[0]);},async run(){m.queries.push(query);
@@ -63,5 +64,14 @@ test('CSP API validates roles, previews without writes, saves one PDF, rejects i
  const future={...pending,id:'future',effective:'2099-01-01',nrAfter:220};
  m.rows[0].status='review';m.rows[0].detail=JSON.stringify({kind:'csp',events:[ready,future],reports:[]});
  response=await route.PATCH(request({id:batch.id,action:'validate-state',state:'scheduled',checked:true,events:[ready,future]},'PATCH'));assert.equal(response.status,400);assert.equal(m.rows[0].status,'review');assert.match((await response.json()).error,/dépend/);
+
+ // A new admission found in the RUP is persisted with automatic NNI/arrival,
+ // not only displayed as ready in the temporary preview.
+ m.rows=[];(m as any).identities=[{name:'NOUVELLE CLAIRE',nni:'C12345',source:'rup-latest',date:'2026-09-30'}];
+ const admitted={id:'arrival',name:'NOUVELLE CLAIRE',kind:'admission',effective:'2026-04-01',gfAfter:8,agency:'AMTE',job:'Technicien',page:1,selected:true};
+ const admissionForm=new FormData();admissionForm.append('file',new File(['%PDF-admission-fixture'],'admission.pdf',{type:'application/pdf'}));admissionForm.append('extraction',JSON.stringify({date:'2026-03-24',events:[admitted],reports:[]}));
+ const arrival=await (await route.POST(new Request('https://fixture.test/api/csp',{method:'POST',headers:uploadHeaders,body:admissionForm}))).json();
+ assert.equal(JSON.parse(m.rows[0].detail).events[0].newAgent,true);assert.equal(JSON.parse(m.rows[0].detail).events[0].agentId,'C12345');
+ response=await route.PATCH(request({id:arrival.id,action:'validate-state',state:'ready',checked:true,events:[admitted]},'PATCH'));assert.equal(response.status,200);const approvedAdmission=JSON.parse(m.rows[0].detail).events[0];assert.equal(approvedAdmission.approved,true);assert.equal(approvedAdmission.newAgent,true);assert.equal(approvedAdmission.identityMethod,'rup');assert.equal(approvedAdmission.recordedAfter.gf,8);assert.equal(approvedAdmission.recordedAfter.nr,undefined);
 
 });

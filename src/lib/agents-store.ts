@@ -1,8 +1,10 @@
+import {cspNameKey,findCspRupIdentities} from './csp-rup';
+import type {CspEvent} from './csp';
 import {activeCspEvents} from './csp-validation';
 import {projectCsp,parisToday} from './csp';
 import type {CspImport} from './csp';
 import {accessError} from './access';
-import {rupSeedText,packedText} from '../../server/seeds';
+import {rupSeedText,packedText,loadSeeds} from '../../server/seeds';
 import {withRupCareer,withRupSex} from './rup';
 import type {RupData} from './rup';
 import {resources} from './store';
@@ -115,3 +117,13 @@ if(b.kind==='return'){
 }
 await resources().db.prepare('INSERT INTO agent_decisions (id,agent,kind,target,source,note,created) VALUES (?,?,?,?,?,?,?)').bind(crypto.randomUUID(),b.agent,b.kind,b.target||null,b.source,note,new Date().toISOString()).run();return {ok:true};}
 
+
+export async function cspIdentityData(data:AgentData,events:CspEvent[]){
+ const known=new Map<string,Set<string>>();for(const r of data.records)if(r.nni){const key=cspNameKey(r.name),ids=known.get(key)||new Set<string>();ids.add(r.nni);known.set(key,ids);}
+ const names=events.filter(e=>!e.approved&&e.selected&&(e.kind==='admission'||e.identityMethod==='rup'||!e.agentId&&known.get(cspNameKey(e.name))?.size!==1)).map(e=>e.name);if(!names.length)return data;
+ await loadSeeds(['rup-seed']);
+ const {db,bucket}=resources();const imports=(await db.prepare('SELECT id,name,date,status,detail FROM agent_imports ORDER BY date DESC,created DESC').all<any>()).results;
+ const excluded=(await db.prepare('SELECT source_id FROM rup_source_exclusions').all<{source_id:string}>()).results.map(r=>r.source_id);
+ const cspIdentities=await findCspRupIdentities(JSON.parse(rupSeedText),imports,excluded,names,async id=>{const object=await bucket.get('agents/'+id+'/records.json');return object?await object.json<any[]>():[];});
+ return {...data,cspIdentities};
+}
