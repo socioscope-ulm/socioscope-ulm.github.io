@@ -4,17 +4,43 @@ type Passage={agentId:string;from:number;to:number;years:number;estimated:boolea
 const mean=(v:number[])=>v.length?v.reduce((a,b)=>a+b,0)/v.length:null;
 const epoch=(v?:string)=>v&&/^\d{4}-\d{2}-\d{2}$/.test(v)?Date.parse(v+'T00:00:00Z'):NaN;
 const yearMs=365.2425*86400000;
-function anchor(r:AgentRecord,s:AgentSource,key:'gf'|'nr'){
+function anchor(r:AgentRecord,s:AgentSource,key:'gf'|'nr',parseDate:typeof epoch){
  if((r as any).conflicts?.some((f:string)=>[key,key+'Date',key+'Years','seniorityDate'].includes(f)))return null;
- const exact=epoch(r[key==='gf'?'gfDate':'nrDate']);
- const ref=epoch(r.seniorityDate||s.seniorityDate||s.date);
- if(Number.isFinite(exact)&&exact<=Math.max(ref,epoch(s.date)))return {time:exact,estimated:false};
+ const exact=parseDate(r[key==='gf'?'gfDate':'nrDate']);
+ const ref=parseDate(r.seniorityDate||s.seniorityDate||s.date);
+ if(Number.isFinite(exact)&&exact<=Math.max(ref,parseDate(s.date)))return {time:exact,estimated:false};
  const years=r[key==='gf'?'gfYears':'nrYears'];
  return typeof years==='number'&&Number.isFinite(years)&&years>=0&&Number.isFinite(ref)?{time:ref-years*yearMs,estimated:true}:null;
 }
-export function agentProgression(data:AgentData,sourceId:string,includePassages=false, snapshotFor:(source:string)=>ReturnType<typeof snapshot>=(source)=>snapshot(data,source)){
+export function agentProgression(data:AgentData,sourceId:string,includePassages=false, providedSnapshot?:(source:string)=>ReturnType<typeof snapshot>){
  const reference=data.sources.find(s=>s.id===sourceId);if(!reference)return null;
  const sources=data.sources.filter(s=>(s.primary||s.status==='validated')&&s.status!=='review'&&s.date<=reference.date).sort((a,b)=>a.date.localeCompare(b.date)||a.id.localeCompare(b.id));
+ // Read the historical rows once, instead of rescanning all photographs
+ // for each source. A caller such as family analysis can reuse its own cache.
+ let snapshotFor=providedSnapshot;
+ if(!snapshotFor){
+  const needed=new Set([...sources.map(s=>s.id),sourceId]);
+  const bySource=new Map<string,AgentRecord[]>();
+  for(const row of data.records){
+   if(!needed.has(row.source))continue;
+   let rows=bySource.get(row.source);
+   if(!rows){rows=[];bySource.set(row.source,rows);}
+   rows.push(row);
+  }
+  const snapshots=new Map<string,ReturnType<typeof snapshot>>();
+  snapshotFor=(id)=>{
+   let rows=snapshots.get(id);
+   if(!rows){rows=snapshot({...data,records:bySource.get(id)||[]},id);snapshots.set(id,rows);}
+   return rows;
+  };
+ }
+ // Dates recur across thousands of agents. Parse each distinct value once
+ // per calculation, with no shared mutable state between requests.
+ const dates=new Map<string|undefined,number>();
+ const parseDate=(value?:string)=>{
+  if(!dates.has(value))dates.set(value,epoch(value));
+  return dates.get(value)!;
+ };
  const histories=new Map<string,{record:AgentRecord;source:AgentSource}[]>();
  // Alternative files and duplicate situations never create extra passages.
  for(const s of sources)for(const r of snapshotFor(s.id).filter(r=>r.nni)){
@@ -24,10 +50,10 @@ export function agentProgression(data:AgentData,sourceId:string,includePassages=
  for(const [agentId,h] of histories)for(const key of ['gf','nr'] as const)for(let i=1;i<h.length;i++){
   const prev=h[i-1],cur=h[i],from=prev.record[key],to=cur.record[key];
   if(typeof from!=='number'||typeof to!=='number'||to<=from||cur.source.date===prev.source.date)continue;
-  const start=anchor(prev.record,prev.source,key),end=anchor(cur.record,cur.source,key);
+  const start=anchor(prev.record,prev.source,key,parseDate),end=anchor(cur.record,cur.source,key,parseDate);
   // An undated change cannot establish a duration; a change after an unknown
   // intermediate level cannot establish that the whole interval was spent at from.
-  if(!start||!end||end.time<=start.time||end.time<epoch(prev.source.date)-32*86400000||end.time>Math.max(epoch(cur.source.date),epoch(cur.record.seniorityDate||cur.source.seniorityDate)))continue;
+  if(!start||!end||end.time<=start.time||end.time<parseDate(prev.source.date)-32*86400000||end.time>Math.max(parseDate(cur.source.date),parseDate(cur.record.seniorityDate||cur.source.seniorityDate)))continue;
   const years=(end.time-start.time)/yearMs;if(years>60)continue;
   passages[key].push({agentId,from,to,years,estimated:start.estimated||end.estimated});
  }
