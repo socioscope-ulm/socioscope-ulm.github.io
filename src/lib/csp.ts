@@ -5,8 +5,10 @@ import type {AgentData,AgentRecord,AgentSource} from './agents.ts';
 export const CSP_SOURCE='csp-current';
 export const cspKinds={admission:'Admission au stage',titularisation:'Titularisation',mutation:'Mutation d’office',reclassement:'Reclassement',avancement:'Avancement au choix',posthume:'Avancement à titre posthume',mesure:'Mesure salariale',nomination:'Nomination'};
 export type CspKind=keyof typeof cspKinds;
-export type CspEvent={id:string;name:string;agentId?:string;kind:CspKind;effective:string;page:number;pages?:number[];agency?:string;job?:string;team?:string;m3e?:string;location?:string;reference?:string;gfDelta?:number;nrSteps?:number;gfBefore?:number;gfAfter?:number;nrBefore?:number;nrAfter?:number;identityMethod?:'rup'|'annual'|'manual';identitySource?:string;identityDate?:string;selected:boolean;candidacy?:boolean;approved?:boolean;approvedAt?:string;note?:string;nrConfirmed?:boolean;extractionIssue?:string;newAgent?:boolean;recordedBefore?:Partial<AgentRecord>;recordedAfter?:Partial<AgentRecord>};
-export type CspImport={id:string;name:string;date:string;status:string;created?:string;events:CspEvent[];documentType?:'rd'|'cr'};
+export type CspSalaryReference={nni:string;gf:number;nr:number;nrAfter:number;steps:number;effective:string;agency?:string;rup:{source:string;date:string};cr:{id:string;name:string;eventId:string;page:number};rd:{id:string;name:string;eventId:string;page:number}};
+export type CspSalaryChecks={references:Map<string,CspSalaryReference>;problems:Map<string,string>};
+export type CspEvent={salaryReference?:CspSalaryReference;id:string;name:string;agentId?:string;kind:CspKind;effective:string;page:number;pages?:number[];agency?:string;job?:string;team?:string;m3e?:string;location?:string;reference?:string;gfDelta?:number;nrSteps?:number;gfBefore?:number;gfAfter?:number;nrBefore?:number;nrAfter?:number;identityMethod?:'rup'|'annual'|'manual';identitySource?:string;identityDate?:string;selected:boolean;candidacy?:boolean;approved?:boolean;approvedAt?:string;note?:string;nrConfirmed?:boolean;extractionIssue?:string;newAgent?:boolean;recordedBefore?:Partial<AgentRecord>;recordedAfter?:Partial<AgentRecord>};
+export type CspImport={id:string;name:string;date:string;status:string;created?:string;events:CspEvent[];documentType?:'rd'|'cr';evidenceEvents?:CspEvent[]};
 export type CspPreview=CspEvent&{state:string;problem:string;matchedRD?:{id:string;eventId:string;name:string;page:number;approved:boolean};before?:Partial<AgentRecord>;after?:Partial<AgentRecord>;candidates?:{id:string;name:string;agency?:string}[]};
 export function validDate(v:unknown):v is string {if(typeof v!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(v))return false;const d=new Date(v+'T12:00:00Z');return Number.isFinite(+d)&&d.toISOString().slice(0,10)===v&&v>='2000-01-01'&&v<='2100-12-31';}
 export const parisToday=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Paris',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
@@ -66,7 +68,7 @@ function applyEvent(row:AgentRecord|undefined,e:CspEvent):{row?:AgentRecord;prob
  if(!row){after.entryUnit=e.effective;if(e.kind==='admission')after.presence='Stagiaire';}
  return {row:after,problem:''};
 }
-export function prepareCsp(data:AgentData,events:CspEvent[],prior:CspImport[]=[],meetingDate=parisToday()):CspPreview[]{
+export function prepareCsp(data:AgentData,events:CspEvent[],prior:CspImport[]=[],meetingDate=parisToday(),salaryChecks?:CspSalaryChecks):CspPreview[]{
  const base=latestAnnual(data);if(!base)return events.map(e=>({...e,state:'blocked',problem:'Aucune photographie annuelle de référence.'}));
  const histories=new Map<string,AgentRecord>();const dateById=new Map(data.sources.map(s=>[s.id,s.date]));
  for(const r of [...data.records].sort((a,b)=>(dateById.get(a.source)||'').localeCompare(dateById.get(b.source)||'')))if(r.nni)histories.set(r.agentId,r);
@@ -77,22 +79,23 @@ export function prepareCsp(data:AgentData,events:CspEvent[],prior:CspImport[]=[]
   const candidates=[...(names.get(nameKey(e.name))||[])].map(id=>({id,name:histories.get(id)?.name||e.name,agency:histories.get(id)?.agency||evidence.get(nameKey(e.name)+'|'+id)?.agency}));
   const automatic=e.identityMethod==='rup'||e.identityMethod==='annual';const agentId=e.approved?e.agentId:!automatic&&e.agentId?e.agentId:candidates.length===1?candidates[0].id:undefined;
   const proof=agentId?evidence.get(nameKey(e.name)+'|'+agentId):undefined;const certain=candidates.length===1&&candidates[0].id===agentId;
-  return {...e,...(!e.approved&&e.kind==='mutation'?{gfDelta:e.gfDelta??0,...(e.note==='Évolution GF non reconnue : vérifier la ligne.'?{note:undefined}:{})}:{}),agentId,candidates,...(!e.approved&&certain?{identityMethod:(e.identityMethod==='manual'&&e.agentId?'manual':proof?'rup':'annual') as CspEvent['identityMethod'],identitySource:proof?.source,identityDate:proof?.date,...(e.kind==='admission'?{newAgent:true}:{})}:{})};
+  return {...e,salaryReference:e.approved?e.salaryReference:salaryChecks?.references.get(e.id),...(!e.approved&&e.kind==='mutation'?{gfDelta:e.gfDelta??0,...(e.note==='Évolution GF non reconnue : vérifier la ligne.'?{note:undefined}:{})}:{}),agentId,candidates,...(!e.approved&&certain?{identityMethod:(e.identityMethod==='manual'&&e.agentId?'manual':proof?'rup':'annual') as CspEvent['identityMethod'],identitySource:proof?.source,identityDate:proof?.date,...(e.kind==='admission'?{newAgent:true}:{})}:{})};
  });
  const existing=[...prior].sort((a,b)=>(a.created||'').localeCompare(b.created||'')).filter(i=>i.status==='validated').flatMap(i=>i.events.filter(e=>e.selected&&!e.candidacy));const known=new Map(existing.map(e=>[cspKey(e),e]));
  const state=new Map(snapshot(data,base.id).map(r=>[r.agentId,r as AgentRecord]));
  const combined=[...existing.map(e=>({event:e,prior:true})),...resolved.map(e=>({event:e,prior:false}))].sort((a,b)=>a.event.effective.localeCompare(b.event.effective)||Number(b.prior)-Number(a.prior));
  const results=new Map<string,CspPreview>();const seen=new Set<string>();
  for(const {event:e,prior:isPrior} of combined){
-  const key=cspKey(e);if(isPrior){if(e.effective>base.date&&!seen.has(key)){seen.add(key);const a=applyEvent(state.get(e.agentId!),e);if(a.row)state.set(e.agentId!,a.row);}continue;}
-  const before=state.get(e.agentId!)||(e.kind==='posthume'?cspHistoricalRecord(data,e.agentId!,e.effective):undefined);const out:CspPreview={...e,before:before?summary(before):undefined,state:'ready',problem:''};
+  const key=cspKey(e);if(isPrior){if(e.effective>base.date&&!seen.has(key)){seen.add(key);const a=applyEvent(salaryReferenceRow(state.get(e.agentId!),e),e);if(a.row)state.set(e.agentId!,a.row);}continue;}
+  const before=salaryReferenceRow(state.get(e.agentId!)||(e.kind==='posthume'?cspHistoricalRecord(data,e.agentId!,e.effective):undefined),e);const out:CspPreview={...e,before:before?summary(before):undefined,state:'ready',problem:''};
   if(!e.selected){out.state='excluded';out.problem='Écarté de cet import.';}
   else if(e.candidacy){out.state='blocked';out.problem='En attente du RD : aucune prise de poste confirmée.';}
   else if(e.extractionIssue){out.state='blocked';out.problem=e.extractionIssue;}
   else if(!e.agentId){out.state='blocked';out.problem=(e as CspPreview).candidates?.length?'Plusieurs agents possibles : choisir le NNI.':'Agent non rapproché : choisir le NNI ou confirmer une arrivée.';}
+  else if(salaryChecks?.problems.has(e.id)){out.state='blocked';out.problem=salaryChecks.problems.get(e.id)!;}
   else if(known.has(key)||seen.has(key)){const old=known.get(key);const conflict=old&&['gfAfter','nrAfter'].some(k=>{const prior=(old as any)[k]??(old.recordedAfter as any)?.[k==='gfAfter'?'gf':'nr'];return (e as any)[k]!==undefined&&prior!==undefined&&(e as any)[k]!==prior;});out.state=conflict?'blocked':'duplicate';out.problem=conflict?'Une autre version de cette décision indique une situation après différente. Corriger le relevé existant.':'Décision identique déjà présente : aucun cumul.';}
   else if(e.effective<=base.date){out.state=['admission','posthume','mutation'].includes(e.kind)||e.gfDelta===0?'ready':'covered';out.problem='Antérieure ou égale à la photographie : conservée dans l’historique, sans réapplication.';}
-  else {const applied=applyEvent(before,e);if(applied.problem){out.state='blocked';out.problem=applied.problem;}else{out.after=summary(applied.row!);if(e.kind!=='posthume'||state.has(e.agentId!))state.set(e.agentId!,applied.row!);seen.add(key);if(e.effective>parisToday()){out.state='scheduled';out.problem='S’appliquera à sa date d’effet.';}else if(e.kind==='mutation')out.problem='Mutation d’office : GF et NR conservés.';else if(applied.row?.nrProvisional)out.problem='GF constant : NR non précisé dans le RD, dernière valeur connue conservée.';}}
+  else {const applied=applyEvent(before,e);if(applied.problem){out.state='blocked';out.problem=applied.problem;}else{out.after=summary(applied.row!);if(e.kind!=='posthume'||state.has(e.agentId!))state.set(e.agentId!,applied.row!);seen.add(key);if(e.effective>parisToday()){out.state='scheduled';out.problem='S’appliquera à sa date d’effet.';}else if(e.kind==='mutation')out.problem='Mutation d’office : GF et NR conservés.';else if(e.salaryReference)out.problem='Référence GF/NR établie par le CR (page '+e.salaryReference.cr.page+'), mesure confirmée par le RD (page '+e.salaryReference.rd.page+'), identité confirmée par le RUP. Une seule application.';else if(applied.row?.nrProvisional)out.problem='GF constant : NR non précisé dans le RD, dernière valeur connue conservée.';}}
   results.set(e.id,out);
  }
  // The projected set is intentionally not returned: preview contains changed fields only.
@@ -104,7 +107,7 @@ export function projectCsp(data:AgentData,imports:CspImport[],asOf=parisToday(),
  const base=latestAnnual(data,asOf),active=imports.filter(i=>i.status==='validated');if(!base||!active.length||asOf<base.date)return {data,issues:[],base};
  const state=new Map(snapshot(data,base.id).map(r=>[r.agentId,r as AgentRecord]));const stages=new Map<string,Map<string,AgentRecord>>();const seen=new Set<string>();const issues:{event:CspEvent;problem:string}[]=[];
  const events=[...active].sort((a,b)=>(a.created||'').localeCompare(b.created||'')).flatMap((i,order)=>i.events.filter(e=>e.selected&&!e.candidacy).map((e,index)=>({...e,importId:i.id,order,index}))).sort((a,b)=>a.effective.localeCompare(b.effective)||a.order-b.order||a.index-b.index);
- for(const e of events){if(e.effective<=base.date||e.effective>asOf)continue;const key=cspKey(e);if(seen.has(key))continue;seen.add(key);const present=state.has(e.agentId!);const before=state.get(e.agentId!)||(e.kind==='posthume'?cspHistoricalRecord(data,e.agentId!,e.effective):undefined);const result=applyEvent(before,e);if(result.row){if(e.kind==='posthume'&&!present)continue;state.set(e.agentId!,result.row);const rows=stages.get(e.effective)||new Map<string,AgentRecord>();rows.set(e.agentId!,result.row);stages.set(e.effective,rows);}else issues.push({event:e,problem:result.problem});}
+ for(const e of events){if(e.effective<=base.date||e.effective>asOf)continue;const key=cspKey(e);if(seen.has(key))continue;seen.add(key);const present=state.has(e.agentId!);if(e.salaryReference&&!salaryReferenceSupported(e,imports)){issues.push({event:e,problem:'Référence CR/RD de la mesure salariale désactivée ou modifiée : vérifier la décision.'});continue;}const before=salaryReferenceRow(state.get(e.agentId!)||(e.kind==='posthume'?cspHistoricalRecord(data,e.agentId!,e.effective):undefined),e);const result=applyEvent(before,e);if(result.row){if(e.kind==='posthume'&&!present)continue;state.set(e.agentId!,result.row);const rows=stages.get(e.effective)||new Map<string,AgentRecord>();rows.set(e.agentId!,result.row);stages.set(e.effective,rows);}else issues.push({event:e,problem:result.problem});}
  if(!attach)return {data,issues,base};
  const source:AgentSource={...base,id:CSP_SOURCE,kind:'csp',baseSource:base.id,name:'Situation actualisée par les CSP',label:'Situation actualisée au '+asOf+' · CSP',date:asOf,seniorityDate:asOf,hash:'',primary:false,status:'validated',confidence:'Photographie du '+base.date+' + décisions CSP ; sorties non couvertes',rows:state.size,agents:state.size,sheet:'Décisions CSP'};
  const records=[...state.values()].map(r=>({...r,id:CSP_SOURCE+':'+r.agentId,source:CSP_SOURCE,originalSource:r.source,gfYears:r.gfDate?Math.max(0,(+new Date(asOf)-+new Date(r.gfDate))/(365.2425*86400000)):r.gfYears,nrYears:r.nrDate?Math.max(0,(+new Date(asOf)-+new Date(r.nrDate))/(365.2425*86400000)):r.nrYears,seniorityDate:r.seniorityDate||base.seniorityDate}));
@@ -117,4 +120,23 @@ function cspHistoricalRecord(data:AgentData,agentId:string,asOf:string){
  const sources=data.sources.filter(s=>!s.kind?.startsWith('csp')&&s.status!=='review'&&!s.status?.startsWith('disabled')&&s.date<=asOf).sort((a,b)=>b.date.localeCompare(a.date)||Number(b.primary)-Number(a.primary));
  for(const source of sources){const rows=data.records.filter(r=>r.agentId===agentId&&r.source===source.id);if(rows.length)return snapshot({...data,records:rows},source.id)[0];}
 }
-export function cspResolvedEvent(e:CspEvent,p:CspPreview):CspEvent{return {...e,...(!e.approved&&e.kind==='mutation'?{gfDelta:p.gfDelta,note:p.note}:{}),agentId:p.agentId,newAgent:p.newAgent,identityMethod:p.identityMethod,identitySource:p.identitySource,identityDate:p.identityDate};}
+export function cspResolvedEvent(e:CspEvent,p:CspPreview):CspEvent{return {...e,...(!e.approved&&e.kind==='mutation'?{gfDelta:p.gfDelta,note:p.note}:{}),agentId:p.agentId,newAgent:p.newAgent,identityMethod:p.identityMethod,identitySource:p.identitySource,identityDate:p.identityDate,salaryReference:e.approved?e.salaryReference:p.salaryReference};}
+
+
+// This is a reference for one validated salary decision, never a backdated
+// annual photograph, an arrival, or an IEG seniority date.
+function salaryReferenceRow(row:AgentRecord|undefined,e:CspEvent):AgentRecord|undefined{
+ const ref=e.salaryReference;if(e.kind!=='mesure'||!ref||ref.nni!==e.agentId||ref.effective!==e.effective)return row;
+ if(row)return {...row,gf:row.gf??ref.gf,nr:row.nr??ref.nr};
+ return {id:'csp-reference:'+e.id,agentId:ref.nni,nni:ref.nni,name:e.name,source:CSP_SOURCE,row:e.page,gf:ref.gf,nr:ref.nr,agency:ref.agency};
+}
+export function salaryReferenceSupported(e:CspEvent,documents:CspImport[]):boolean{
+ const r=e.salaryReference;if(!r)return true;
+ if(e.kind!=='mesure'||r.nni!==e.agentId||r.effective!==e.effective||r.nrAfter!==r.nr+r.steps*5)return false;
+ const get=(proof:CspSalaryReference['cr'],type:'cr'|'rd')=>{
+  const d=documents.find(d=>d.id===proof.id&&!d.status.startsWith('disabled')&&(d.documentType==='cr'?'cr':'rd')===type);
+  return d&&(d.evidenceEvents||d.events).find(v=>v.id===proof.eventId&&v.selected&&!v.candidacy&&!v.extractionIssue&&v.kind==='mesure'&&nameKey(v.name)===nameKey(e.name)&&(!v.agentId||v.agentId===e.agentId)&&v.effective===r.effective);
+ };
+ const cr=get(r.cr,'cr'),rd=get(r.rd,'rd');
+ return !!cr&&!!rd&&cr.gfBefore===r.gf&&cr.nrBefore===r.nr&&cr.nrAfter===r.nrAfter&&[cr,rd].every(v=>cspNRSteps(v)===r.steps&&(v.gfDelta??0)===0&&(v.gfBefore===undefined||v.gfBefore===r.gf)&&(v.gfAfter===undefined||v.gfAfter===r.gf)&&(v.nrBefore===undefined||v.nrBefore===r.nr)&&(v.nrAfter===undefined||v.nrAfter===r.nrAfter));
+}

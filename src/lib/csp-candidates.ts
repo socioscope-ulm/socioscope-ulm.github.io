@@ -1,13 +1,24 @@
+import {salaryReferenceChecks} from './csp-salary-reference.ts';
 import {normalName} from './agents.ts';
 import {cspNameKey} from './csp-rup.ts';
-import {prepareCsp} from './csp.ts';
+import {prepareCsp,salaryReferenceSupported} from './csp.ts';
 import type {CspEvent,CspImport,CspPreview} from './csp.ts';
 import type {AgentData,AgentRecord} from './agents.ts';
 
 // Documents are evidence, including drafts. Only `prior` contains applicable
 // approved movements. Import timestamps never determine CR/RD matching.
-export function prepareCspDocuments(data:AgentData,events:CspEvent[],prior:CspImport[],date:string,documents:CspImport[]=[]):CspPreview[]{
- const preview=prepareCsp(data,events,prior,date);
+export function prepareCspDocuments(data:AgentData,events:CspEvent[],prior:CspImport[],date:string,documents:CspImport[]=[],current?:{id:string;name:string;documentType:'rd'|'cr'}):CspPreview[]{
+ const evidence=current?[...documents.filter(d=>d.id!==current.id),{...current,date,status:'review',events}]:documents;
+ const context=prior.map(d=>({...d,events:d.events.filter(e=>!e.salaryReference||salaryReferenceSupported(e,evidence))}));
+ const initial=prepareCsp(data,events,context,date);
+ const checks=salaryReferenceChecks(data,events,date,evidence);
+ // Keep independent annual references independent from documentary fallback.
+ for(const p of initial){
+  const ref=checks.references.get(p.id);
+  if(ref&&!p.approved&&!['duplicate','covered'].includes(p.state)&&((p.before?.gf!==undefined&&p.before.gf!==ref.gf)||(p.before?.nr!==undefined&&p.before.nr!==ref.nr)))checks.problems.set(p.id,'Mesure salariale : la situation connue contredit les valeurs avant du CR. Vérifier la référence GF/NR.');
+  if(p.before?.gf!==undefined&&p.before?.nr!==undefined)checks.references.delete(p.id);
+ }
+ const preview=checks.references.size||checks.problems.size?prepareCsp(data,events,context,date,checks):initial;
  const rd=documents.filter(d=>d.documentType!=='cr'&&d.date===date&&!d.status.startsWith('disabled'));
  // Resolve identities against the complete history above, then examine each RD
  // using only that person's history. Rebuilding the full name/snapshot indexes
@@ -62,3 +73,4 @@ export function addCrCandidates(detail:any,status:string,candidates:CspEvent[]){
  const old=saved.map(e=>status==='validated'&&!detail.perEventValidation&&e.selected?{...e,approved:true}:e);
  return {...detail,candidateVersion:1,perEventValidation:status==='validated'?true:detail.perEventValidation,events:[...old,...added]};
 }
+

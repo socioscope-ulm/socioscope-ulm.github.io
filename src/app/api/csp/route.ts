@@ -8,6 +8,7 @@ function fail(message:string,status=400):never{throw Object.assign(Error(message
 const parse=(row:any)=>{let detail:any={};try{detail=JSON.parse(row.detail||'{}');}catch{}return {...row,detail};};
 const metadata=(row:any)=>({id:row.id,name:row.name,date:row.date,status:row.status,count:row.count,documentType:row.detail.documentType==='cr'?'cr':'rd',created:row.created,duplicates:row.detail.duplicates||0,reports:row.detail.reports||[],perEventValidation:!!row.detail.perEventValidation,candidateVersion:row.detail.candidateVersion||0,...cspProgress(row.status,row.detail)});
 async function imports(){return (await resources().db.prepare('SELECT * FROM agent_imports WHERE id LIKE ? ORDER BY date,created,id').bind('csp-%').all<any>()).results.map(parse).filter(r=>r.detail.kind==='csp');}
+const currentDocument=(row:any)=>({id:row.id,name:row.name,documentType:row.detail.documentType==='cr'?'cr' as const:'rd' as const});
 const documents=(rows:any[])=>rows.map(r=>({id:r.id,name:r.name,date:r.date,status:r.status,created:r.created,documentType:r.detail.documentType==='cr'?'cr' as const:'rd' as const,events:(r.detail.events||[]).map((e:CspEvent)=>r.status==='validated'&&!r.detail.perEventValidation&&e.selected?{...e,approved:true}:e)}));
 function input(body:any){
  if(!body||!validDate(body.date)||!Array.isArray(body.events)||!body.events.length||body.events.length>3000||!body.events.every(validateCspEvent)||new Set(body.events.map((e:any)=>e.id)).size!==body.events.length)fail('Date ou décisions invalides. Corriger les dates et les valeurs avant l’enregistrement.');
@@ -25,15 +26,15 @@ export async function GET(request:Request){try{
 }catch(e){return agentError(e);}}
 export async function POST(request:Request){try{
  await agentAuth(request,true);const isForm=request.headers.get('content-type')?.startsWith('multipart/form-data');
- if(!isForm){const body=await request.json();const rows=await imports();const evidence=documents(rows);const saved=body.id?rows.find(r=>r.id===body.id):null;const events=preserveApproved(input(body),saved?.detail.events||[],saved?.status==='validated'&&saved.detail.perEventValidation===true);const {data:baseData,cspImports}=await agentData(true,undefined,parisToday(),false);const data=await cspIdentityData(baseData,events);const preview=prepareCspDocuments(data,events,cspImports.filter(i=>i.id!==body.id),body.date,evidence);return Response.json({events:preview.map(e=>e.approved?{...e,state:'validated',before:e.recordedBefore,after:e.recordedAfter,problem:'Décision déjà validée et intégrée.'}:e),base:latestAnnual(data),blocked:preview.filter(e=>e.selected&&!e.approved&&e.state==='blocked').length});}
+ if(!isForm){const body=await request.json();const rows=await imports();const evidence=documents(rows);const saved=body.id?rows.find(r=>r.id===body.id):null;const events=preserveApproved(input(body),saved?.detail.events||[],saved?.status==='validated'&&saved.detail.perEventValidation===true);const {data:baseData,cspImports}=await agentData(true,undefined,parisToday(),false);const data=await cspIdentityData(baseData,events);const preview=prepareCspDocuments(data,events,cspImports.filter(i=>i.id!==body.id),body.date,evidence,saved?currentDocument(saved):{id:'csp-unsaved',name:'Document en cours',documentType:body.documentType==='cr'?'cr':'rd'});return Response.json({events:preview.map(e=>e.approved?{...e,state:'validated',before:e.recordedBefore,after:e.recordedAfter,problem:'Décision déjà validée et intégrée.'}:e),base:latestAnnual(data),blocked:preview.filter(e=>e.selected&&!e.approved&&e.state==='blocked').length});}
  const f=await request.formData(),file=f.get('file'),raw=f.get('extraction');
  if(!(file instanceof File)||!file.size||file.size>20*1024*1024||!/\.pdf$/i.test(file.name)||typeof raw!=='string'||raw.length>1500000)fail('Choisir un PDF de moins de 20 Mo.');
  const body=JSON.parse(raw),events=preserveApproved(input(body),[],false);const bytes=await file.arrayBuffer();if(new TextDecoder().decode(bytes.slice(0,5))!=='%PDF-')fail('Le fichier n’est pas un PDF.');
  const hash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)),b=>b.toString(16).padStart(2,'0')).join('');const {db,bucket}=resources();
  const existing=await db.prepare('SELECT id FROM agent_imports WHERE hash=?').bind(hash).first<any>();if(existing)return Response.json({id:existing.id,existing:true});
- const {data:baseData,cspImports}=await agentData(true,undefined,parisToday(),false);const data=await cspIdentityData(baseData,events);const preview=prepareCspDocuments(data,events,cspImports,body.date,documents(await imports()));
+ const {data:baseData,cspImports}=await agentData(true,undefined,parisToday(),false);const data=await cspIdentityData(baseData,events);const id='csp-'+crypto.randomUUID();const preview=prepareCspDocuments(data,events,cspImports,body.date,documents(await imports()),{id,name:file.name,documentType:body.documentType==='cr'?'cr':'rd'});
  const stored=events.map(e=>cspResolvedEvent(e,preview.find(p=>p.id===e.id)!));
- const id='csp-'+crypto.randomUUID();const reports=Array.isArray(body.reports)?body.reports.slice(0,250).map((r:any)=>({page:Number(r.page),section:String(r.section||'').slice(0,80),count:Number(r.count)||0,status:['read','empty','unsupported'].includes(r.status)?r.status:'unsupported',note:String(r.note||'').slice(0,200)})):[];
+ const reports=Array.isArray(body.reports)?body.reports.slice(0,250).map((r:any)=>({page:Number(r.page),section:String(r.section||'').slice(0,80),count:Number(r.count)||0,status:['read','empty','unsupported'].includes(r.status)?r.status:'unsupported',note:String(r.note||'').slice(0,200)})):[];
  const detail={kind:'csp',version:1,documentType:body.documentType==='cr'?'cr':'rd',candidateVersion:body.documentType==='cr'&&body.candidateVersion===1?1:0,events:stored,reports,duplicates:Math.max(0,Number(body.duplicates)||0),checked:false};
  await bucket.put('agents/'+id+'/original',bytes,{httpMetadata:{contentType:'application/pdf'}});
  await db.prepare('INSERT INTO agent_imports (id,name,hash,date,created,status,count,complete,detail) VALUES (?,?,?,?,?,?,?,?,?)').bind(id,file.name.slice(0,240),hash,body.date,new Date().toISOString(),'review',stored.length,0,JSON.stringify(detail)).run();
@@ -65,7 +66,7 @@ export async function PATCH(request:Request){try{
  if(b.action==='save'&&row.status!=='review'&&!partial)fail('Utiliser « Corriger » pour modifier des décisions déjà validées.',409);
  const events=b.action==='enable'?row.detail.events:preserveApproved(input({date:row.date,events:b.events}),row.detail.events||[],partial);
  const {data:baseData,cspImports}=await agentData(true,undefined,parisToday(),false);const data=await cspIdentityData(baseData,events);const others=cspImports.filter(i=>i.id!==b.id);const evidence=documents(await imports());
- const preview=prepareCspDocuments(data,b.action==='enable'&&row.detail.perEventValidation?events.map((e:CspEvent)=>({...e,selected:e.selected&&e.approved===true})):events,others,row.date,evidence);
+ const preview=prepareCspDocuments(data,b.action==='enable'&&row.detail.perEventValidation?events.map((e:CspEvent)=>({...e,selected:e.selected&&e.approved===true})):events,others,row.date,evidence,currentDocument(row));
  let chosen=new Set<string>();
  if(['validate','validate-state','validate-event','enable'].includes(b.action)){
   if(b.checked!==true)fail('Confirmer la vérification des pages et des situations avant/après.');
@@ -83,7 +84,7 @@ export async function PATCH(request:Request){try{
   // Recompute with ONLY approved decisions and this batch. A draft in another
   // state must never supply a prerequisite to a decision being published.
   const isolated=events.map((e:CspEvent)=>({...e,selected:e.selected&&(chosen.has(e.id)||(b.action==='enable'?e.approved||!row.detail.perEventValidation:e.approved===true))}));
-  const checked=prepareCspDocuments(data,isolated,others,row.date,evidence);
+  const checked=prepareCspDocuments(data,isolated,others,row.date,evidence,currentDocument(row));
   for(const e of checked)if(e.selected&&chosen.has(e.id)){
    if(e.state==='blocked')fail('Ce groupe contient une décision restant à vérifier : '+e.problem);
    const full=preview.find(p=>p.id===e.id)!;
@@ -97,3 +98,4 @@ export async function PATCH(request:Request){try{
  if(changed.meta.changes!==1)fail('Le relevé a changé dans une autre fenêtre. Recharger avant de réessayer.',409);
  return Response.json({ok:true,status,validated:chosen.size,...cspProgress(status,detail)});
 }catch(e){return agentError(e);}}
+
