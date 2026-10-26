@@ -5,7 +5,7 @@ import {cspKinds,cspNRSteps,cspResolvedEvent,validDate} from '../lib/csp';
 import {normalName} from '../lib/agents';
 import type {CspEvent,CspPreview} from '../lib/csp';
 const day=(v?:string)=>v?new Intl.DateTimeFormat('fr-FR',{dateStyle:'medium',timeZone:'UTC'}).format(new Date(v+'T12:00:00Z')):'À renseigner';
-async function api(path:string,init?:RequestInit){const r=await fetch(path,{cache:'no-store',...init});const b=await r.json().catch(()=>null);if(!r.ok||!b)throw Error(b?.error||'Service indisponible. Réessayer.');return b;}
+async function api(path:string,init?:RequestInit){const r=await fetch(path,{cache:'no-store',...init});const b=await r.json().catch(()=>null);if(!r.ok||!b)throw Error(r.status===546?'Le traitement a dépassé la limite de calcul du serveur (code 546). Aucune validation n’est confirmée ; rechargez le relevé avant de réessayer.':b?.error||`Service indisponible (code ${r.status}). Réessayer.`);return b;}
 const post=(body:any,method='POST')=>({method,headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
 const stateNames:Record<string,string>={validated:'Validée',ready:'Prêt',blocked:'À vérifier',scheduled:'À venir',duplicate:'Déjà enregistré',covered:'Historique antérieur',excluded:'À vérifier · non retenue'};
 const value=(r:any)=>r?`GF ${r.gf??'?'} · NR ${r.nr??'?'}`:'Non renseigné';

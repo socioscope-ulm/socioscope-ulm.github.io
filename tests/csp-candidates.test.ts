@@ -51,3 +51,22 @@ test('backfill preserves original annotations and approvals, adds only candidate
  const updated=addCrCandidates(detail,'validated',[candidate]);assert.deepEqual(detail,old);assert.equal(updated.candidateVersion,1);assert.equal(updated.perEventValidation,true);assert.equal(updated.events[0].approved,true);assert.equal(updated.events[0].note,existing.note);assert.equal(updated.events[1].approved,undefined);assert.equal(updated.reports[0].note,'Page contrôlée');assert.equal(cspProgress('validated',updated).pending,1);
  assert.equal(addCrCandidates(updated,'validated',[candidate]).events.length,2);
 });
+
+test('validation checks all candidate identities once without rebuilding unrelated agent histories for every match',()=>{
+ let reads=0;const records=Array.from({length:2000},(_,i)=>({id:'r'+i,source:'annual',row:i,agentId:'A'+String(i).padStart(5,'0'),nni:'A'+String(i).padStart(5,'0'),get name(){reads++;return 'EXEMPLE PERSONNE '+i;},gf:9,nr:140,agency:'AMT CENTRE',job:'Technicien'}));
+ const bulk={...data,records,cspIdentities:[]};
+ const candidates=records.slice(0,30).map((r,i)=>({...candidate,id:'c'+i,name:r.name,reference:'26-'+String(i).padStart(5,'0')+'.01'}));
+ const nominations=candidates.map((c,i)=>({...nomination,id:'n'+i,name:c.name,agentId:records[i].agentId,reference:c.reference}));
+ reads=0;const result=prepareCspDocuments(bulk,candidates,[],rd.date,[{...rd,events:nominations}]);
+ assert.equal(result.length,30);assert.ok(result.every(p=>p.state==='ready'));
+ // Each whole history is indexed once; adding candidates must not multiply
+ // that work by the number of matching nominations (the former CPU overflow).
+ assert.ok(reads<records.length*4,`Unrelated histories reread ${reads} times`);
+});
+
+test('focusing a candidate history does not resolve an ambiguous RD identity by accident',()=>{
+ const ambiguous={...data,cspIdentities:[...data.cspIdentities!,{name:candidate.name,nni:'B12345',source:'rup-latest',date:'2026-09-30'}]};
+ const manual={...candidate,agentId:'A12345',identityMethod:'manual' as const};
+ const unresolved={...rd,events:[{...nomination,approved:undefined,agentId:undefined}]};
+ assert.equal(preview([unresolved],manual,ambiguous).state,'blocked');
+});

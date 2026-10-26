@@ -2,13 +2,21 @@ import {normalName} from './agents.ts';
 import {cspNameKey} from './csp-rup.ts';
 import {prepareCsp} from './csp.ts';
 import type {CspEvent,CspImport,CspPreview} from './csp.ts';
-import type {AgentData} from './agents.ts';
+import type {AgentData,AgentRecord} from './agents.ts';
 
 // Documents are evidence, including drafts. Only `prior` contains applicable
 // approved movements. Import timestamps never determine CR/RD matching.
 export function prepareCspDocuments(data:AgentData,events:CspEvent[],prior:CspImport[],date:string,documents:CspImport[]=[]):CspPreview[]{
  const preview=prepareCsp(data,events,prior,date);
  const rd=documents.filter(d=>d.documentType!=='cr'&&d.date===date&&!d.status.startsWith('disabled'));
+ // Resolve identities against the complete history above, then examine each RD
+ // using only that person's history. Rebuilding the full name/snapshot indexes
+ // for every candidature exceeded the Edge Function CPU limit on validation.
+ const wanted=new Set(preview.filter(p=>p.candidacy&&p.selected&&p.agentId).map(p=>p.agentId!));
+ const records=new Map<string,AgentRecord[]>();
+ if(wanted.size)for(const r of data.records)if(wanted.has(r.agentId)){const rows=records.get(r.agentId)||[];rows.push(r);records.set(r.agentId,rows);}
+ const scopedData=new Map<string,AgentData>();
+ const forAgent=(id:string)=>{let scoped=scopedData.get(id);if(!scoped){scoped={...data,records:records.get(id)||[],cspIdentities:data.cspIdentities?.filter(i=>i.nni===id)};scopedData.set(id,scoped);}return scoped;};
  return preview.map(p=>{
   if(!p.candidacy||!p.selected)return p;
   const blocked=(problem:string):CspPreview=>({...p,state:'blocked',problem});
@@ -18,13 +26,15 @@ export function prepareCspDocuments(data:AgentData,events:CspEvent[],prior:CspIm
   const matches=samePost.filter(({e})=>e.selected&&cspNameKey(e.name)===cspNameKey(p.name));
   if(!matches.length)return blocked('En attente du RD : aucune nomination retenue et concordante pour ce candidat et ce poste.');
   if(!p.agentId)return blocked('Candidat non rapproché avec certitude : vérifier le NNI dans les RUP.');
+  if((p.candidates?.length||0)>1&&matches.some(({e})=>!e.approved&&(!e.agentId||e.identityMethod==='rup'||e.identityMethod==='annual')))return blocked('Plusieurs NNI possibles pour la nomination du RD : confirmer son rapprochement RUP.');
   const checked=matches.map(({d,e})=>{
    // Keep earlier approved decisions from this same RD in the reference, but
    // exclude the matched decision so that its GF increase is never replayed.
    const own={...d,events:d.events.filter(other=>other.id!==e.id&&other.selected&&other.approved&&!other.candidacy)};
    const current:CspImport={id:'csp-current-approved',name:'Décisions déjà validées de ce document',date,status:'validated',events:events.filter(e=>e.approved&&e.selected&&!e.candidacy)};
    const context=[...prior.filter(i=>i.id!==d.id),own,current];
-   const decision=prepareCsp(data,[e],context,d.date)[0];
+   const scopedContext=context.map(i=>({...i,events:i.events.filter(event=>event.agentId===p.agentId)}));
+   const decision=prepareCsp(forAgent(p.agentId!),[e],scopedContext,d.date)[0];
    return {d,e,decision};
   });
   if(checked.some(({decision})=>decision.agentId!==p.agentId))return blocked('Le CR et le RD ne désignent pas le même NNI : vérifier le rapprochement RUP.');
