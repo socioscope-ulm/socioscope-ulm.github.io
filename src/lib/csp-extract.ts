@@ -1,7 +1,7 @@
 import {installPDFByteMethods} from '../../public/pdf-byte-compat.js';
 import {normalName} from './agents.ts';
 import {deduplicateCsp,validDate} from './csp.ts';
-import {extractCrPage} from './csp-cr-extract.ts';
+import {extractCrPage,extractCrCandidates} from './csp-cr-extract.ts';
 import type {CspEvent,CspKind} from './csp.ts';
 export type CspTextItem={str:string;x:number;y:number;width:number;height:number};
 export type CspPage={page:number;width:number;height:number;items:CspTextItem[]};
@@ -16,7 +16,7 @@ export function extractCspPages(pages:CspPage[],documentType:'rd'|'cr'='rd'){
   let kind:CspKind|undefined;
   if(n.includes('NOMINATIONS AUX POSTES VACANTS'))kind='nomination';else if(n.includes('ADMISSION AU STAGE'))kind='admission';else if(n.includes('TITULARISATION'))kind='titularisation';else if(n.includes('MUTATION D OFFICE'))kind='mutation';else if(n.includes('RECLASSEMENT'))kind='reclassement';else if(n.includes('AVANCEMENT A TITRE POSTHUME'))kind='posthume';else if(n.includes('MESURES SALARIALES'))kind='mesure';else if(n.includes('AVANCEMENT AU CHOIX')&&!n.includes('LONGUE MALADIE'))kind='avancement';
   const report:CspPageReport={page:pg.page,section:kind||'Autre rubrique',count:0,status:'read',note:''};reports.push(report);
-  if(documentType==='cr'&&n.includes('BORDEREAU DES CANDIDATS')){report.section='Candidatures';report.status='empty';report.note='Candidatures sans décision de nomination : conservées dans le PDF, aucun mouvement appliqué.';continue;}
+  if(documentType==='cr'&&n.includes('BORDEREAU DES CANDIDATS')){events.push(...extractCrCandidates(pg,report));continue;}
   if(!kind){report.status=n.includes('LONGUE MALADIE')?'empty':'unsupported';report.note=n.includes('LONGUE MALADIE')?'Information collective : aucun changement individuel importé.':'Mise en page ou rubrique non reconnue : à examiner.';continue;}
   if(documentType==='cr'&&kind!=='nomination'){events.push(...extractCrPage(pg,kind,report));continue;}
   const head=rows.find(r=>/NOM\s+PR[EÉ]NOM/.test(r.text));

@@ -38,8 +38,8 @@ test('CR mutation joins wrapped names and reads destination while preserving the
 test('CR titularisation selects titularisation date, not the admission date in the preceding column',()=>{
  const e=event(table('TITULARISATION',[['NOM PRENOM',80],['DATE ADMISSION STAGE',400],['DATE TITULARISATION',550],['GF',650],['NR',700]],[['EXEMPLE ALICE',80],['01/02/2025',400],['01/02/2026',550],['8',650],['100',700]]));assert.equal(e.effective,'2026-02-01');assert.equal(e.gfAfter,undefined);assert.equal(e.nrAfter,undefined);
 });
-test('candidate lists and collective information stay in the PDF without creating nominations',()=>{
- const r=extractCspPages([page("BORDEREAU DES CANDIDATS A L'EMPLOI",[item('EXEMPLE ALICE',80,380)]),page('SITUATION DES SALARIES EN LONGUE MALADIE AU REGARD DES AVANCEMENTS AU CHOIX',[])],'cr');assert.equal(r.events.length,0);assert.deepEqual(r.reports.map(r=>r.status),['empty','empty']);assert.match(r.reports[0].note,/sans décision/);
+test('unreadable candidate lists are reported and collective information remains informational',()=>{
+ const r=extractCspPages([page("BORDEREAU DES CANDIDATS A L'EMPLOI",[item('EXEMPLE ALICE',80,380)]),page('SITUATION DES SALARIES EN LONGUE MALADIE AU REGARD DES AVANCEMENTS AU CHOIX',[])],'cr');assert.equal(r.events.length,0);assert.deepEqual(r.reports.map(r=>r.status),['unsupported','empty']);assert.match(r.reports[0].note,/non reconnu/);
 });
 test('missing or inconsistent CR values stay blocked, including historical and duplicate decisions',()=>{
  for(const v of [values.filter(([s])=>s!=='110'),values.map(([s,x])=>[s==='110'?'115':s,x] as [string,number])]){
@@ -49,4 +49,15 @@ test('missing or inconsistent CR values stay blocked, including historical and d
 test('contradictory versions in the same CR are grouped with page evidence and require explicit review',()=>{
  const a=table('RECLASSEMENT',headers,values),b=table('RECLASSEMENT',headers,values.map(([s,x])=>[s==='100'?'105':s==='110'?'115':s,x] as [string,number]),2);
  const r=extractCspPages([a,b],'cr');assert.equal(r.events.length,1);assert.deepEqual(r.events[0].pages,[1,2]);assert.match(r.events[0].extractionIssue!,/plusieurs situations/);assert.equal(prepareCsp(data,r.events)[0].state,'blocked');
+});
+
+
+test('CR candidate rows retain post reference and observed GF/NR while waiting for a RD',()=>{
+ const p=page("BORDEREAU DES CANDIDATS A L'EMPLOI",[
+  item('Emploi :',90,405,40),item('TECHNICIEN CONFIRME H/F',140,405,150),item('N° publication :',320,405,70),item('26-00001.01',395,405,60),
+  item('DUM :',560,385,30),item('AMT EST',600,385,90),item('GF de publication :',50,365,90),item('09-10-11',150,365,70),item('Position M3E :',320,365,70),item('F',395,365,10),
+  item('NOM PRENOM',75,280,100),item('EMPLOI',280,280,80),item('LOCALISATION',450,280,100),item('ANCIENNETE POSTE',570,280,30),item('ANCIENNETE GF',620,280,30),item('M3E',670,280,20),item('GF',710,280,15),item('NR',745,280,15),item('APTITUDE',790,280,30),
+  item('EXEMPLE ALICE',75,240,100),item('TECHNICIEN',280,240,80),item('AMT CENTRE',450,240,100),item('2',570,240,10),item('4',620,240,10),item('G',670,240,10),item('9',710,240,10),item('140',745,240,15)
+ ]);
+ const r=extractCspPages([p],'cr');assert.equal(r.events.length,1);const e=r.events[0];assert.equal(e.candidacy,true);assert.equal(e.selected,true);assert.equal(e.effective,'');assert.equal(e.reference,'26-00001.01');assert.equal(e.job,'TECHNICIEN CONFIRME');assert.equal(e.agency,'AMT EST');assert.equal(e.m3e,'0911');assert.equal(e.gfBefore,9);assert.equal(e.nrBefore,140);assert.equal(e.nrAfter,undefined);assert.equal(validateCspEvent(e),true);assert.equal(prepareCsp(data,[e])[0].state,'blocked');
 });
