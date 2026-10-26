@@ -172,5 +172,17 @@ test('CSP API validates roles, previews without writes, saves one PDF, rejects i
  response=await route.PATCH(request({id:crId,action:'disable'},'PATCH'));assert.equal(response.status,200);
  const reverseRestored=await (await route.GET(new Request('https://fixture.test/api/csp?id='+rdId,{headers}))).json();assert.equal(reverseRestored.meta.pending,1);assert.equal(reverseRestored.events[0].approved,undefined);
 
+ // Close an unknown candidate after the other decision is approved, then reopen
+ // it without revising or withdrawing the already applied decision.
+ const unknown={id:'unknown-candidate',name:'EXEMPLE INCONNU',kind:'nomination',candidacy:true,effective:'',page:1,selected:true,reference:'SYNTHETIC-POST'};
+ const approvedDecision={...ready,pages:[1],approved:true,recordedBefore:{gf:9,nr:200},recordedAfter:{gf:9,nr:205}};
+ m.rows=[{id:crId,name:'CR fictif.pdf',date:'2026-03-24',status:'validated',count:2,detail:JSON.stringify({kind:'csp',documentType:'cr',perEventValidation:true,events:[approvedDecision,unknown]})}];
+ response=await route.PATCH(request({id:crId,action:'save',events:[approvedDecision,{...unknown,nonRetained:true}]},'PATCH'));
+ assert.equal(response.status,200);report=await response.json();assert.equal(report.pending,0);assert.equal(report.approved,1);
+ let closure=JSON.parse(m.rows[0].detail);assert.equal(closure.events[1].approved,undefined);assert.equal(closure.events[1].nonRetained,true);assert.deepEqual(closure.events[0],approvedDecision);
+ const closedPreview=await (await route.POST(request({id:crId,date:'2026-03-24',events:closure.events}))).json();assert.equal(closedPreview.events[1].state,'not-retained');assert.equal(closedPreview.blocked,0);
+ response=await route.PATCH(request({id:crId,action:'save',events:[approvedDecision,{...unknown,nonRetained:false}]},'PATCH'));
+ assert.equal(response.status,200);assert.equal((await response.json()).pending,1);assert.deepEqual(JSON.parse(m.rows[0].detail).events[0],approvedDecision);
+
 });
 

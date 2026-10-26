@@ -32,6 +32,7 @@ export function prepareCspDocuments(data:AgentData,events:CspEvent[],prior:CspIm
  const forAgent=(id:string)=>{let scoped=scopedData.get(id);if(!scoped){scoped={...data,records:records.get(id)||[],cspIdentities:data.cspIdentities?.filter(i=>i.nni===id)};scopedData.set(id,scoped);}return scoped;};
  return preview.map(p=>{
   if(!p.candidacy||!p.selected)return p;
+  if(p.nonRetained)return p;
   const blocked=(problem:string):CspPreview=>({...p,state:'blocked',problem});
   if(p.extractionIssue)return blocked(p.extractionIssue);
   if(!p.reference)return blocked('Numéro de publication du poste absent : vérifier le CR.');

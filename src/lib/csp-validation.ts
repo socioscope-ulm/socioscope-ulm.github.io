@@ -1,7 +1,7 @@
 import type {CspEvent} from './csp.ts';
 export function activeCspEvents(detail:{events?:CspEvent[];perEventValidation?:boolean}):CspEvent[]{return (detail.events||[]).filter(e=>e.selected&&!e.candidacy&&!e.acknowledgedByRD&&!e.acknowledgedByDocument&&(!detail.perEventValidation||e.approved===true));}
 export function cspProgress(status:string,detail:{events?:CspEvent[];perEventValidation?:boolean}){
- const selected=(detail.events||[]).filter(e=>e.selected);const approved=selected.filter(e=>status==='validated'&&(!detail.perEventValidation||e.approved===true)||status==='review'&&!!e.acknowledgedByDocument).length;
+ const selected=(detail.events||[]).filter(e=>e.selected&&!e.nonRetained);const approved=selected.filter(e=>status==='validated'&&(!detail.perEventValidation||e.approved===true)||status==='review'&&!!e.acknowledgedByDocument).length;
  return {approved,pending:status==='validated'&&detail.perEventValidation?selected.length-approved:status==='review'?selected.length-approved:0,partial:status==='validated'&&!!detail.perEventValidation&&selected.length>approved};
 }
 const business=(e:CspEvent)=>JSON.stringify(Object.entries(e).filter(([k,v])=>v!==undefined&&!['approved','approvedAt','recordedBefore','recordedAfter','acknowledgedByRD','acknowledgedByDocument'].includes(k)).sort(([a],[b])=>a.localeCompare(b)));

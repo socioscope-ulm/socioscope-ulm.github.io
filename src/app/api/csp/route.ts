@@ -54,7 +54,7 @@ export async function PATCH(request:Request){try{
  if(b.action==='disable'){
   const changed=await db.prepare("UPDATE agent_imports SET status='disabled:validated' WHERE id=? AND status='validated' AND detail=?").bind(b.id,JSON.stringify(row.rawDetail||row.detail)).run();if(changed.meta.changes!==1)fail('Le relevé a changé. Recharger avant de réessayer.',409);return Response.json({ok:true});
  }
- const progress=cspProgress(row.status,row.detail);const partial=row.status==='validated'&&row.detail.perEventValidation===true&&progress.pending>0;
+ const progress=cspProgress(row.status,row.detail);const partial=row.status==='validated'&&row.detail.perEventValidation===true&&(progress.pending>0||row.detail.events.some((e:CspEvent)=>e.candidacy&&!e.approved));
  if(['validate','validate-state','validate-event'].includes(b.action)&&row.status!=='review'&&!partial)fail('Ce relevé est déjà validé ou désactivé. Recharger.',409);
  if(b.action==='enable'&&row.status!=='disabled:validated')fail('Ce relevé n’est pas désactivé.',409);
  if(b.action==='revise'){
@@ -74,14 +74,14 @@ export async function PATCH(request:Request){try{
   if(b.action==='validate-event'){
    if(typeof b.eventId!=='string')fail('Choisir la décision à valider.');
    const event=preview.find(e=>e.id===b.eventId);
-   if(!event||!event.selected||event.approved)fail('Cette décision est absente, écartée ou déjà validée. Actualiser le relevé.',409);
+   if(!event||!event.selected||event.nonRetained||event.approved)fail('Cette décision est absente, écartée ou déjà validée. Actualiser le relevé.',409);
    if(!['ready','scheduled','covered','duplicate'].includes(event.state))fail('Cette décision reste à vérifier : '+event.problem);
    chosen=new Set([event.id]);
   }else if(b.action==='validate-state'){
    if(!['ready','scheduled','covered','duplicate'].includes(b.state))fail('Les décisions « À vérifier » doivent être corrigées avant validation.');
    chosen=new Set(preview.filter(e=>e.selected&&!e.approved&&e.state===b.state).map(e=>e.id));
    if(!chosen.size)fail('Aucune décision restante dans cet état. Actualiser la vérification.',409);
-  }else chosen=new Set(preview.filter(e=>e.selected&&(b.action==='enable'?(!row.detail.perEventValidation||e.approved):!e.approved)).map(e=>e.id));
+  }else chosen=new Set(preview.filter(e=>e.selected&&!e.nonRetained&&(b.action==='enable'?(!row.detail.perEventValidation||e.approved):!e.approved)).map(e=>e.id));
   // Recompute with ONLY approved decisions and this batch. A draft in another
   // state must never supply a prerequisite to a decision being published.
   const isolated=events.map((e:CspEvent)=>({...e,selected:e.selected&&(chosen.has(e.id)||(b.action==='enable'?e.approved||!row.detail.perEventValidation:e.approved===true))}));

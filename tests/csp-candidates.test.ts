@@ -70,3 +70,20 @@ test('focusing a candidate history does not resolve an ambiguous RD identity by 
  const unresolved={...rd,events:[{...nomination,approved:undefined,agentId:undefined}]};
  assert.equal(preview([unresolved],manual,ambiguous).state,'blocked');
 });
+
+test('non-retained candidates close without NNI, without creating agents or changing an existing career; reopening restores checks',()=>{
+ for(const c of [candidate,{...candidate,name:'EXEMPLE INCONNU',agentId:undefined}]){
+  const closed={...c,nonRetained:true};
+  assert.equal(validateCspEvent(closed),true);
+  assert.equal(preview([],closed).state,'not-retained');
+  assert.equal(cspProgress('review',{events:[closed]}).pending,0);
+  assert.equal(cspProgress('validated',{events:[closed],perEventValidation:true}).partial,false);
+  assert.deepEqual(activeCspEvents({events:[closed],perEventValidation:true}),[]);
+  const projected=projectCsp(data,[{...cr,status:'validated',events:[closed]}],'2026-10-26');
+  assert.equal(projected.data.records.filter(r=>r.source===CSP_SOURCE).length,1);
+  assert.equal(projected.data.records.find(r=>r.source===CSP_SOURCE)?.agency,'AMT CENTRE');
+  assert.equal(preview([],{...closed,nonRetained:false}).state,'blocked');
+ }
+ assert.equal(validateCspEvent({...nomination,nonRetained:true}),false);
+ assert.equal(validateCspEvent({...candidate,nonRetained:'true'}),false);
+});
