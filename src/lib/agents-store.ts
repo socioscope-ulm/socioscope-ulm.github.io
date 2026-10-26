@@ -120,7 +120,7 @@ await resources().db.prepare('INSERT INTO agent_decisions (id,agent,kind,target,
 
 export async function cspIdentityData(data:AgentData,events:CspEvent[]){
  const known=new Map<string,Set<string>>();for(const r of data.records)if(r.nni){const key=cspNameKey(r.name),ids=known.get(key)||new Set<string>();ids.add(r.nni);known.set(key,ids);}
- const names=events.filter(e=>!e.approved&&e.selected&&(e.kind==='admission'||e.identityMethod==='rup'||!e.agentId&&known.get(cspNameKey(e.name))?.size!==1)).map(e=>e.name);if(!names.length)return data;
+ const names=events.filter(e=>!e.approved&&e.selected&&(e.candidacy||e.kind==='admission'||e.identityMethod==='rup'||!e.agentId&&known.get(cspNameKey(e.name))?.size!==1)).map(e=>e.name);if(!names.length)return data;
  await loadSeeds(['rup-seed']);
  const {db,bucket}=resources();const imports=(await db.prepare('SELECT id,name,date,status,detail FROM agent_imports ORDER BY date DESC,created DESC').all<any>()).results;
  const excluded=(await db.prepare('SELECT source_id FROM rup_source_exclusions').all<{source_id:string}>()).results.map(r=>r.source_id);

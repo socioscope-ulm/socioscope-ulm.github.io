@@ -36,3 +36,17 @@ test('mutation d’office is ready with GF/NR preserved and destination applied,
  for(const patch of [{gfDelta:1},{nrSteps:1},{gfAfter:10},{nrAfter:205}]){assert.equal(prepareCsp(base,[{...e,...patch}])[0].state,'blocked');}
  assert.equal(prepareCsp(base,[{...e,name:'INCONNU TEST'}])[0].state,'blocked');
 });
+
+
+test('CR candidates consult the active RUP even when the NNI is already present in an annual photograph',async()=>{
+ const {build}=await import('esbuild');(globalThis as any).__candidateRupLoads=0;
+ const b=await build({entryPoints:[new URL('../src/lib/agents-store.ts',import.meta.url).pathname],bundle:true,write:false,platform:'node',format:'esm',plugins:[{name:'candidate-rup-fixture',setup(build){
+  build.onResolve({filter:/\/(store|seeds)(\.ts)?$/},a=>({path:a.path.split('/').at(-1)!.replace('.ts',''),namespace:'candidate-rup-fixture'}));
+  build.onLoad({filter:/.*/,namespace:'candidate-rup-fixture'},a=>({contents:a.path==='seeds'?`
+   export const packedText='{}';export const rupSeedText=JSON.stringify({sources:[{id:'rup-latest',name:'RUP actif',date:'2026-09-30',status:'validated'}],records:[{source:'rup-latest',nom:'TEST',prenom:'ALICE',nni:'A12345'}]});export async function loadSeeds(){globalThis.__candidateRupLoads++;}
+  `:`export function resources(){return {db:{prepare(){return {async all(){return {results:[]}}}}},bucket:{async get(){throw Error('No imported RUP should be read')}}};}`}));
+ }}]});
+ const {cspIdentityData}=await import('data:text/javascript;base64,'+Buffer.from(b.outputFiles[0].text).toString('base64'));
+ const candidate:CspEvent={id:'candidate',name:'TEST ALICE',kind:'nomination',candidacy:true,effective:'',reference:'26-00001.01',page:1,selected:true};
+ const enriched=await cspIdentityData(base,[candidate]);assert.equal((globalThis as any).__candidateRupLoads,1);assert.equal(enriched.cspIdentities[0].source,'rup-latest');assert.equal(prepareCsp(enriched,[candidate])[0].identityMethod,'rup');
+});
