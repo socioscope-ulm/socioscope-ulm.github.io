@@ -4,6 +4,7 @@ export const suspensionMessage='Les consultations sont temporairement suspendues
 
 export function createUsageService(database:{prepare:(sql:string)=>any},now=()=>new Date()){
  const pending=new Map<string,Counter>();
+ let recordingAvailable=true;
  const add=(entry:Counter)=>{
   const key=entry.day+'|'+entry.bucket,prior=pending.get(key);
   if(prior){prior.bytes+=entry.bytes;prior.requests+=entry.requests;prior.unmeasured+=entry.unmeasured;}
@@ -18,12 +19,15 @@ export function createUsageService(database:{prepare:(sql:string)=>any},now=()=>
   const entries=[...pending.values()].map(v=>({...v}));pending.clear();
   try{
    await database.prepare(`INSERT INTO socioscope.usage_daily(day,bucket,bytes,requests,unmeasured)
-    SELECT day,bucket,bytes,requests,unmeasured FROM jsonb_to_recordset(?::jsonb)
+    SELECT day,bucket,bytes,requests,unmeasured FROM jsonb_to_recordset(?::text::jsonb)
      AS values_to_add(day date,bucket text,bytes bigint,requests bigint,unmeasured bigint)
     ON CONFLICT(day,bucket) DO UPDATE SET bytes=usage_daily.bytes+excluded.bytes,
      requests=usage_daily.requests+excluded.requests,unmeasured=usage_daily.unmeasured+excluded.unmeasured,updated_at=now()`)
+    // The driver serializes JSONB parameters itself. Bind the already encoded
+    // payload as text to avoid turning the array into a JSON string.
     .bind(JSON.stringify(entries)).run();
-  }catch{for(const entry of entries)add(entry);}
+   recordingAvailable=true;
+  }catch{recordingAvailable=false;for(const entry of entries)add(entry);}
  };
  const control=async()=>{
   const value=await database.prepare(`SELECT suspended,tracking_started AS "trackingStarted",updated_at AS "updatedAt",threshold_bytes::text AS "thresholdBytes"
@@ -42,7 +46,7 @@ export function createUsageService(database:{prepare:(sql:string)=>any},now=()=>
    const settings=await control();
    const rows=await database.prepare(`SELECT day::text,bucket,bytes::text,requests::text,unmeasured::text,updated_at AS "updatedAt"
     FROM socioscope.usage_daily ORDER BY day,bucket`).all();
-   return {settings,rows:rows.results.map((r:any)=>({...r,bytes:Number(r.bytes),requests:Number(r.requests),unmeasured:Number(r.unmeasured)})),reportedAt:now().toISOString()};
+   return {settings,recordingAvailable,rows:rows.results.map((r:any)=>({...r,bytes:Number(r.bytes),requests:Number(r.requests),unmeasured:Number(r.unmeasured)})),reportedAt:now().toISOString()};
   }
  };
 }

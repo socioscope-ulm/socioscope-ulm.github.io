@@ -3,6 +3,34 @@ import assert from 'node:assert/strict';
 import {build} from 'esbuild';
 import {createUsageService,recordStorageTransfer} from '../server/usage.ts';
 
+test('already encoded usage batches bind as text before JSONB conversion',async()=>{
+ let stored:any[]=[];
+ // Model postgres.js parameter serialization after PostgreSQL describes the
+ // placeholder: JSONB runs JSON.stringify; text preserves an encoded payload.
+ const db={prepare(query:string){return {bind(value:string){return {async run(){
+  const wire=query.includes('?::text::jsonb')?value:JSON.stringify(value);
+  const decoded=JSON.parse(wire);
+  if(!Array.isArray(decoded))throw Error('cannot call jsonb_to_recordset on a non-array');
+  stored.push(...decoded);
+ }};}};}};
+ const service=createUsageService(db);
+ service.record('api',1234);await service.flush();
+ assert.equal(stored.length,1);assert.equal(stored[0].bytes,1234);
+});
+
+test('reports expose failed recording and recover after a successful retry',async()=>{
+ let fail=true;
+ const db={prepare(){return {
+  bind(){return {async run(){if(fail)throw Error('Unavailable');}};},
+  async first(){return {thresholdBytes:'4500000000'};},async all(){return {results:[]};}
+ };}};
+ const service=createUsageService(db);
+ service.record('api',100);
+ assert.equal((await service.report()).recordingAvailable,false);
+ fail=false;
+ assert.equal((await service.report()).recordingAvailable,true);
+});
+
 test('usage batches bytes atomically, distinguishes unknown transfers and retries failed writes',async()=>{
  const batches:any[]=[];let fail=true;
  const db={prepare(){return {bind(value:string){return {async run(){if(fail)throw Error('Transient');batches.push(JSON.parse(value));}};}};}};
