@@ -135,6 +135,7 @@ test('CSP API validates roles, previews without writes, saves one PDF, rejects i
 
  // CR/RD salary references are regenerated server-side during individual and
  // state validation; drafts, annotations, PDFs and existing approvals survive.
+ // Fictional identity and salary figures; no production personnel data.
  const salaryRD={id:'salary-rd',name:'EXEMPLE BOB',agentId:'Z00001',identityMethod:'rup',kind:'mesure',effective:'2026-01-01',nrSteps:1,page:50,selected:true,note:'Motif conservé'};
  const salaryCR={...salaryRD,id:'salary-cr',gfBefore:8,nrBefore:120,nrAfter:125,page:40};
  (m as any).identities=[{name:salaryRD.name,nni:'Z00001',source:'rup-active',date:'2026-09-30',agency:'AMT OUEST'}];
