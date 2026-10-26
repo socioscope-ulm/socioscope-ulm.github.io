@@ -1,8 +1,9 @@
+import {resolveNominationOutcomes} from './csp-nomination-outcomes.ts';
 import {acknowledgeCspDecisions} from './csp-acknowledgement.ts';
 import {salaryReferenceChecks} from './csp-salary-reference.ts';
 import {normalName} from './agents.ts';
 import {cspNameKey} from './csp-rup.ts';
-import {prepareCsp,salaryReferenceSupported} from './csp.ts';
+import {prepareCsp,salaryReferenceSupported,cspNonRetained} from './csp.ts';
 import type {CspEvent,CspImport,CspPreview} from './csp.ts';
 import type {AgentData,AgentRecord} from './agents.ts';
 
@@ -11,6 +12,7 @@ import type {AgentData,AgentRecord} from './agents.ts';
 export function prepareCspDocuments(data:AgentData,events:CspEvent[],prior:CspImport[],date:string,documents:CspImport[]=[],current?:{id:string;name:string;documentType:'rd'|'cr'}):CspPreview[]{
  const evidence=current?[...documents.filter(d=>d.id!==current.id),{...current,date,status:'review',events}]:documents;
  if(current){const acknowledged=acknowledgeCspDecisions(evidence.map(d=>({...d,detail:{documentType:d.documentType,perEventValidation:true,events:d.events}})));events=acknowledged.find(d=>d.id===current.id)!.detail.events;}
+ if(!current){const id='csp-outcome-preview';events=resolveNominationOutcomes([...documents.map(d=>({...d,detail:{documentType:d.documentType,events:d.events}})),{id,name:'Aperçu CR',date,status:'review',detail:{documentType:'cr',events}}]).find(d=>d.id===id)!.detail.events;}
  const context=prior.map(d=>({...d,events:d.events.filter(e=>!e.salaryReference||salaryReferenceSupported(e,evidence))}));
  const initial=prepareCsp(data,events,context,date);
  const checks=salaryReferenceChecks(data,events,date,evidence);
@@ -32,7 +34,7 @@ export function prepareCspDocuments(data:AgentData,events:CspEvent[],prior:CspIm
  const forAgent=(id:string)=>{let scoped=scopedData.get(id);if(!scoped){scoped={...data,records:records.get(id)||[],cspIdentities:data.cspIdentities?.filter(i=>i.nni===id)};scopedData.set(id,scoped);}return scoped;};
  return preview.map(p=>{
   if(!p.candidacy||!p.selected)return p;
-  if(p.nonRetained)return p;
+  if(cspNonRetained(p))return p;
   const blocked=(problem:string):CspPreview=>({...p,state:'blocked',problem});
   if(p.extractionIssue)return blocked(p.extractionIssue);
   if(!p.reference)return blocked('Numéro de publication du poste absent : vérifier le CR.');

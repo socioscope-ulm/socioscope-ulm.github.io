@@ -1,3 +1,4 @@
+import {resolveNominationOutcomes} from './csp-nomination-outcomes.ts';
 import {cspNameKey} from './csp-rup.ts';
 import {normalName} from './agents.ts';
 import {cspKey,cspNRSteps,validDate} from './csp.ts';
@@ -47,7 +48,7 @@ export function acknowledgeCspDecisions<T extends Document>(rows:T[]):T[]{
   const k=key(row.date,event),matches=confirmed.get(k)||[];matches.push({row,event});confirmed.set(k,matches);
   const id=identity(row.date,event),values=dates.get(id)||new Set<string>();values.add(event.effective);dates.set(id,values);
  }
- return rows.map(row=>({...row,detail:{...row.detail,events:(row.detail.events||[]).map(original=>{
+ return resolveNominationOutcomes(rows.map(row=>({...row,detail:{...row.detail,events:(row.detail.events||[]).map(original=>{
   const e=clear(original);
   if(!['review','validated'].includes(row.status)||row.status==='validated'&&!row.detail.perEventValidation||e.approved||!eligible(e))return e;
   const candidates=(confirmed.get(key(row.date,e))||[]).filter(m=>m.row.id!==row.id&&type(m.row)!==type(row));
@@ -56,5 +57,5 @@ export function acknowledgeCspDecisions<T extends Document>(rows:T[]):T[]{
   const match=candidates[0];
   const proof:CspAcknowledgement={id:match.row.id,eventId:match.event.id,name:match.row.name,page:match.event.page,documentType:type(match.row)};
   return {...e,approved:true,approvedAt:match.event.approvedAt,recordedBefore:match.event.recordedBefore,recordedAfter:match.event.recordedAfter,acknowledgedByDocument:proof};
- })}}));
+ })}})));
 }

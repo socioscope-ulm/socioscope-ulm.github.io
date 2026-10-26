@@ -3,7 +3,7 @@ import {prepareCspDocuments,addCrCandidates} from '../../../lib/csp-candidates';
 import {activeCspEvents,cspProgress,preserveApproved} from '../../../lib/csp-validation';
 import {agentAuth,agentData,cspIdentityData,agentError} from '../../../lib/agents-store';
 import {resources} from '../../../lib/store';
-import {cspKinds,cspKey,cspResolvedEvent,validateCspEvent,deduplicateCsp,validDate,latestAnnual,parisToday} from '../../../lib/csp';
+import {cspKinds,cspKey,cspNonRetained,cspResolvedEvent,validateCspEvent,deduplicateCsp,validDate,latestAnnual,parisToday} from '../../../lib/csp';
 import type {CspEvent} from '../../../lib/csp';
 function fail(message:string,status=400):never{throw Object.assign(Error(message),{status});}
 const parse=(row:any)=>{let detail:any={};try{detail=JSON.parse(row.detail||'{}');}catch{}return {...row,detail,rawDetail:detail};};
@@ -74,14 +74,14 @@ export async function PATCH(request:Request){try{
   if(b.action==='validate-event'){
    if(typeof b.eventId!=='string')fail('Choisir la décision à valider.');
    const event=preview.find(e=>e.id===b.eventId);
-   if(!event||!event.selected||event.nonRetained||event.approved)fail('Cette décision est absente, écartée ou déjà validée. Actualiser le relevé.',409);
+   if(!event||!event.selected||cspNonRetained(event)||event.approved)fail('Cette décision est absente, écartée ou déjà validée. Actualiser le relevé.',409);
    if(!['ready','scheduled','covered','duplicate'].includes(event.state))fail('Cette décision reste à vérifier : '+event.problem);
    chosen=new Set([event.id]);
   }else if(b.action==='validate-state'){
    if(!['ready','scheduled','covered','duplicate'].includes(b.state))fail('Les décisions « À vérifier » doivent être corrigées avant validation.');
    chosen=new Set(preview.filter(e=>e.selected&&!e.approved&&e.state===b.state).map(e=>e.id));
    if(!chosen.size)fail('Aucune décision restante dans cet état. Actualiser la vérification.',409);
-  }else chosen=new Set(preview.filter(e=>e.selected&&!e.nonRetained&&(b.action==='enable'?(!row.detail.perEventValidation||e.approved):!e.approved)).map(e=>e.id));
+  }else chosen=new Set(preview.filter(e=>e.selected&&!cspNonRetained(e)&&(b.action==='enable'?(!row.detail.perEventValidation||e.approved):!e.approved)).map(e=>e.id));
   // Recompute with ONLY approved decisions and this batch. A draft in another
   // state must never supply a prerequisite to a decision being published.
   const isolated=events.map((e:CspEvent)=>({...e,selected:e.selected&&(chosen.has(e.id)||(b.action==='enable'?e.approved||!row.detail.perEventValidation:e.approved===true))}));

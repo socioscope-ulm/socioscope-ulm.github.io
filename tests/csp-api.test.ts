@@ -195,5 +195,22 @@ test('CSP API validates roles, previews without writes, saves one PDF, rejects i
   const validated=JSON.parse(m.rows[0].detail).events[0];assert.equal(validated.recordedAfter.nr,210);assert.equal(validated.recordedAfter.gf,9+delta);
  }
 
+ // Reading existing CRs automatically classifies non-winners without a write.
+ const selectedCandidate={id:'chosen-cr',name:'EXEMPLE LAURE',agentId:'Z00001',kind:'nomination',candidacy:true,effective:'',page:1,pages:[1],selected:true,reference:'POSTE-AUTOMATIQUE'};
+ const notChosen={...selectedCandidate,id:'other-cr',name:'TEST ALICE',agentId:'A12345'};
+ const unknownCandidate={...selectedCandidate,id:'external-cr',name:'EXEMPLE BOB',agentId:undefined};
+ const appointment={...selectedCandidate,id:'chosen-rd',candidacy:false,effective:'2026-04-01',newAgent:true,gfAfter:8,nrAfter:120,agency:'AMTE',job:'EMPLOI FICTIF',approved:true};
+ m.rows=[{id:rdId,name:'RD fictif.pdf',date:'2026-03-24',status:'validated',count:1,detail:JSON.stringify({kind:'csp',documentType:'rd',perEventValidation:true,events:[appointment]})},{id:crId,name:'CR fictif.pdf',date:'2026-03-24',status:'review',count:3,detail:JSON.stringify({kind:'csp',documentType:'cr',perEventValidation:true,events:[selectedCandidate,notChosen,unknownCandidate]})}];
+ const originalRows=structuredClone(m.rows);
+ let auto=await (await route.GET(new Request('https://fixture.test/api/csp?id='+crId,{headers}))).json();
+ assert.equal(auto.meta.pending,1);assert.equal(auto.meta.approved,0);assert.equal(auto.events[0].nonRetainedByRD,undefined);
+ for(const item of auto.events.slice(1)){assert.equal(item.nonRetainedByRD.id,rdId);assert.equal(item.approved,undefined);assert.equal(item.nonRetained,undefined);}
+ assert.deepEqual(m.rows,originalRows);
+ const autoPreview=await (await route.POST(request({id:crId,date:'2026-03-24',events:auto.events}))).json();assert.equal(autoPreview.events[1].state,'not-retained');assert.equal(autoPreview.events[2].state,'not-retained');
+ response=await route.PATCH(request({id:crId,action:'validate-event',eventId:notChosen.id,events:auto.events,checked:true},'PATCH'));assert.equal(response.status,409);
+ response=await route.PATCH(request({id:crId,action:'save',events:auto.events},'PATCH'));assert.equal(response.status,200);assert.equal((await response.json()).pending,1);
+ response=await route.PATCH(request({id:rdId,action:'disable'},'PATCH'));assert.equal(response.status,200);
+ auto=await (await route.GET(new Request('https://fixture.test/api/csp?id='+crId,{headers}))).json();assert.equal(auto.meta.pending,3);assert.ok(auto.events.every((v:any)=>!v.nonRetainedByRD));
+
 });
 
