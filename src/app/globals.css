@@ -66,3 +66,11 @@
 .csp-record-actions .btn svg{flex-shrink:0}
 .csp-import .panel-heading>.file-input{flex-shrink:0}
 @media(max-width:760px){.csp-import .panel-heading{flex-wrap:wrap}.csp-record-actions{width:240px}}
+
+.csp-method{padding:20px 24px;border-left:4px solid #738d63}
+.csp-method h2{font-size:17px;margin:0 0 10px}
+.csp-method p{font-size:12px;line-height:1.65;margin:10px 0}
+.csp-method th,.csp-method td{font-size:12px;white-space:normal;line-height:1.55}
+.csp-method td:first-child{width:31%;min-width:165px}
+.csp-method-note{color:#61715d}
+@media(max-width:760px){.csp-method{padding:17px}.csp-method td:first-child{min-width:130px}}
