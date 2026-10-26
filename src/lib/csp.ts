@@ -93,7 +93,7 @@ export function prepareCsp(data:AgentData,events:CspEvent[],prior:CspImport[]=[]
  for(const {event:e,prior:isPrior} of combined){
   const key=cspKey(e);if(isPrior){if(e.effective>base.date&&!seen.has(key)){seen.add(key);const a=applyEvent(salaryReferenceRow(state.get(e.agentId!),e),e);if(a.row)state.set(e.agentId!,a.row);}continue;}
   const before=salaryReferenceRow(state.get(e.agentId!)||(e.kind==='posthume'?cspHistoricalRecord(data,e.agentId!,e.effective):undefined),e);const out:CspPreview={...e,before:before?summary(before):undefined,state:'ready',problem:''};
-  if(e.candidacy&&cspNonRetained(e)){out.state='not-retained';out.problem=e.nonRetainedByRD?'Traité automatiquement : le RD « '+e.nonRetainedByRD.name+' » désigne un autre candidat pour ce poste. Aucun effet sur la situation RH.':'Candidature clôturée sans nomination : aucun effet sur la situation de l’agent. Conservée dans le bordereau.';}
+  if(e.candidacy&&cspNonRetained(e)){out.state='not-retained';out.problem=e.nonRetainedByRD?'Traité automatiquement : le RD « '+e.nonRetainedByRD.name+' » désigne un ou plusieurs autres candidats pour ce poste. Aucun effet sur la situation RH.':'Candidature clôturée sans nomination : aucun effet sur la situation de l’agent. Conservée dans le bordereau.';}
   else if(!e.selected){out.state='excluded';out.problem='Écarté de cet import.';}
   else if(e.candidacy){out.state='blocked';out.problem='En attente du RD : aucune prise de poste confirmée.';}
   else if(e.extractionIssue){out.state='blocked';out.problem=e.extractionIssue;}

@@ -33,7 +33,7 @@ test('no matching post, winner, meeting or clear selection means no inferred rej
   {...rd,detail:{...rd.detail,events:[{...winner,agentId:'Z99999'}]}},
   {...rd,detail:{...rd.detail,events:[{...winner,extractionIssue:'Lecture incertaine'}]}},
   {...rd,detail:{...rd.detail,events:[{...winner,effective:''}]}},
-  {...rd,detail:{...rd.detail,events:[winner,{...winner,id:'contradiction',name:unknown.name,agentId:undefined}]}}
+  {...rd,detail:{...rd.detail,events:[winner,{...winner,id:'contradiction',gfDelta:2}]}}
  ])assert.equal(resolve(source).detail.events.some(cspNonRetained),false);
  const conflict={...rd,id:'csp-other',detail:{...rd.detail,events:[{...winner,name:internal.name,agentId:internal.agentId}]}};
  assert.equal(resolveNominationOutcomes([cr,rd,conflict])[0].detail.events.some(cspNonRetained),false);
@@ -53,4 +53,35 @@ test('preview places an unknown non-winner in treated without requiring a NNI or
  const preview=prepareCspDocuments(data,cr.detail.events,[],cr.date,documents,{id:cr.id,name:cr.name,documentType:'cr'});
  assert.equal(preview[1].state,'not-retained');assert.equal(preview[1].agentId,undefined);assert.equal(preview[1].after,undefined);assert.equal(preview[1].approved,undefined);
  assert.match(preview[1].problem,/automatiquement/);
+});
+
+test('two nominees for the same post both remain retained and only other candidates are automatically treated',()=>{
+ const second={...winner,id:'second-rd',name:internal.name,agentId:internal.agentId};
+ const double={...rd,detail:{...rd.detail,events:[winner,second]}};
+ const result=resolve(double);
+ assert.equal(cspNonRetained(result.detail.events[0]),false);
+ assert.equal(cspNonRetained(result.detail.events[2]),false);
+ assert.equal(cspNonRetained(result.detail.events[1]),true);
+ assert.equal(cspProgress('review',result.detail).pending,2);
+ assert.deepEqual(activeCspEvents(result.detail),[]);
+ assert.deepEqual(resolve({...double,detail:{...double.detail,events:[second,winner]}}).detail.events.map(cspNonRetained),result.detail.events.map(cspNonRetained));
+ assert.equal(resolve({...double,status:'disabled:validated'},result).detail.events.some(cspNonRetained),false);
+ // Identical nominee lists repeated in another RD are corroborating evidence.
+ const repeated={...double,id:'csp-repeat',detail:{...double.detail,events:[second,winner]}};
+ assert.equal(cspNonRetained(resolveNominationOutcomes([cr,double,repeated])[0].detail.events[1]),true);
+ // A lone, conflicting RD list is still ambiguous rather than a third nominee.
+ assert.equal(resolveNominationOutcomes([cr,double,{...rd,id:'csp-conflict'}])[0].detail.events.some(cspNonRetained),false);
+});
+test('both retained candidates become ready through their own RD line and each movement is applied once',async()=>{
+ const {projectCsp,CSP_SOURCE}=await import('../src/lib/csp.ts');
+ const records=[candidate,internal].map((c,i)=>({id:'row-'+i,source:'annual',row:i+1,name:c.name,agentId:c.agentId!,nni:c.agentId!,gf:8,nr:120,agency:'ORIGINE FICTIVE',job:'EMPLOI FICTIF'}));
+ const data={sources:[{id:'annual',date:'2025-12-31',primary:true}],records,events:[],issues:[],updated:''} as any;
+ const decisions=[winner,{...winner,id:'second-rd',name:internal.name,agentId:internal.agentId,gfDelta:2}].map(e=>({...e,agency:'DESTINATION FICTIVE',job:'EMPLOI FICTIF'}));
+ const documents=[{id:rd.id,name:rd.name,date:rd.date,status:'validated',documentType:'rd' as const,events:decisions},{id:cr.id,name:cr.name,date:cr.date,status:'review',documentType:'cr' as const,events:cr.detail.events}];
+ const preview=prepareCspDocuments(data,cr.detail.events,[documents[0]],cr.date,documents,{id:cr.id,name:cr.name,documentType:'cr'});
+ assert.equal(preview[0].state,'ready');assert.equal(preview[2].state,'ready');assert.equal(preview[1].state,'not-retained');
+ assert.equal(preview[0].after?.gf,9);assert.equal(preview[2].after?.gf,10);assert.equal(preview[0].after?.nr,130);assert.equal(preview[2].after?.nr,130);
+ const projection=projectCsp(data,[documents[0],{...documents[1],status:'validated',events:preview}],'2026-10-26');
+ assert.deepEqual(projection.issues,[]);
+ const applied=projection.data.records.filter(r=>r.source===CSP_SOURCE);assert.equal(applied.length,2);assert.ok(applied.every(r=>r.nr===130));
 });
