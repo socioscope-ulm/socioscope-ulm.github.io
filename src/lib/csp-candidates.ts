@@ -1,9 +1,10 @@
+import {cumulativeNomination} from './csp-cumulative.ts';
 import {resolveNominationOutcomes} from './csp-nomination-outcomes.ts';
 import {acknowledgeCspDecisions} from './csp-acknowledgement.ts';
 import {salaryReferenceChecks} from './csp-salary-reference.ts';
 import {normalName} from './agents.ts';
 import {cspNameKey} from './csp-rup.ts';
-import {prepareCsp,salaryReferenceSupported,cspNonRetained} from './csp.ts';
+import {prepareCsp,salaryReferenceSupported,cspNonRetained,cspNRSteps} from './csp.ts';
 import type {CspEvent,CspImport,CspPreview} from './csp.ts';
 import type {AgentData,AgentRecord} from './agents.ts';
 
@@ -58,13 +59,14 @@ export function prepareCspDocuments(data:AgentData,events:CspEvent[],prior:CspIm
   const signature=({e,decision}:{e:CspEvent;decision:CspPreview})=>JSON.stringify([e.effective,e.gfDelta,e.gfAfter,e.nrAfter,e.nrConfirmed,normalName(e.agency),normalName(e.job),decision.after]);
   if(new Set(checked.map(signature)).size>1)return blocked('Plusieurs RD actifs donnent des nominations différentes pour ce poste et ce candidat.');
   const {d,e,decision}=checked[0];
+  const cumulative=cumulativeNomination(p,preview,d);
   if(!e.agency||!e.job)return blocked('Destination de la nomination incomplète dans le RD : vérifier l’agence et l’emploi.');
   for(const [field,key] of [['gfBefore','gf'],['nrBefore','nr']] as const){
    const expected=e[field]??decision.before?.[key]??e.recordedBefore?.[key];
-   if(p[field]!==undefined&&expected!==undefined&&p[field]!==expected)return blocked(`${key.toUpperCase()} du candidat dans le CR (${p[field]}) différent de la situation avant du RD (${expected}). Vérifier les documents.`);
+   if(p[field]!==undefined&&expected!==undefined&&p[field]!==expected&&!cumulative)return blocked(`${key.toUpperCase()} du candidat dans le CR (${p[field]}) différent de la situation avant du RD (${expected}). Vérifier les documents.`);
   }
   for(const field of ['agency','job'] as const)if(p[field]&&e[field]&&normalName(p[field])!==normalName(e[field]))return blocked('Destination différente entre le CR et le RD : vérifier '+(field==='job'?'l’emploi.':'l’agence.'));
-  return {...p,state:decision.state==='scheduled'?'scheduled':'ready',effective:e.effective,before:decision.before||e.recordedBefore,after:decision.after||e.recordedAfter,matchedRD:{id:d.id,eventId:e.id,name:d.name,page:e.page,approved:e.approved===true},problem:'Candidat retenu confirmé par le RD « '+d.name+' ». La prise de poste est appliquée uniquement par le RD validé, sans double comptage.'};
+  return {...p,state:decision.state==='scheduled'?'scheduled':'ready',effective:e.effective,before:decision.before||e.recordedBefore,after:decision.after||e.recordedAfter,matchedRD:{id:d.id,eventId:e.id,name:d.name,page:e.page,approved:e.approved===true},problem:(cumulative?'Cumul nomination (+2 NR) et avancement (+'+(cspNRSteps(cumulative.advance)||0)+' NR) concordant malgré un ordre différent entre CR et RD. ':'')+'Candidat retenu confirmé par le RD « '+d.name+' ». La prise de poste est appliquée uniquement par le RD validé, sans double comptage.'};
  });
 }
 
