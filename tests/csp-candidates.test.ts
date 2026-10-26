@@ -37,9 +37,10 @@ test('ambiguous or conflicting identities, destinations and situations remain bl
  const ambiguous={...data,cspIdentities:[...data.cspIdentities!,{name:candidate.name,nni:'B12345',source:'rup',date:'2026-09-30'}]};assert.equal(preview([rd],candidate,ambiguous).state,'blocked');
  assert.equal(preview([rd],{...candidate,extractionIssue:'Lecture incertaine'}).state,'blocked');
 });
-test('GF increases still require a known NR after; CR candidate NR is never treated as NR after',()=>{
- const changed={...rd,events:[{...nomination,gfDelta:1,nrAfter:undefined,approved:undefined,recordedBefore:undefined,recordedAfter:undefined}]};assert.match(preview([changed]).problem,/NR après/);
- const complete={...changed,events:[{...changed.events[0],nrAfter:145}]};const ready=preview([complete]);assert.equal(ready.state,'ready');assert.equal(ready.after?.gf,10);assert.equal(ready.after?.nr,145);
+test('internal nominations with one or two GF become ready in RD and matching CR; other GF gains still require NR after',()=>{
+ for(const delta of [1,2]){const internal={...rd,status:'review',events:[{...nomination,gfDelta:delta,approved:undefined,recordedBefore:undefined,recordedAfter:undefined}]};const result=preview([internal]);assert.equal(result.state,'ready');assert.equal(result.after?.gf,9+delta);assert.equal(result.after?.nr,150);assert.equal(result.matchedRD?.eventId,nomination.id);assert.equal(preview([],candidate).state,'blocked');}
+ const changed={...rd,events:[{...nomination,gfDelta:3,nrAfter:undefined,approved:undefined,recordedBefore:undefined,recordedAfter:undefined}]};assert.match(preview([changed]).problem,/NR après/);
+ const complete={...changed,events:[{...changed.events[0],nrAfter:145}]};const ready=preview([complete]);assert.equal(ready.state,'ready');assert.equal(ready.after?.gf,12);assert.equal(ready.after?.nr,145);
  const conflict={...rd,id:'csp-other',events:[{...nomination,effective:'2026-05-01'}]};assert.match(preview([rd,conflict]).problem,/Plusieurs RD/);
 });
 test('same RD earlier approved movements are retained when checking the nomination without replaying it',()=>{

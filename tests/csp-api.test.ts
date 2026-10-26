@@ -22,7 +22,7 @@ test('CSP API validates roles, previews without writes, saves one PDF, rejects i
  const route=await import('data:text/javascript;base64,'+Buffer.from(b.outputFiles[0].text).toString('base64'));
  const headers={'oai-authenticated-user-id':'fixture','oai-authenticated-user-email':'fixture@example.test','x-socioscope-role':'admin','Content-Type':'application/json'};
  const request=(body:any,method='POST',role='admin')=>new Request('https://fixture.test/api/csp',{method,headers:{...headers,'x-socioscope-role':role},body:JSON.stringify(body)});
- const e={id:'one',name:'TEST ALICE',kind:'nomination',effective:'2026-01-01',gfDelta:1,page:1,selected:true};
+ const e={id:'one',name:'TEST ALICE',kind:'nomination',effective:'2026-01-01',gfDelta:3,page:1,selected:true};
  assert.equal((await route.POST(request({date:'2026-03-24',events:[e]},'POST','viewer'))).status,403);
  assert.equal((await route.POST(new Request('https://fixture.test/api/csp',{method:'POST',body:'{}'}))).status,401);
  let preview=await (await route.POST(request({date:'2026-03-24',events:[e]}))).json();assert.equal(preview.blocked,1);assert.equal(preview.events[0].agentId,'A12345');assert.equal(m.rows.length,0);assert.equal(m.puts.length,0);
@@ -183,6 +183,17 @@ test('CSP API validates roles, previews without writes, saves one PDF, rejects i
  const closedPreview=await (await route.POST(request({id:crId,date:'2026-03-24',events:closure.events}))).json();assert.equal(closedPreview.events[1].state,'not-retained');assert.equal(closedPreview.blocked,0);
  response=await route.PATCH(request({id:crId,action:'save',events:[approvedDecision,{...unknown,nonRetained:false}]},'PATCH'));
  assert.equal(response.status,200);assert.equal((await response.json()).pending,1);assert.deepEqual(JSON.parse(m.rows[0].detail).events[0],approvedDecision);
+
+ // An internal RD award of either one or two GF provides exactly two NR
+ // steps; the matching CR candidate uses the same calculation without applying it.
+ for(const delta of [1,2]){
+  const internal={id:'internal-nomination',name:'TEST ALICE',agentId:'A12345',kind:'nomination',effective:'2026-04-01',gfDelta:delta,page:1,pages:[1],selected:true,reference:'SYNTHETIC-INTERNAL',agency:'AMTE',job:'EMPLOI FICTIF'};
+  const candidacy={id:'internal-candidate',name:internal.name,kind:'nomination',candidacy:true,effective:'',page:1,pages:[1],selected:true,reference:internal.reference,gfBefore:9,nrBefore:200};
+  m.rows=[{id:rdId,name:'RD fictif.pdf',date:'2026-03-24',status:'review',count:1,detail:JSON.stringify({kind:'csp',documentType:'rd',events:[internal]})},{id:crId,name:'CR fictif.pdf',date:'2026-03-24',status:'review',count:1,detail:JSON.stringify({kind:'csp',documentType:'cr',events:[candidacy]})}];
+  for(const [id,events] of [[rdId,[internal]],[crId,[candidacy]]] as const){const prepared=await (await route.POST(request({id,date:'2026-03-24',events}))).json();assert.equal(prepared.events[0].state,'ready');assert.equal(prepared.events[0].after.gf,9+delta);assert.equal(prepared.events[0].after.nr,210);}
+  response=await route.PATCH(request({id:rdId,action:'validate-event',eventId:internal.id,events:[internal],checked:true},'PATCH'));assert.equal(response.status,200);
+  const validated=JSON.parse(m.rows[0].detail).events[0];assert.equal(validated.recordedAfter.nr,210);assert.equal(validated.recordedAfter.gf,9+delta);
+ }
 
 });
 

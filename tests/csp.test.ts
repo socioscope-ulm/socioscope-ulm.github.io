@@ -17,8 +17,12 @@ test('reclassement is +1 GF and +10 NR; avancement +1 NR is +5; observations and
  const p=projectCsp(base,[imported(events)],'2026-03-24');assert.equal(current(p.data).gf,10);assert.equal(current(p.data).nr,215);assert.equal(current(p.data).agency,'AMTC');assert.equal(current(p.data,'B12345').nr,180);assert.deepEqual(base,copy);assert.equal(snapshot(p.data,'annual')[0].nr,200);
  const history=agentProgression(p.data,CSP_SOURCE,true)!;assert.equal(history.passages?.nr.length,2);assert.equal(history.passages?.gf.length,1);
 });
-test('nominations require explicit NR after or a deliberate unchanged confirmation; no inferred NR from GF',()=>{
- const e=event({kind:'nomination',gfDelta:1,agency:'AMTE',job:'Responsable'});assert.equal(prepareCsp(base,[e])[0].state,'blocked');
+test('internal nominations infer two NR steps for one or two GF; explicit NR instructions remain unchanged',()=>{
+ const e=event({kind:'nomination',gfDelta:1,agency:'AMTE',job:'Responsable'});
+ for(const delta of [1,2]){const movement={...e,gfDelta:delta};const ready=prepareCsp(base,[movement])[0];assert.equal(ready.state,'ready');assert.equal(ready.after?.gf,9+delta);assert.equal(ready.after?.nr,210);assert.match(ready.problem,/Nomination interne/);const applied=current(projectCsp(base,[imported([movement])],'2026-06-01').data);assert.equal(applied.nr,210);assert.equal(applied.gf,9+delta);}
+ assert.equal(prepareCsp(base,[{...e,gfDelta:3}])[0].state,'blocked');
+ assert.equal(prepareCsp({...base,records:base.records.map(r=>({...r,nr:undefined}))},[e])[0].state,'blocked');
+ assert.equal(prepareCsp(base,[{...e,agentId:'Z00001',name:'EXEMPLE EXTERNE',newAgent:true,gfBefore:8,nrBefore:120}])[0].state,'blocked');
  let p=projectCsp(base,[imported([{...e,nrAfter:200}])],'2026-06-01');assert.equal(current(p.data).nr,200);assert.equal(current(p.data).gf,10);assert.equal(current(p.data).agency,'AMTE');
  p=projectCsp(base,[imported([{...e,nrAfter:225}])],'2026-06-01');assert.equal(current(p.data).nr,225);
  p=projectCsp(base,[imported([{...e,nrConfirmed:true}])],'2026-06-01');assert.equal(current(p.data).nr,200);
@@ -86,3 +90,4 @@ test('admission can be integrated without inventing an entry NR; identity and co
  assert.equal(prepareCsp(base,[{...admission,nrAfter:160}])[0].after?.nr,160);
  assert.equal(prepareCsp(base,[{...admission,newAgent:false}])[0].state,'blocked');assert.equal(prepareCsp(base,[{...admission,agentId:undefined}])[0].state,'blocked');
 });
+
