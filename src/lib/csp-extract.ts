@@ -1,6 +1,7 @@
 import {installPDFByteMethods} from '../../public/pdf-byte-compat.js';
 import {normalName} from './agents.ts';
 import {deduplicateCsp,validDate} from './csp.ts';
+import {extractCrPage} from './csp-cr-extract.ts';
 import type {CspEvent,CspKind} from './csp.ts';
 export type CspTextItem={str:string;x:number;y:number;width:number;height:number};
 export type CspPage={page:number;width:number;height:number;items:CspTextItem[]};
@@ -8,14 +9,16 @@ export type CspPageReport={page:number;section:string;count:number;status:'read'
 const iso=(v:string)=>{const m=v.match(/(\d{2})\/(\d{2})\/(\d{4})/);const d=m?`${m[3]}-${m[2]}-${m[1]}`:'';return validDate(d)?d:'';};
 function lines(items:CspTextItem[]){const groups:{y:number;items:CspTextItem[]}[]=[];for(const it of items){if(!it.str)continue;let row=groups.find(r=>Math.abs(r.y-it.y)<2);if(!row){row={y:it.y,items:[]};groups.push(row);}row.items.push(it);}return groups.sort((a,b)=>b.y-a.y).map(r=>{r.items.sort((a,b)=>a.x-b.x);let text='',end=0;for(const i of r.items){text+=(text?(i.x-end>3?'   ':''):'')+i.str;end=i.x+i.width;}return {...r,text};});}
 const textOf=(items:CspTextItem[])=>lines(items).map(r=>r.text.trim()).join(' ').replace(/\s+/g,' ').trim();
-export function extractCspPages(pages:CspPage[]){
+export function extractCspPages(pages:CspPage[],documentType:'rd'|'cr'='rd'){
  const events:CspEvent[]=[],reports:CspPageReport[]=[];const meetingDates=new Set<string>();
  for(const pg of pages){
   const rows=lines(pg.items),all=rows.map(r=>r.text).join('\n'),n=normalName(all);const header=rows.filter(r=>r.y>pg.height*.8).map(r=>r.text).join(' ');const md=iso(header);if(md)meetingDates.add(md);
   let kind:CspKind|undefined;
   if(n.includes('NOMINATIONS AUX POSTES VACANTS'))kind='nomination';else if(n.includes('ADMISSION AU STAGE'))kind='admission';else if(n.includes('TITULARISATION'))kind='titularisation';else if(n.includes('MUTATION D OFFICE'))kind='mutation';else if(n.includes('RECLASSEMENT'))kind='reclassement';else if(n.includes('AVANCEMENT A TITRE POSTHUME'))kind='posthume';else if(n.includes('MESURES SALARIALES'))kind='mesure';else if(n.includes('AVANCEMENT AU CHOIX')&&!n.includes('LONGUE MALADIE'))kind='avancement';
   const report:CspPageReport={page:pg.page,section:kind||'Autre rubrique',count:0,status:'read',note:''};reports.push(report);
+  if(documentType==='cr'&&n.includes('BORDEREAU DES CANDIDATS')){report.section='Candidatures';report.status='empty';report.note='Candidatures sans décision de nomination : conservées dans le PDF, aucun mouvement appliqué.';continue;}
   if(!kind){report.status=n.includes('LONGUE MALADIE')?'empty':'unsupported';report.note=n.includes('LONGUE MALADIE')?'Information collective : aucun changement individuel importé.':'Mise en page ou rubrique non reconnue : à examiner.';continue;}
+  if(documentType==='cr'&&kind!=='nomination'){events.push(...extractCrPage(pg,kind,report));continue;}
   const head=rows.find(r=>/NOM\s+PR[EÉ]NOM/.test(r.text));
   if(!head){report.status='unsupported';report.note='En-tête du tableau non reconnu.';continue;}
   const headerY=head.y;
@@ -65,7 +68,7 @@ export function extractCspPages(pages:CspPage[]){
  }
  const unique=deduplicateCsp(events);return {date:meetingDates.size===1?[...meetingDates][0]:'',events:unique,reports,rawCount:events.length,duplicates:events.length-unique.length};
 }
-export async function readCspPDF(file:File,progress:(value:string)=>void){
+export async function readCspPDF(file:File,progress:(value:string)=>void,documentType:'rd'|'cr'='rd'){
  if(!/\.pdf$/i.test(file.name)||file.size>20*1024*1024)throw Error('Choisir un PDF avec texte de moins de 20 Mo.');
  installPDFByteMethods();const pdfjs=await import('pdfjs-dist');pdfjs.GlobalWorkerOptions.workerSrc=import.meta.env.BASE_URL+'csp-pdf.worker.mjs';
  const pdf=await pdfjs.getDocument({data:new Uint8Array(await file.arrayBuffer()),isEvalSupported:false}).promise;
@@ -73,9 +76,9 @@ export async function readCspPDF(file:File,progress:(value:string)=>void){
   if(pdf.numPages>250)throw Error('Le relevé dépasse 250 pages.');
   const pages:CspPage[]=[];
   for(let page=1;page<=pdf.numPages;page++){
-   progress(`Lecture locale du RD : page ${page} / ${pdf.numPages}`);const p=await pdf.getPage(page),v=p.getViewport({scale:1});const content=await p.getTextContent();
+   progress(`Lecture locale du ${documentType==='cr'?'CR de CSP':'RD'} : page ${page} / ${pdf.numPages}`);const p=await pdf.getPage(page),v=p.getViewport({scale:1});const content=await p.getTextContent();
    const items=content.items.filter((i:any)=>typeof i.str==='string'&&Math.abs(i.transform[1])<.1&&Math.abs(i.transform[2])<.1).map((i:any)=>({str:i.str,x:i.transform[4],y:i.transform[5],width:i.width,height:i.height}));pages.push({page,width:v.width,height:v.height,items});p.cleanup();
   }
-  const result=extractCspPages(pages);if(!result.events.length)throw Error('Aucune décision reconnue. Vérifier le format du RD ou utiliser un PDF avec texte.');return result;
+  const result=extractCspPages(pages,documentType);if(!result.events.length)throw Error('Aucune décision reconnue. Vérifier le type de document choisi et utiliser un PDF avec texte.');return result;
  }finally{await pdf.destroy();}
 }

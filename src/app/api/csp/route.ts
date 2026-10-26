@@ -5,7 +5,7 @@ import {cspKinds,prepareCsp,cspKey,cspResolvedEvent,validateCspEvent,deduplicate
 import type {CspEvent} from '../../../lib/csp';
 function fail(message:string,status=400):never{throw Object.assign(Error(message),{status});}
 const parse=(row:any)=>{let detail:any={};try{detail=JSON.parse(row.detail||'{}');}catch{}return {...row,detail};};
-const metadata=(row:any)=>({id:row.id,name:row.name,date:row.date,status:row.status,count:row.count,created:row.created,duplicates:row.detail.duplicates||0,reports:row.detail.reports||[],perEventValidation:!!row.detail.perEventValidation,...cspProgress(row.status,row.detail)});
+const metadata=(row:any)=>({id:row.id,name:row.name,date:row.date,status:row.status,count:row.count,documentType:row.detail.documentType==='cr'?'cr':'rd',created:row.created,duplicates:row.detail.duplicates||0,reports:row.detail.reports||[],perEventValidation:!!row.detail.perEventValidation,...cspProgress(row.status,row.detail)});
 async function imports(){return (await resources().db.prepare('SELECT * FROM agent_imports WHERE id LIKE ? ORDER BY date,created,id').bind('csp-%').all<any>()).results.map(parse).filter(r=>r.detail.kind==='csp');}
 function input(body:any){
  if(!body||!validDate(body.date)||!Array.isArray(body.events)||!body.events.length||body.events.length>3000||!body.events.every(validateCspEvent)||new Set(body.events.map((e:any)=>e.id)).size!==body.events.length)fail('Date ou décisions invalides. Corriger les dates et les valeurs avant l’enregistrement.');
@@ -32,7 +32,7 @@ export async function POST(request:Request){try{
  const {data:baseData,cspImports}=await agentData(true,undefined,parisToday(),false);const data=await cspIdentityData(baseData,events);const preview=prepareCsp(data,events,cspImports,body.date);
  const stored=events.map(e=>cspResolvedEvent(e,preview.find(p=>p.id===e.id)!));
  const id='csp-'+crypto.randomUUID();const reports=Array.isArray(body.reports)?body.reports.slice(0,250).map((r:any)=>({page:Number(r.page),section:String(r.section||'').slice(0,80),count:Number(r.count)||0,status:['read','empty','unsupported'].includes(r.status)?r.status:'unsupported',note:String(r.note||'').slice(0,200)})):[];
- const detail={kind:'csp',version:1,events:stored,reports,duplicates:Math.max(0,Number(body.duplicates)||0),checked:false};
+ const detail={kind:'csp',version:1,documentType:body.documentType==='cr'?'cr':'rd',events:stored,reports,duplicates:Math.max(0,Number(body.duplicates)||0),checked:false};
  await bucket.put('agents/'+id+'/original',bytes,{httpMetadata:{contentType:'application/pdf'}});
  await db.prepare('INSERT INTO agent_imports (id,name,hash,date,created,status,count,complete,detail) VALUES (?,?,?,?,?,?,?,?,?)').bind(id,file.name.slice(0,240),hash,body.date,new Date().toISOString(),'review',stored.length,0,JSON.stringify(detail)).run();
  return Response.json({id,count:stored.length});

@@ -98,6 +98,18 @@ test('CSP API validates roles, previews without writes, saves one PDF, rejects i
  // A single future decision must not borrow an unapproved prerequisite.
  m.rows=[{id:individualId,date:'2026-03-24',status:'review',count:2,detail:JSON.stringify({kind:'csp',events:[ready,future]})}];
  response=await route.PATCH(request({id:individualId,action:'validate-event',eventId:future.id,checked:true,events:[ready,future]},'PATCH'));assert.equal(response.status,400);assert.match((await response.json()).error,/dépend/);
+ // CR documents use the same workflow, persist their type and cannot approve
+ // extraction conflicts until the administrator has reviewed and corrected them.
+ const crEvent={...ready,extractionIssue:'Deux versions de la situation sont présentes.'};
+ m.rows=[];const crForm=new FormData();crForm.append('file',new File(['%PDF-cr-fixture'],'cr.pdf',{type:'application/pdf'}));crForm.append('extraction',JSON.stringify({date:'2026-03-24',documentType:'cr',events:[crEvent],reports:[]}));
+ const crResponse=await route.POST(new Request('https://fixture.test/api/csp',{method:'POST',headers:uploadHeaders,body:crForm}));assert.equal(crResponse.status,200);const crBatch=await crResponse.json();
+ assert.equal(JSON.parse(m.rows[0].detail).documentType,'cr');
+ const crMeta=await (await route.GET(new Request('https://fixture.test/api/csp?id='+crBatch.id,{headers}))).json();assert.equal(crMeta.meta.documentType,'cr');
+ response=await route.PATCH(request({id:crBatch.id,action:'validate-event',eventId:ready.id,checked:true,events:[crEvent]},'PATCH'));assert.equal(response.status,400);
+ response=await route.PATCH(request({id:crBatch.id,action:'validate-event',eventId:ready.id,checked:true,events:[{...crEvent,extractionIssue:undefined}]},'PATCH'));assert.equal(response.status,200);assert.equal(JSON.parse(m.rows[0].detail).documentType,'cr');
+ assert.equal((await route.PATCH(request({id:crBatch.id,action:'disable'},'PATCH'))).status,200);
+ assert.equal((await route.PATCH(request({id:crBatch.id,action:'enable',checked:true},'PATCH'))).status,200);
+
  // A duplicate is acknowledged without losing the original approved record.
  const prior={...m.rows[0],id:'csp-prior',status:'validated',detail:JSON.stringify({kind:'csp',events:[{...ready,approved:true}]})};
  m.rows=[prior,{id:individualId,date:'2026-03-24',status:'review',count:1,detail:JSON.stringify({kind:'csp',events:[ready]})}];
