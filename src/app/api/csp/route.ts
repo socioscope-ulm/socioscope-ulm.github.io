@@ -1,3 +1,4 @@
+import {acknowledgeTitularisations} from '../../../lib/csp-titularisation';
 import {prepareCspDocuments,addCrCandidates} from '../../../lib/csp-candidates';
 import {activeCspEvents,cspProgress,preserveApproved} from '../../../lib/csp-validation';
 import {agentAuth,agentData,cspIdentityData,agentError} from '../../../lib/agents-store';
@@ -5,9 +6,9 @@ import {resources} from '../../../lib/store';
 import {cspKinds,cspKey,cspResolvedEvent,validateCspEvent,deduplicateCsp,validDate,latestAnnual,parisToday} from '../../../lib/csp';
 import type {CspEvent} from '../../../lib/csp';
 function fail(message:string,status=400):never{throw Object.assign(Error(message),{status});}
-const parse=(row:any)=>{let detail:any={};try{detail=JSON.parse(row.detail||'{}');}catch{}return {...row,detail};};
+const parse=(row:any)=>{let detail:any={};try{detail=JSON.parse(row.detail||'{}');}catch{}return {...row,detail,rawDetail:detail};};
 const metadata=(row:any)=>({id:row.id,name:row.name,date:row.date,status:row.status,count:row.count,documentType:row.detail.documentType==='cr'?'cr':'rd',created:row.created,duplicates:row.detail.duplicates||0,reports:row.detail.reports||[],perEventValidation:!!row.detail.perEventValidation,candidateVersion:row.detail.candidateVersion||0,...cspProgress(row.status,row.detail)});
-async function imports(){return (await resources().db.prepare('SELECT * FROM agent_imports WHERE id LIKE ? ORDER BY date,created,id').bind('csp-%').all<any>()).results.map(parse).filter(r=>r.detail.kind==='csp');}
+async function imports(){return acknowledgeTitularisations((await resources().db.prepare('SELECT * FROM agent_imports WHERE id LIKE ? ORDER BY date,created,id').bind('csp-%').all<any>()).results.map(parse).filter(r=>r.detail.kind==='csp'));}
 const currentDocument=(row:any)=>({id:row.id,name:row.name,documentType:row.detail.documentType==='cr'?'cr' as const:'rd' as const});
 const documents=(rows:any[])=>rows.map(r=>({id:r.id,name:r.name,date:r.date,status:r.status,created:r.created,documentType:r.detail.documentType==='cr'?'cr' as const:'rd' as const,events:(r.detail.events||[]).map((e:CspEvent)=>r.status==='validated'&&!r.detail.perEventValidation&&e.selected?{...e,approved:true}:e)}));
 function input(body:any){
@@ -26,7 +27,7 @@ export async function GET(request:Request){try{
 }catch(e){return agentError(e);}}
 export async function POST(request:Request){try{
  await agentAuth(request,true);const isForm=request.headers.get('content-type')?.startsWith('multipart/form-data');
- if(!isForm){const body=await request.json();const rows=await imports();const evidence=documents(rows);const saved=body.id?rows.find(r=>r.id===body.id):null;const events=preserveApproved(input(body),saved?.detail.events||[],saved?.status==='validated'&&saved.detail.perEventValidation===true);const {data:baseData,cspImports}=await agentData(true,undefined,parisToday(),false);const data=await cspIdentityData(baseData,events);const preview=prepareCspDocuments(data,events,cspImports.filter(i=>i.id!==body.id),body.date,evidence,saved?currentDocument(saved):{id:'csp-unsaved',name:'Document en cours',documentType:body.documentType==='cr'?'cr':'rd'});return Response.json({events:preview.map(e=>e.approved?{...e,state:'validated',before:e.recordedBefore,after:e.recordedAfter,problem:'Décision déjà validée et intégrée.'}:e),base:latestAnnual(data),blocked:preview.filter(e=>e.selected&&!e.approved&&e.state==='blocked').length});}
+ if(!isForm){const body=await request.json();const rows=await imports();const evidence=documents(rows);const saved=body.id?rows.find(r=>r.id===body.id):null;const events=preserveApproved(input(body),saved?.detail.events||[],saved?.status==='validated'&&saved.detail.perEventValidation===true);const {data:baseData,cspImports}=await agentData(true,undefined,parisToday(),false);const data=await cspIdentityData(baseData,events);const preview=prepareCspDocuments(data,events,cspImports.filter(i=>i.id!==body.id),body.date,evidence,saved?currentDocument(saved):{id:'csp-unsaved',name:'Document en cours',documentType:body.documentType==='cr'?'cr':'rd'});return Response.json({events:preview.map(e=>e.approved?{...e,state:e.acknowledgedByRD?'duplicate':'validated',before:e.recordedBefore,after:e.recordedAfter,...(e.acknowledgedByRD?{matchedRD:{...e.acknowledgedByRD,approved:true}}:{}),problem:e.acknowledgedByRD?'Titularisation déjà validée dans le RD : reconnue automatiquement, sans nouvelle application.':'Décision déjà validée et intégrée.'}:e),base:latestAnnual(data),blocked:preview.filter(e=>e.selected&&!e.approved&&e.state==='blocked').length});}
  const f=await request.formData(),file=f.get('file'),raw=f.get('extraction');
  if(!(file instanceof File)||!file.size||file.size>20*1024*1024||!/\.pdf$/i.test(file.name)||typeof raw!=='string'||raw.length>1500000)fail('Choisir un PDF de moins de 20 Mo.');
  const body=JSON.parse(raw),events=preserveApproved(input(body),[],false);const bytes=await file.arrayBuffer();if(new TextDecoder().decode(bytes.slice(0,5))!=='%PDF-')fail('Le fichier n’est pas un PDF.');
@@ -41,17 +42,17 @@ export async function POST(request:Request){try{
  return Response.json({id,count:stored.length});
 }catch(e){return agentError(e);}}
 export async function PATCH(request:Request){try{
- await agentAuth(request,true);const b=await request.json();if(typeof b.id!=='string'||!b.id.startsWith('csp-'))fail('Relevé invalide.');const {db}=resources();const row=parse(await db.prepare('SELECT * FROM agent_imports WHERE id=?').bind(b.id).first<any>()||{});if(row.detail.kind!=='csp')fail('Relevé introuvable.',404);
+ await agentAuth(request,true);const b=await request.json();if(typeof b.id!=='string'||!b.id.startsWith('csp-'))fail('Relevé invalide.');const {db}=resources();const row=(await imports()).find(r=>r.id===b.id);if(!row||row.detail.kind!=='csp')fail('Relevé introuvable.',404);
  if(b.action==='add-candidates'){
   if(row.detail.documentType!=='cr'||row.status.startsWith('disabled')||!Array.isArray(b.events)||b.events.length>3000||!b.events.every((e:any)=>validateCspEvent(e)&&e.candidacy===true&&e.kind==='nomination'))fail('Candidatures du CR invalides.');
   const detail=addCrCandidates(row.detail,row.status,deduplicateCsp(b.events));
   if(detail.events.length>3000)fail('Le CR dépasse 3 000 situations après récupération des candidatures.');
   const count=detail.events.filter((e:CspEvent)=>e.selected).length;
-  const changed=await db.prepare('UPDATE agent_imports SET detail=?,status=?,count=? WHERE id=? AND status=? AND detail=?').bind(JSON.stringify(detail),row.status,count,b.id,row.status,JSON.stringify(row.detail)).run();
+  const changed=await db.prepare('UPDATE agent_imports SET detail=?,status=?,count=? WHERE id=? AND status=? AND detail=?').bind(JSON.stringify(detail),row.status,count,b.id,row.status,JSON.stringify(row.rawDetail||row.detail)).run();
   if(changed.meta.changes!==1)fail('Le relevé a changé. Recharger.',409);return Response.json({ok:true});
  }
  if(b.action==='disable'){
-  const changed=await db.prepare("UPDATE agent_imports SET status='disabled:validated' WHERE id=? AND status='validated' AND detail=?").bind(b.id,JSON.stringify(row.detail)).run();if(changed.meta.changes!==1)fail('Le relevé a changé. Recharger avant de réessayer.',409);return Response.json({ok:true});
+  const changed=await db.prepare("UPDATE agent_imports SET status='disabled:validated' WHERE id=? AND status='validated' AND detail=?").bind(b.id,JSON.stringify(row.rawDetail||row.detail)).run();if(changed.meta.changes!==1)fail('Le relevé a changé. Recharger avant de réessayer.',409);return Response.json({ok:true});
  }
  const progress=cspProgress(row.status,row.detail);const partial=row.status==='validated'&&row.detail.perEventValidation===true&&progress.pending>0;
  if(['validate','validate-state','validate-event'].includes(b.action)&&row.status!=='review'&&!partial)fail('Ce relevé est déjà validé ou désactivé. Recharger.',409);
@@ -59,7 +60,7 @@ export async function PATCH(request:Request){try{
  if(b.action==='revise'){
   if(!['validated','disabled:validated'].includes(row.status))fail('Le relevé est déjà en cours de vérification.',409);
   const detail={...row.detail,perEventValidation:false,checked:false,events:preserveApproved(row.detail.events,[],false)};
-  const changed=await db.prepare('UPDATE agent_imports SET detail=?,status=?,count=? WHERE id=? AND status=? AND detail=?').bind(JSON.stringify(detail),'review',row.count,b.id,row.status,JSON.stringify(row.detail)).run();
+  const changed=await db.prepare('UPDATE agent_imports SET detail=?,status=?,count=? WHERE id=? AND status=? AND detail=?').bind(JSON.stringify(detail),'review',row.count,b.id,row.status,JSON.stringify(row.rawDetail||row.detail)).run();
   if(changed.meta.changes!==1)fail('Le relevé a changé. Recharger.',409);return Response.json({ok:true});
  }
  if(!['save','validate','validate-state','validate-event','enable'].includes(b.action))fail('Action inconnue.');
@@ -94,7 +95,7 @@ export async function PATCH(request:Request){try{
  const now=new Date().toISOString();
  const stored=events.map((e:CspEvent)=>{if(e.approved)return e;const p=preview.find(p=>p.id===e.id)!;return {...cspResolvedEvent(e,p),...(chosen.has(e.id)?{approved:true,approvedAt:now,recordedBefore:p.before,recordedAfter:p.after}:{})};});
  const publishing=b.action!=='save';const detail={...row.detail,events:stored,perEventValidation:publishing||row.detail.perEventValidation===true,checked:b.checked===true,validatedAt:publishing?now:row.detail.validatedAt,actor:request.headers.get('oai-authenticated-user-email')};
- const status=publishing?'validated':row.status;const changed=await db.prepare('UPDATE agent_imports SET detail=?,status=?,count=? WHERE id=? AND status=? AND detail=?').bind(JSON.stringify(detail),status,stored.filter((e:CspEvent)=>e.selected).length,b.id,row.status,JSON.stringify(row.detail)).run();
+ const status=publishing?'validated':row.status;const changed=await db.prepare('UPDATE agent_imports SET detail=?,status=?,count=? WHERE id=? AND status=? AND detail=?').bind(JSON.stringify(detail),status,stored.filter((e:CspEvent)=>e.selected).length,b.id,row.status,JSON.stringify(row.rawDetail||row.detail)).run();
  if(changed.meta.changes!==1)fail('Le relevé a changé dans une autre fenêtre. Recharger avant de réessayer.',409);
  return Response.json({ok:true,status,validated:chosen.size,...cspProgress(status,detail)});
 }catch(e){return agentError(e);}}

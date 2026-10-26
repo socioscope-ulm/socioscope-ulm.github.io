@@ -146,5 +146,18 @@ test('CSP API validates roles, previews without writes, saves one PDF, rejects i
  assert.equal(JSON.parse(m.rows[1].detail).events[0].approved,undefined);assert.equal(m.puts.length,noWrites);
  response=await route.PATCH(request({id:crId,action:'validate-state',state:'duplicate',checked:true,events:[salaryCR]},'PATCH'));assert.equal(response.status,200,JSON.stringify(await response.clone().json()));assert.equal(JSON.parse(m.rows[0].detail).events[0].recordedAfter.nr,125);assert.equal(JSON.parse(m.rows[1].detail).reports[0].note,'Vérifié');
 
+ // Exact titularisations are acknowledged on read, without database writes;
+ // an authorized later save compares the original stored detail, not the view.
+ const titular={id:'titular',name:'TEST ALICE',agentId:'A12345',kind:'titularisation',effective:'2024-12-16',page:2,pages:[2],selected:true,note:'Note conservée'};
+ const unresolved={...pending,id:'still-pending'};
+ m.rows=[{id:rdId,name:'RD mars.pdf',date:'2026-03-24',status:'validated',count:1,detail:JSON.stringify({kind:'csp',perEventValidation:true,events:[{...titular,approved:true}]})},{id:crId,name:'CR mars.pdf',date:'2026-03-24',status:'validated',count:2,detail:JSON.stringify({kind:'csp',documentType:'cr',perEventValidation:true,events:[titular,unresolved],reports:[{page:2,note:'Page conservée'}]})}];
+ const raw=m.rows[1].detail;const writes=m.queries.filter(q=>q.startsWith('UPDATE')).length;
+ const acknowledged=await (await route.GET(new Request('https://fixture.test/api/csp?id='+crId,{headers}))).json();assert.equal(acknowledged.meta.approved,1);assert.equal(acknowledged.meta.pending,1);assert.equal(acknowledged.events[0].acknowledgedByRD.id,rdId);assert.equal(m.rows[1].detail,raw);assert.equal(m.queries.filter(q=>q.startsWith('UPDATE')).length,writes);
+ const previewAcknowledged=await (await route.POST(request({id:crId,date:'2026-03-24',events:[titular,unresolved]}))).json();assert.ok(previewAcknowledged.events,JSON.stringify(previewAcknowledged));assert.equal(previewAcknowledged.events[0].state,'duplicate');assert.equal(previewAcknowledged.events[0].approved,true);assert.equal(previewAcknowledged.events[0].matchedRD.id,rdId);assert.equal(m.rows[1].detail,raw);
+ response=await route.PATCH(request({id:crId,action:'save',events:[titular,unresolved]},'PATCH'));assert.equal(response.status,200,JSON.stringify(await response.clone().json()));assert.equal(JSON.parse(m.rows[1].detail).events[0].acknowledgedByRD.id,rdId);
+ const listingAcknowledged=await (await route.GET(new Request('https://fixture.test/api/csp',{headers}))).json();assert.equal(listingAcknowledged.records.filter(e=>e.kind==='titularisation').length,1);
+ response=await route.PATCH(request({id:rdId,action:'disable'},'PATCH'));assert.equal(response.status,200);
+ const restored=await (await route.GET(new Request('https://fixture.test/api/csp?id='+crId,{headers}))).json();assert.equal(restored.events[0].approved,undefined);assert.equal(restored.meta.pending,2);assert.equal(restored.events[0].note,'Note conservée');
+
 });
 
