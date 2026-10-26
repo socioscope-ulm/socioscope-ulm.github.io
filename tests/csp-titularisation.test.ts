@@ -14,12 +14,12 @@ test('25 exact titularisations leave pending automatically without mutating stor
  const rows=[{...rd,detail:{...rd.detail,events:events.map(e=>({...e,approved:true}))}},{...cr,detail:{...cr.detail,events}}];const original=structuredClone(rows);
  const matched=acknowledgeTitularisations(rows);const details=matched[1].detail;
  assert.equal(cspProgress('validated',details).approved,25);assert.equal(cspProgress('validated',details).pending,0);assert.equal(activeCspEvents(details).length,0);assert.equal(activeCspEvents(matched[0].detail).length,25);
- assert.ok(details.events.every(e=>e.approved&&e.acknowledgedByRD?.id==='rd'));
+ assert.ok(details.events.every(e=>e.approved&&e.acknowledgedByDocument?.id==='rd'));
  assert.deepEqual(rows,original);assert.deepEqual(acknowledgeTitularisations(matched),matched);assert.deepEqual(details.reports,cr.detail.reports);
 });
 
 test('only selected, approved, identical RD evidence matches, regardless of import order',()=>{
- const result=acknowledgeTitularisations([cr,rd]);assert.equal(result[0].detail.events[0].acknowledgedByRD?.id,'rd');
+ const result=acknowledgeTitularisations([cr,rd]);assert.equal(result[0].detail.events[0].acknowledgedByDocument?.id,'rd');
  const variants=[{...rd,status:'review'},{...rd,status:'disabled:validated'},{...rd,date:'2026-04-24'},...[
   {agentId:'B12345'},{name:'EXEMPLE BOB'},{effective:'2024-12-17'},{approved:false},{selected:false},{extractionIssue:'Incertain'},
  ].map(patch=>({...rd,detail:{...rd.detail,events:[{...rd.detail.events[0],...patch}]}}))];
@@ -43,5 +43,5 @@ test('client-supplied acknowledgements are discarded and server matches survive 
  const matched=acknowledgeTitularisations([cr,rd])[0].detail.events[0];
  assert.deepEqual(preserveApproved([matched],[],false),[event]);
  assert.equal(preserveApproved([event],[matched],true)[0],matched);
- const result=cspResolvedEvent(event,{...matched,state:'duplicate',problem:'Reconnu automatiquement'});assert.equal(result.approved,true);assert.equal(result.acknowledgedByRD?.id,'rd');
+ const result=cspResolvedEvent(event,{...matched,state:'duplicate',problem:'Reconnu automatiquement'});assert.equal(result.approved,true);assert.equal(result.acknowledgedByDocument?.id,'rd');
 });

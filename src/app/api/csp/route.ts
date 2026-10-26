@@ -1,4 +1,4 @@
-import {acknowledgeTitularisations} from '../../../lib/csp-titularisation';
+import {acknowledgeCspDecisions} from '../../../lib/csp-acknowledgement';
 import {prepareCspDocuments,addCrCandidates} from '../../../lib/csp-candidates';
 import {activeCspEvents,cspProgress,preserveApproved} from '../../../lib/csp-validation';
 import {agentAuth,agentData,cspIdentityData,agentError} from '../../../lib/agents-store';
@@ -8,7 +8,7 @@ import type {CspEvent} from '../../../lib/csp';
 function fail(message:string,status=400):never{throw Object.assign(Error(message),{status});}
 const parse=(row:any)=>{let detail:any={};try{detail=JSON.parse(row.detail||'{}');}catch{}return {...row,detail,rawDetail:detail};};
 const metadata=(row:any)=>({id:row.id,name:row.name,date:row.date,status:row.status,count:row.count,documentType:row.detail.documentType==='cr'?'cr':'rd',created:row.created,duplicates:row.detail.duplicates||0,reports:row.detail.reports||[],perEventValidation:!!row.detail.perEventValidation,candidateVersion:row.detail.candidateVersion||0,...cspProgress(row.status,row.detail)});
-async function imports(){return acknowledgeTitularisations((await resources().db.prepare('SELECT * FROM agent_imports WHERE id LIKE ? ORDER BY date,created,id').bind('csp-%').all<any>()).results.map(parse).filter(r=>r.detail.kind==='csp'));}
+async function imports(){return acknowledgeCspDecisions((await resources().db.prepare('SELECT * FROM agent_imports WHERE id LIKE ? ORDER BY date,created,id').bind('csp-%').all<any>()).results.map(parse).filter(r=>r.detail.kind==='csp'));}
 const currentDocument=(row:any)=>({id:row.id,name:row.name,documentType:row.detail.documentType==='cr'?'cr' as const:'rd' as const});
 const documents=(rows:any[])=>rows.map(r=>({id:r.id,name:r.name,date:r.date,status:r.status,created:r.created,documentType:r.detail.documentType==='cr'?'cr' as const:'rd' as const,events:(r.detail.events||[]).map((e:CspEvent)=>r.status==='validated'&&!r.detail.perEventValidation&&e.selected?{...e,approved:true}:e)}));
 function input(body:any){
@@ -27,7 +27,7 @@ export async function GET(request:Request){try{
 }catch(e){return agentError(e);}}
 export async function POST(request:Request){try{
  await agentAuth(request,true);const isForm=request.headers.get('content-type')?.startsWith('multipart/form-data');
- if(!isForm){const body=await request.json();const rows=await imports();const evidence=documents(rows);const saved=body.id?rows.find(r=>r.id===body.id):null;const events=preserveApproved(input(body),saved?.detail.events||[],saved?.status==='validated'&&saved.detail.perEventValidation===true);const {data:baseData,cspImports}=await agentData(true,undefined,parisToday(),false);const data=await cspIdentityData(baseData,events);const preview=prepareCspDocuments(data,events,cspImports.filter(i=>i.id!==body.id),body.date,evidence,saved?currentDocument(saved):{id:'csp-unsaved',name:'Document en cours',documentType:body.documentType==='cr'?'cr':'rd'});return Response.json({events:preview.map(e=>e.approved?{...e,state:e.acknowledgedByRD?'duplicate':'validated',before:e.recordedBefore,after:e.recordedAfter,...(e.acknowledgedByRD?{matchedRD:{...e.acknowledgedByRD,approved:true}}:{}),problem:e.acknowledgedByRD?'Titularisation déjà validée dans le RD : reconnue automatiquement, sans nouvelle application.':'Décision déjà validée et intégrée.'}:e),base:latestAnnual(data),blocked:preview.filter(e=>e.selected&&!e.approved&&e.state==='blocked').length});}
+ if(!isForm){const body=await request.json();const rows=await imports();const evidence=documents(rows);const saved=body.id?rows.find(r=>r.id===body.id):null;const events=preserveApproved(input(body),saved?.detail.events||[],saved?.status==='review'||saved?.status==='validated'&&saved.detail.perEventValidation===true);const {data:baseData,cspImports}=await agentData(true,undefined,parisToday(),false);const data=await cspIdentityData(baseData,events);const preview=prepareCspDocuments(data,events,cspImports.filter(i=>i.id!==body.id),body.date,evidence,saved?currentDocument(saved):{id:'csp-unsaved',name:'Document en cours',documentType:body.documentType==='cr'?'cr':'rd'});return Response.json({events:preview.map(e=>e.approved?{...e,state:e.acknowledgedByDocument?'duplicate':'validated',before:e.recordedBefore,after:e.recordedAfter,...(e.acknowledgedByDocument?{matchedDocument:e.acknowledgedByDocument}:{}),problem:e.acknowledgedByDocument?'Décision déjà validée dans le '+e.acknowledgedByDocument.documentType.toUpperCase()+' : reconnue automatiquement, sans nouvelle application.':'Décision déjà validée et intégrée.'}:e),base:latestAnnual(data),blocked:preview.filter(e=>e.selected&&!e.approved&&e.state==='blocked').length});}
  const f=await request.formData(),file=f.get('file'),raw=f.get('extraction');
  if(!(file instanceof File)||!file.size||file.size>20*1024*1024||!/\.pdf$/i.test(file.name)||typeof raw!=='string'||raw.length>1500000)fail('Choisir un PDF de moins de 20 Mo.');
  const body=JSON.parse(raw),events=preserveApproved(input(body),[],false);const bytes=await file.arrayBuffer();if(new TextDecoder().decode(bytes.slice(0,5))!=='%PDF-')fail('Le fichier n’est pas un PDF.');
@@ -65,7 +65,7 @@ export async function PATCH(request:Request){try{
  }
  if(!['save','validate','validate-state','validate-event','enable'].includes(b.action))fail('Action inconnue.');
  if(b.action==='save'&&row.status!=='review'&&!partial)fail('Utiliser « Corriger » pour modifier des décisions déjà validées.',409);
- const events=b.action==='enable'?row.detail.events:preserveApproved(input({date:row.date,events:b.events}),row.detail.events||[],partial);
+ const events=b.action==='enable'?row.detail.events:preserveApproved(input({date:row.date,events:b.events}),row.detail.events||[],partial||row.status==='review');
  const {data:baseData,cspImports}=await agentData(true,undefined,parisToday(),false);const data=await cspIdentityData(baseData,events);const others=cspImports.filter(i=>i.id!==b.id);const evidence=documents(await imports());
  const preview=prepareCspDocuments(data,b.action==='enable'&&row.detail.perEventValidation?events.map((e:CspEvent)=>({...e,selected:e.selected&&e.approved===true})):events,others,row.date,evidence,currentDocument(row));
  let chosen=new Set<string>();

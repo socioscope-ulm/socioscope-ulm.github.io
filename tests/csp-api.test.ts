@@ -8,7 +8,7 @@ test('CSP API validates roles, previews without writes, saves one PDF, rejects i
    export async function agentAuth(req,write=false){const error=accessError(req,write);if(error)throw Object.assign(Error((await error.json()).error),{status:error.status});}
    export const agentError=e=>Response.json({error:e.message},{status:e.status||500});
    export async function cspIdentityData(data){return {...data,cspIdentities:globalThis.__cspAPI.identities||[]};}
-   export async function agentData(){return {cspImports:globalThis.__cspAPI.rows.map(r=>{const d=JSON.parse(r.detail);return {...r,...d,evidenceEvents:d.events,events:d.events.filter(e=>e.selected&&!e.candidacy&&(!d.perEventValidation||e.approved===true))};}),data:{sources:[{id:'annual',primary:true,date:'2025-12-31',seniorityDate:'2025-12-31',label:'Annual'}],records:[{id:'one',agentId:'A12345',nni:'A12345',name:'TEST ALICE',source:'annual',row:1,gf:9,nr:200,agency:'AMTC'}],events:[],issues:[],updated:''}};}
+   export async function agentData(){return {cspImports:globalThis.__cspAPI.rows.map(r=>{const d=JSON.parse(r.detail);return {...r,...d,evidenceEvents:d.events,events:d.events.filter(e=>e.selected&&!e.candidacy&&!e.acknowledgedByDocument&&!e.acknowledgedByRD&&(!d.perEventValidation||e.approved===true))};}),data:{sources:[{id:'annual',primary:true,date:'2025-12-31',seniorityDate:'2025-12-31',label:'Annual'}],records:[{id:'one',agentId:'A12345',nni:'A12345',name:'TEST ALICE',source:'annual',row:1,gf:9,nr:200,agency:'AMTC'}],events:[],issues:[],updated:''}};}
   `:`
    export function resources(){const m=globalThis.__cspAPI;return {bucket:{async put(key){m.puts.push(key);}},db:{prepare(query){let args=[];const stmt={bind(...a){args=a;return stmt;},async all(){m.queries.push(query);return {results:m.rows};},async first(){m.queries.push(query);return query.includes('hash=')?m.rows.find(r=>r.hash===args[0]):m.rows.find(r=>r.id===args[0]);},async run(){m.queries.push(query);
     if(query.startsWith('INSERT')){const [id,name,hash,date,created,status,count,complete,detail]=args;m.rows.push({id,name,hash,date,created,status,count,complete,detail});return {meta:{changes:1}};}
@@ -144,7 +144,7 @@ test('CSP API validates roles, previews without writes, saves one PDF, rejects i
  response=await route.PATCH(request({id:rdId,action:'validate-event',eventId:salaryRD.id,checked:true,events:[salaryRD]},'PATCH'));assert.equal(response.status,200,JSON.stringify(await response.clone().json()));
  const accepted=JSON.parse(m.rows[0].detail).events[0];assert.equal(accepted.approved,true);assert.equal(accepted.recordedBefore.gf,8);assert.equal(accepted.recordedAfter.nr,125);assert.equal(accepted.salaryReference.cr.id,crId);assert.equal(accepted.salaryReference.rd.id,rdId);assert.equal(accepted.note,'Motif conservé');
  assert.equal(JSON.parse(m.rows[1].detail).events[0].approved,undefined);assert.equal(m.puts.length,noWrites);
- response=await route.PATCH(request({id:crId,action:'validate-state',state:'duplicate',checked:true,events:[salaryCR]},'PATCH'));assert.equal(response.status,200,JSON.stringify(await response.clone().json()));assert.equal(JSON.parse(m.rows[0].detail).events[0].recordedAfter.nr,125);assert.equal(JSON.parse(m.rows[1].detail).reports[0].note,'Vérifié');
+ const automaticSalary=await (await route.GET(new Request('https://fixture.test/api/csp?id='+crId,{headers}))).json();assert.equal(automaticSalary.meta.pending,0);assert.equal(automaticSalary.events[0].acknowledgedByDocument.id,rdId);assert.equal(automaticSalary.events[0].approved,true);assert.equal(JSON.parse(m.rows[0].detail).events[0].recordedAfter.nr,125);assert.equal(JSON.parse(m.rows[1].detail).reports[0].note,'Vérifié');
 
  // Exact titularisations are acknowledged on read, without database writes;
  // an authorized later save compares the original stored detail, not the view.
@@ -152,12 +152,24 @@ test('CSP API validates roles, previews without writes, saves one PDF, rejects i
  const unresolved={...pending,id:'still-pending'};
  m.rows=[{id:rdId,name:'RD mars.pdf',date:'2026-03-24',status:'validated',count:1,detail:JSON.stringify({kind:'csp',perEventValidation:true,events:[{...titular,approved:true}]})},{id:crId,name:'CR mars.pdf',date:'2026-03-24',status:'validated',count:2,detail:JSON.stringify({kind:'csp',documentType:'cr',perEventValidation:true,events:[titular,unresolved],reports:[{page:2,note:'Page conservée'}]})}];
  const raw=m.rows[1].detail;const writes=m.queries.filter(q=>q.startsWith('UPDATE')).length;
- const acknowledged=await (await route.GET(new Request('https://fixture.test/api/csp?id='+crId,{headers}))).json();assert.equal(acknowledged.meta.approved,1);assert.equal(acknowledged.meta.pending,1);assert.equal(acknowledged.events[0].acknowledgedByRD.id,rdId);assert.equal(m.rows[1].detail,raw);assert.equal(m.queries.filter(q=>q.startsWith('UPDATE')).length,writes);
- const previewAcknowledged=await (await route.POST(request({id:crId,date:'2026-03-24',events:[titular,unresolved]}))).json();assert.ok(previewAcknowledged.events,JSON.stringify(previewAcknowledged));assert.equal(previewAcknowledged.events[0].state,'duplicate');assert.equal(previewAcknowledged.events[0].approved,true);assert.equal(previewAcknowledged.events[0].matchedRD.id,rdId);assert.equal(m.rows[1].detail,raw);
- response=await route.PATCH(request({id:crId,action:'save',events:[titular,unresolved]},'PATCH'));assert.equal(response.status,200,JSON.stringify(await response.clone().json()));assert.equal(JSON.parse(m.rows[1].detail).events[0].acknowledgedByRD.id,rdId);
+ const acknowledged=await (await route.GET(new Request('https://fixture.test/api/csp?id='+crId,{headers}))).json();assert.equal(acknowledged.meta.approved,1);assert.equal(acknowledged.meta.pending,1);assert.equal(acknowledged.events[0].acknowledgedByDocument.id,rdId);assert.equal(m.rows[1].detail,raw);assert.equal(m.queries.filter(q=>q.startsWith('UPDATE')).length,writes);
+ const previewAcknowledged=await (await route.POST(request({id:crId,date:'2026-03-24',events:[titular,unresolved]}))).json();assert.ok(previewAcknowledged.events,JSON.stringify(previewAcknowledged));assert.equal(previewAcknowledged.events[0].state,'duplicate');assert.equal(previewAcknowledged.events[0].approved,true);assert.equal(previewAcknowledged.events[0].matchedDocument.id,rdId);assert.equal(m.rows[1].detail,raw);
+ response=await route.PATCH(request({id:crId,action:'save',events:[titular,unresolved]},'PATCH'));assert.equal(response.status,200,JSON.stringify(await response.clone().json()));assert.equal(JSON.parse(m.rows[1].detail).events[0].acknowledgedByDocument.id,rdId);
  const listingAcknowledged=await (await route.GET(new Request('https://fixture.test/api/csp',{headers}))).json();assert.equal(listingAcknowledged.records.filter(e=>e.kind==='titularisation').length,1);
  response=await route.PATCH(request({id:rdId,action:'disable'},'PATCH'));assert.equal(response.status,200);
  const restored=await (await route.GET(new Request('https://fixture.test/api/csp?id='+crId,{headers}))).json();assert.equal(restored.events[0].approved,undefined);assert.equal(restored.meta.pending,2);assert.equal(restored.events[0].note,'Note conservée');
+
+ // Validate in the CR first: the draft RD must immediately leave pending too.
+ const crFirst={...ready,id:'cr-first',pages:[1],gfBefore:9,nrBefore:200,nrAfter:205};
+ const rdSecond={...ready,id:'rd-second',pages:[1]};
+ m.rows=[{id:crId,name:'CR premier.pdf',date:'2026-03-24',status:'review',count:1,detail:JSON.stringify({kind:'csp',documentType:'cr',events:[crFirst]})},{id:rdId,name:'RD second.pdf',date:'2026-03-24',status:'review',count:1,detail:JSON.stringify({kind:'csp',documentType:'rd',events:[rdSecond]})}];
+ response=await route.PATCH(request({id:crId,action:'validate-event',eventId:crFirst.id,checked:true,events:[crFirst]},'PATCH'));assert.equal(response.status,200,JSON.stringify(await response.clone().json()));
+ const reverseMatch=await (await route.GET(new Request('https://fixture.test/api/csp?id='+rdId,{headers}))).json();assert.equal(reverseMatch.meta.approved,1);assert.equal(reverseMatch.meta.pending,0);assert.equal(reverseMatch.events[0].acknowledgedByDocument.documentType,'cr');
+ const reversePreview=await (await route.POST(request({id:rdId,date:'2026-03-24',events:[rdSecond]}))).json();assert.equal(reversePreview.events[0].state,'duplicate');assert.equal(reversePreview.events[0].matchedDocument.id,crId);
+ response=await route.PATCH(request({id:rdId,action:'save',events:[rdSecond]},'PATCH'));assert.equal(response.status,200,JSON.stringify(await response.clone().json()));
+ assert.equal(JSON.parse(m.rows[1].detail).events[0].acknowledgedByDocument.id,crId);
+ response=await route.PATCH(request({id:crId,action:'disable'},'PATCH'));assert.equal(response.status,200);
+ const reverseRestored=await (await route.GET(new Request('https://fixture.test/api/csp?id='+rdId,{headers}))).json();assert.equal(reverseRestored.meta.pending,1);assert.equal(reverseRestored.events[0].approved,undefined);
 
 });
 

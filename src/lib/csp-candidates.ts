@@ -1,3 +1,4 @@
+import {acknowledgeCspDecisions} from './csp-acknowledgement.ts';
 import {salaryReferenceChecks} from './csp-salary-reference.ts';
 import {normalName} from './agents.ts';
 import {cspNameKey} from './csp-rup.ts';
@@ -9,6 +10,7 @@ import type {AgentData,AgentRecord} from './agents.ts';
 // approved movements. Import timestamps never determine CR/RD matching.
 export function prepareCspDocuments(data:AgentData,events:CspEvent[],prior:CspImport[],date:string,documents:CspImport[]=[],current?:{id:string;name:string;documentType:'rd'|'cr'}):CspPreview[]{
  const evidence=current?[...documents.filter(d=>d.id!==current.id),{...current,date,status:'review',events}]:documents;
+ if(current){const acknowledged=acknowledgeCspDecisions(evidence.map(d=>({...d,detail:{documentType:d.documentType,perEventValidation:true,events:d.events}})));events=acknowledged.find(d=>d.id===current.id)!.detail.events;}
  const context=prior.map(d=>({...d,events:d.events.filter(e=>!e.salaryReference||salaryReferenceSupported(e,evidence))}));
  const initial=prepareCsp(data,events,context,date);
  const checks=salaryReferenceChecks(data,events,date,evidence);
