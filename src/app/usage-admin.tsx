@@ -1,7 +1,10 @@
 'use client';
 import {useEffect,useState} from 'react';
 
-const gb=(bytes:number)=>new Intl.NumberFormat('fr-FR',{maximumFractionDigits:3}).format(bytes/1e9)+' Go';
+const gb=(bytes:number)=>{
+ const [divisor,unit]=bytes>0&&bytes<1e6?[1e3,'ko']:bytes>0&&bytes<1e9?[1e6,'Mo']:[1e9,'Go'];
+ return new Intl.NumberFormat('fr-FR',{maximumFractionDigits:3}).format(bytes/Number(divisor))+' '+unit;
+};
 const date=(value:string)=>new Intl.DateTimeFormat('fr-FR',{dateStyle:'short',timeStyle:'short'}).format(new Date(value));
 export default function UsageAdmin(){
  const [from,setFrom]=useState(''),[to,setTo]=useState(new Date().toISOString().slice(0,10));
@@ -32,6 +35,7 @@ export default function UsageAdmin(){
   <div className="panel-heading"><div><h2>Consommation et accès utilisateurs</h2><p>Suivi local estimé de Socioscope · administrateur uniquement</p></div><button type="button" className="btn" disabled={busy} onClick={()=>void refresh()}>Actualiser le suivi</button></div>
   <p>Ce suivi commence à son activation. Il exclut les usages antérieurs, Pointage, les échanges avec la base de données et l’authentification. Il ne représente pas le relevé de facturation Supabase de l’organisation.</p>
   {data?<>
+   {data.recordingAvailable===false&&<p className="notice" role="alert">L’enregistrement des mesures est momentanément indisponible. Les valeurs affichées sont incomplètes. Actualisez le suivi pour réessayer.</p>}
    <p>Comptage depuis le <b>{date(data.settings.trackingStarted)}</b> · relevé affiché le {date(data.reportedAt)}. Les jours du tableau sont regroupés en UTC.</p>
    <div className="analysis-options"><label>Du<input type="date" aria-label="Début de la période de consommation" value={from} onChange={e=>{setFrom(e.target.value);if(e.target.value>to)setTo(e.target.value);}}/></label><label>Au<input type="date" aria-label="Fin de la période de consommation" value={to} onChange={e=>{setTo(e.target.value);if(e.target.value<from)setFrom(e.target.value);}}/></label><span>Choisissez les dates du cycle à comparer au relevé Supabase. Les jauges et le tableau suivent cette période.</span></div>
    <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(220px,1fr))',gap:16}}>

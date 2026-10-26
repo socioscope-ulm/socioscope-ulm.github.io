@@ -9,7 +9,7 @@ await build({
   platform:'neutral',
   target:'es2022',
   minify:true,
-  external:['npm:postgres@3.4.7'],
+  external:['npm:postgres@3.4.7','node:*'],
   mainFields:['module','main'],
   conditions:['import','default']
 });
