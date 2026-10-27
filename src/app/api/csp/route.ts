@@ -9,7 +9,7 @@ function fail(message:string,status=400):never{throw Object.assign(Error(message
 const parse=(row:any)=>{let detail:any={};try{detail=JSON.parse(row.detail||'{}');}catch{}return {...row,detail,rawDetail:detail};};
 const metadata=(row:any)=>({id:row.id,name:row.name,date:row.date,status:row.status,count:row.count,documentType:row.detail.documentType==='cr'?'cr':'rd',created:row.created,duplicates:row.detail.duplicates||0,reports:row.detail.reports||[],perEventValidation:!!row.detail.perEventValidation,candidateVersion:row.detail.candidateVersion||0,...cspProgress(row.status,row.detail)});
 async function imports(){return acknowledgeCspDecisions((await resources().db.prepare('SELECT * FROM agent_imports WHERE id LIKE ? ORDER BY date,created,id').bind('csp-%').all<any>()).results.map(parse).filter(r=>r.detail.kind==='csp'));}
-const currentDocument=(row:any)=>({id:row.id,name:row.name,documentType:row.detail.documentType==='cr'?'cr' as const:'rd' as const});
+const currentDocument=(row:any)=>({id:row.id,name:row.name,status:row.status,documentType:row.detail.documentType==='cr'?'cr' as const:'rd' as const});
 const documents=(rows:any[])=>rows.map(r=>({id:r.id,name:r.name,date:r.date,status:r.status,created:r.created,documentType:r.detail.documentType==='cr'?'cr' as const:'rd' as const,events:(r.detail.events||[]).map((e:CspEvent)=>r.status==='validated'&&!r.detail.perEventValidation&&e.selected?{...e,approved:true}:e)}));
 function input(body:any){
  if(!body||!validDate(body.date)||!Array.isArray(body.events)||!body.events.length||body.events.length>3000||!body.events.every(validateCspEvent)||new Set(body.events.map((e:any)=>e.id)).size!==body.events.length)fail('Date ou décisions invalides. Corriger les dates et les valeurs avant l’enregistrement.');

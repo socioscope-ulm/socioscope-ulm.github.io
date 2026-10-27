@@ -230,8 +230,16 @@ test('CSP API validates roles, previews without writes, saves one PDF, rejects i
  const beforeVacant=structuredClone(m.rows);
  let vacant=await (await route.GET(new Request('https://fixture.test/api/csp?id='+crId,{headers}))).json();assert.equal(vacant.meta.pending,0);assert.equal(vacant.events[0].nonRetainedByRD.reason,'unfilled-post');assert.equal(vacant.events[0].approved,undefined);assert.deepEqual(m.rows,beforeVacant);
  preview=await (await route.POST(request({id:crId,date:'2026-03-24',events:vacant.events}))).json();assert.equal(preview.events[0].state,'not-retained');assert.equal(preview.events[0].after,undefined);
+ // The RD can be complete through acknowledgements of original CR approvals.
+ // Previewing that validated CR must preserve its evidentiary status.
+ const originalSalary={...award,id:'original-cr-award',pages:[1],approved:true,recordedBefore:{gf:9,nr:200},recordedAfter:{gf:9,nr:205}};
+ const rdSalary={...originalSalary,id:'acknowledged-rd-award',acknowledgedByDocument:{id:crId,eventId:originalSalary.id,name:'CR fictif.pdf',page:1,documentType:'cr'}};
+ m.rows[0].detail=JSON.stringify({kind:'csp',documentType:'rd',perEventValidation:true,events:[rdSalary]});
+ m.rows[1].detail=JSON.stringify({kind:'csp',documentType:'cr',perEventValidation:true,events:[originalSalary,vacantCandidate]});
+ vacant=await (await route.GET(new Request('https://fixture.test/api/csp?id='+crId,{headers}))).json();assert.equal(vacant.meta.pending,0);assert.equal(vacant.events[1].nonRetainedByRD.reason,'unfilled-post');
+ preview=await (await route.POST(request({id:crId,date:'2026-03-24',events:vacant.events}))).json();assert.equal(preview.events[1].state,'not-retained');assert.equal(preview.events[1].nonRetainedByRD.reason,'unfilled-post');assert.equal(preview.events[0].approved,true);
  response=await route.PATCH(request({id:rdId,action:'revise'},'PATCH'));assert.equal(response.status,200);
- vacant=await (await route.GET(new Request('https://fixture.test/api/csp?id='+crId,{headers}))).json();assert.equal(vacant.meta.pending,1);assert.equal(vacant.events[0].nonRetainedByRD,undefined);
+ vacant=await (await route.GET(new Request('https://fixture.test/api/csp?id='+crId,{headers}))).json();assert.equal(vacant.meta.pending,1);assert.equal(vacant.events[1].nonRetainedByRD,undefined);
 
 });
 
