@@ -264,5 +264,18 @@ test('CSP API validates roles, previews without writes, saves one PDF, rejects i
  response=await route.PATCH(request({...body,action:'preview-correction'},'PATCH'));assert.equal(response.status,400);assert.match((await response.json()).error,/incohérente|dépend/);assert.deepEqual(m.rows,unchanged);
 
  }
+ {
+ // A single acknowledged ODJ decision closes its document automatically,
+ // without persisting another approval or another movement.
+ const decision={id:'completion',name:'TEST ALICE',agentId:'A12345',kind:'titularisation',effective:'2026-01-01',page:1,selected:true};
+ m.rows=[{id:rdId,name:'RD fictif.pdf',date:'2026-03-24',status:'validated',count:1,detail:JSON.stringify({kind:'csp',documentType:'rd',perEventValidation:true,events:[{...decision,approved:true}]})},{id:crId,name:'ODJ fictif.pdf',date:'2026-03-24',status:'review',count:1,detail:JSON.stringify({kind:'csp',documentType:'cr',events:[decision]})}];
+ const originalRows=structuredClone(m.rows);
+ const get=()=>route.GET(new Request('https://fixture.test/api/csp?id='+crId,{headers}));
+ let view=await (await get()).json();assert.equal(view.meta.automaticallyValidated,true);assert.equal(view.meta.pending,0);assert.deepEqual(m.rows,originalRows);
+ const list=await (await route.GET(new Request('https://fixture.test/api/csp',{headers}))).json();assert.equal(list.imports.find(i=>i.id===crId).automaticallyValidated,true);assert.equal(list.total,1);
+ assert.equal((await route.PATCH(request({id:rdId,action:'disable'},'PATCH'))).status,200);
+ view=await (await get()).json();assert.equal(view.meta.automaticallyValidated,false);assert.equal(view.meta.pending,1);
+ }
+
 });
 
