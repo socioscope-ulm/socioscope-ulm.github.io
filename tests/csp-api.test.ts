@@ -241,5 +241,28 @@ test('CSP API validates roles, previews without writes, saves one PDF, rejects i
  response=await route.PATCH(request({id:rdId,action:'revise'},'PATCH'));assert.equal(response.status,200);
  vacant=await (await route.GET(new Request('https://fixture.test/api/csp?id='+crId,{headers}))).json();assert.equal(vacant.meta.pending,1);assert.equal(vacant.events[1].nonRetainedByRD,undefined);
 
+ {
+ // A one-decision correction previews without writes and keeps other approvals.
+ const untouched={...award,id:'unaffected',name:'TEST BOB',agentId:'B12345',effective:'2026-01-02',approved:true,recordedBefore:{gf:8,nr:180},recordedAfter:{gf:8,nr:185}};
+ m.rows=[{id:rdId,name:'RD fictif.pdf',date:'2026-03-24',status:'validated',count:2,detail:JSON.stringify({kind:'csp',documentType:'rd',perEventValidation:true,events:[originalSalary,untouched]})}];
+ const correctionPrior=structuredClone(m.rows);
+ const correction={...originalSalary,nrSteps:2,nrAfter:210};
+ const body={id:rdId,eventId:correction.id,event:correction,reason:'Vérification du document fictif'};
+ assert.equal((await route.PATCH(request({...body,action:'preview-correction'},'PATCH','viewer'))).status,403);
+ response=await route.PATCH(request({...body,action:'preview-correction'},'PATCH'));
+ assert.equal(response.status,200,JSON.stringify(await response.clone().json()));
+ const proposed=await response.json();assert.equal(proposed.decision.after.nr,210);assert.deepEqual(m.rows,correctionPrior);
+ assert.equal((await route.PATCH(request({...body,action:'correct-event',token:'stale'},'PATCH'))).status,409);assert.deepEqual(m.rows,correctionPrior);
+ assert.equal((await route.PATCH(request({...body,action:'correct-event',token:proposed.token,reason:'Changed'},'PATCH'))).status,409);
+ response=await route.PATCH(request({...body,action:'correct-event',token:proposed.token},'PATCH'));assert.equal(response.status,200,JSON.stringify(await response.clone().json()));
+ const corrected=JSON.parse(m.rows[0].detail);assert.equal(m.rows[0].status,'validated');assert.equal(corrected.events[0].recordedAfter.nr,210);assert.deepEqual(corrected.events[1],untouched);assert.equal(corrected.corrections[0].before.recordedAfter.nr,205);assert.equal(corrected.corrections[0].reason,body.reason);
+ assert.equal((await route.PATCH(request({...body,action:'preview-correction',reason:''},'PATCH'))).status,400);
+ // A later explicit salary must not silently become invalid.
+ const dependent={...award,id:'dependent',effective:'2026-03-01',nrBefore:205,nrAfter:210,approved:true,recordedBefore:{gf:9,nr:205},recordedAfter:{gf:9,nr:210}};
+ m.rows[0].detail=JSON.stringify({kind:'csp',documentType:'rd',perEventValidation:true,events:[originalSalary,dependent]});
+ const unchanged=structuredClone(m.rows);
+ response=await route.PATCH(request({...body,action:'preview-correction'},'PATCH'));assert.equal(response.status,400);assert.match((await response.json()).error,/incohérente|dépend/);assert.deepEqual(m.rows,unchanged);
+
+ }
 });
 

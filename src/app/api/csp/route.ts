@@ -1,3 +1,4 @@
+import {correctionEvents,planCspCorrection} from '../../../lib/csp-correction';
 import {acknowledgeCspDecisions} from '../../../lib/csp-acknowledgement';
 import {prepareCspDocuments,addCrCandidates} from '../../../lib/csp-candidates';
 import {activeCspEvents,cspProgress,preserveApproved} from '../../../lib/csp-validation';
@@ -7,7 +8,7 @@ import {cspKinds,cspKey,cspNonRetained,cspResolvedEvent,validateCspEvent,dedupli
 import type {CspEvent} from '../../../lib/csp';
 function fail(message:string,status=400):never{throw Object.assign(Error(message),{status});}
 const parse=(row:any)=>{let detail:any={};try{detail=JSON.parse(row.detail||'{}');}catch{}return {...row,detail,rawDetail:detail};};
-const metadata=(row:any)=>({id:row.id,name:row.name,date:row.date,status:row.status,count:row.count,documentType:row.detail.documentType==='cr'?'cr':'rd',created:row.created,duplicates:row.detail.duplicates||0,reports:row.detail.reports||[],perEventValidation:!!row.detail.perEventValidation,candidateVersion:row.detail.candidateVersion||0,...cspProgress(row.status,row.detail)});
+const metadata=(row:any)=>({id:row.id,name:row.name,date:row.date,status:row.status,count:row.count,documentType:row.detail.documentType==='cr'?'cr':'rd',created:row.created,duplicates:row.detail.duplicates||0,reports:row.detail.reports||[],perEventValidation:!!row.detail.perEventValidation,candidateVersion:row.detail.candidateVersion||0,corrections:(row.detail.corrections||[]).map((c:any)=>({eventId:c.eventId,reason:c.reason,at:c.at})),...cspProgress(row.status,row.detail)});
 async function imports(){return acknowledgeCspDecisions((await resources().db.prepare('SELECT * FROM agent_imports WHERE id LIKE ? ORDER BY date,created,id').bind('csp-%').all<any>()).results.map(parse).filter(r=>r.detail.kind==='csp'));}
 const currentDocument=(row:any)=>({id:row.id,name:row.name,status:row.status,documentType:row.detail.documentType==='cr'?'cr' as const:'rd' as const});
 const documents=(rows:any[])=>rows.map(r=>({id:r.id,name:r.name,date:r.date,status:r.status,created:r.created,documentType:r.detail.documentType==='cr'?'cr' as const:'rd' as const,events:(r.detail.events||[]).map((e:CspEvent)=>r.status==='validated'&&!r.detail.perEventValidation&&e.selected?{...e,approved:true}:e)}));
@@ -50,6 +51,24 @@ export async function PATCH(request:Request){try{
   const count=detail.events.filter((e:CspEvent)=>e.selected).length;
   const changed=await db.prepare('UPDATE agent_imports SET detail=?,status=?,count=? WHERE id=? AND status=? AND detail=?').bind(JSON.stringify(detail),row.status,count,b.id,row.status,JSON.stringify(row.rawDetail||row.detail)).run();
   if(changed.meta.changes!==1)fail('Le relevé a changé. Recharger.',409);return Response.json({ok:true});
+ }
+ if(['preview-correction','correct-event'].includes(b.action)){
+  if(!['review','validated'].includes(row.status))fail('Réactiver le document avant de corriger une décision.',409);
+  if(typeof b.reason!=='string'||!b.reason.trim()||b.reason.length>500)fail('Indiquer un motif de correction (500 caractères maximum).');
+  if(!b.event||b.event.id!==b.eventId)fail('Choisir une seule décision à corriger.');
+  const events=correctionEvents(row,b.event);
+  const rows=await imports();
+  const {data:baseData}=await agentData(true,undefined,parisToday(),false);
+  const data=await cspIdentityData(baseData,events);
+  const plan=planCspCorrection(data,rows,row,b.event);
+  const bytes=new TextEncoder().encode(JSON.stringify([rows.map(r=>[r.id,r.status,r.rawDetail]),b.event,b.reason.trim()]));
+  const token=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)),v=>v.toString(16).padStart(2,'0')).join('');
+  if(b.action==='preview-correction')return Response.json({decision:plan.decision,impact:plan.impact,token});
+  if(b.token!==token)fail('La situation a changé ou la correction n’a pas été vérifiée. Vérifier de nouveau avant d’enregistrer.',409);
+  const detail={...row.detail,events:plan.events,perEventValidation:true,corrections:[...(row.detail.corrections||[]),{eventId:b.eventId,reason:b.reason.trim(),at:new Date().toISOString(),actor:request.headers.get('oai-authenticated-user-email'),before:plan.original,after:plan.events.find(e=>e.id===b.eventId)}]};
+  const changed=await db.prepare('UPDATE agent_imports SET detail=?,status=?,count=? WHERE id=? AND status=? AND detail=?').bind(JSON.stringify(detail),'validated',plan.events.filter(e=>e.selected).length,b.id,row.status,JSON.stringify(row.rawDetail||row.detail)).run();
+  if(changed.meta.changes!==1)fail('Le relevé a changé. Recharger avant de réessayer.',409);
+  return Response.json({ok:true,...cspProgress('validated',detail)});
  }
  if(b.action==='disable'){
   const changed=await db.prepare("UPDATE agent_imports SET status='disabled:validated' WHERE id=? AND status='validated' AND detail=?").bind(b.id,JSON.stringify(row.rawDetail||row.detail)).run();if(changed.meta.changes!==1)fail('Le relevé a changé. Recharger avant de réessayer.',409);return Response.json({ok:true});
