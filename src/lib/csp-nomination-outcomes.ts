@@ -1,10 +1,11 @@
 import {cspNameKey} from './csp-rup.ts';
 import {normalName} from './agents.ts';
 import {validDate} from './csp.ts';
-import type {CspEvent,CspAcknowledgement} from './csp.ts';
+import type {CspEvent,CspAcknowledgement,CspNonRetentionProof} from './csp.ts';
 type Document={id:string;name:string;date:string;status:string;detail:{documentType?:string;events?:CspEvent[];[key:string]:unknown};[key:string]:unknown};
 const post=(date:string,reference:string)=>JSON.stringify([date,reference.trim()]);
 const active=(d:Document)=>['review','validated'].includes(d.status);
+const complete=(d:Document)=>d.status==='validated'&&!!d.detail.events?.some(e=>e.selected)&&d.detail.events.every(e=>!e.selected||!e.candidacy&&!e.extractionIssue&&validDate(e.effective)&&(!d.detail.perEventValidation||e.approved===true));
 // This is a documentary disposition, never an approval or a career movement.
 // Rebuild it on every read so that withdrawing/correcting the RD reopens the CR.
 export function resolveNominationOutcomes<T extends Document>(rows:T[]):T[]{
@@ -18,9 +19,18 @@ export function resolveNominationOutcomes<T extends Document>(rows:T[]):T[]{
  for(const c of row.detail.events||[])if(c.candidacy&&c.reference){const key=post(cspNameKey(c.name),c.reference),group=candidates.get(key)||[];group.push(c);candidates.set(key,group);}
  return {...row,detail:{...row.detail,events:(row.detail.events||[]).map(original=>{
   const {nonRetainedByRD,...e}=original;
-  if(!active(row)||row.detail.documentType!=='cr'||!e.candidacy||!e.selected||e.approved||e.nonRetained||e.extractionIssue||!e.reference)return e;
+  if(!active(row)||row.detail.documentType!=='cr'||!e.candidacy||!e.selected||e.approved||e.nonRetained||e.extractionIssue||!e.reference?.trim())return e;
   const group=nominations.get(post(row.date,e.reference))||[];
-  if(!group.length||group.some(m=>m.event.extractionIssue||!validDate(m.event.effective)||!cspNameKey(m.event.name)))return e;
+  if(!group.length){
+   const sources=rows.filter(d=>d.id!==row.id&&active(d)&&d.detail.documentType!=='cr'&&d.date===row.date&&validDate(d.date));
+   // Absence is evidence only after every active RD of this meeting is fully
+   // validated. A missing post reference or an unselected nomination on this
+   // post remains ambiguous and must not be interpreted as a vacant post.
+   if(!sources.length||sources.some(d=>!complete(d)||(d.detail.events||[]).some(v=>v.kind==='nomination'&&!v.candidacy&&(!v.reference?.trim()||v.reference.trim()===e.reference!.trim()))))return e;
+   const source=sources[0];const proof:CspNonRetentionProof={id:source.id,name:source.name,documentType:'rd',reason:'unfilled-post'};
+   return {...e,nonRetainedByRD:proof};
+  }
+  if(group.some(m=>m.event.extractionIssue||!validDate(m.event.effective)||!cspNameKey(m.event.name)))return e;
   const signature=(v:CspEvent)=>JSON.stringify([cspNameKey(v.name),v.agentId,v.effective,v.gfDelta,v.gfBefore,v.gfAfter,v.nrBefore,v.nrAfter,v.nrSteps,v.nrConfirmed,normalName(v.agency),normalName(v.job)]);
   // Multiple nominees on the same post are legitimate. Contradictions are
   // different versions of one nominee, or different complete lists across RDs.

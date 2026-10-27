@@ -224,5 +224,14 @@ test('CSP API validates roles, previews without writes, saves one PDF, rejects i
  separate=JSON.parse(m.rows[0].detail).events;assert.deepEqual(separate[0],publishedAward);assert.equal(separate[1].approved,true);assert.equal(separate[1].recordedBefore.nr,205);assert.equal(separate[1].recordedAfter.nr,205);assert.equal(separate[1].recordedAfter.agency,'AMTE');
  response=await route.PATCH(request({id:rdId,action:'validate-event',eventId:transfer.id,events:separate,checked:true},'PATCH'));assert.equal(response.status,409);
 
+ // A completed RD also closes the sole CR candidature on an unfilled post.
+ const vacantCandidate={id:'vacant-candidate',name:'EXEMPLE CANDIDAT',kind:'nomination',candidacy:true,effective:'',page:1,reference:'POSTE-NON-POURVU-FICTIF',selected:true};
+ m.rows=[{id:rdId,name:'RD fictif.pdf',date:'2026-03-24',status:'validated',count:1,detail:JSON.stringify({kind:'csp',documentType:'rd',perEventValidation:true,events:[{...award,approved:true}]})},{id:crId,name:'CR fictif.pdf',date:'2026-03-24',status:'validated',count:1,detail:JSON.stringify({kind:'csp',documentType:'cr',perEventValidation:true,events:[vacantCandidate]})}];
+ const beforeVacant=structuredClone(m.rows);
+ let vacant=await (await route.GET(new Request('https://fixture.test/api/csp?id='+crId,{headers}))).json();assert.equal(vacant.meta.pending,0);assert.equal(vacant.events[0].nonRetainedByRD.reason,'unfilled-post');assert.equal(vacant.events[0].approved,undefined);assert.deepEqual(m.rows,beforeVacant);
+ preview=await (await route.POST(request({id:crId,date:'2026-03-24',events:vacant.events}))).json();assert.equal(preview.events[0].state,'not-retained');assert.equal(preview.events[0].after,undefined);
+ response=await route.PATCH(request({id:rdId,action:'revise'},'PATCH'));assert.equal(response.status,200);
+ vacant=await (await route.GET(new Request('https://fixture.test/api/csp?id='+crId,{headers}))).json();assert.equal(vacant.meta.pending,1);assert.equal(vacant.events[0].nonRetainedByRD,undefined);
+
 });
 

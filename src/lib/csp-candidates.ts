@@ -13,7 +13,7 @@ import type {AgentData,AgentRecord} from './agents.ts';
 export function prepareCspDocuments(data:AgentData,events:CspEvent[],prior:CspImport[],date:string,documents:CspImport[]=[],current?:{id:string;name:string;documentType:'rd'|'cr'}):CspPreview[]{
  const evidence=current?[...documents.filter(d=>d.id!==current.id),{...current,date,status:'review',events}]:documents;
  if(current){const acknowledged=acknowledgeCspDecisions(evidence.map(d=>({...d,detail:{documentType:d.documentType,perEventValidation:true,events:d.events}})));events=acknowledged.find(d=>d.id===current.id)!.detail.events;}
- if(!current){const id='csp-outcome-preview';events=resolveNominationOutcomes([...documents.map(d=>({...d,detail:{documentType:d.documentType,events:d.events}})),{id,name:'Aperçu CR',date,status:'review',detail:{documentType:'cr',events}}]).find(d=>d.id===id)!.detail.events;}
+ if(!current){const id='csp-outcome-preview';events=resolveNominationOutcomes([...documents.map(d=>({...d,detail:{documentType:d.documentType,perEventValidation:true,events:d.events}})),{id,name:'Aperçu CR',date,status:'review',detail:{documentType:'cr',events}}]).find(d=>d.id===id)!.detail.events;}
  const context=prior.map(d=>({...d,events:d.events.filter(e=>!e.salaryReference||salaryReferenceSupported(e,evidence))}));
  const initial=prepareCsp(data,events,context,date);
  const checks=salaryReferenceChecks(data,events,date,evidence);

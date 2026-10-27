@@ -85,3 +85,36 @@ test('both retained candidates become ready through their own RD line and each m
  assert.deepEqual(projection.issues,[]);
  const applied=projection.data.records.filter(r=>r.source===CSP_SOURCE);assert.equal(applied.length,2);assert.ok(applied.every(r=>r.nr===130));
 });
+
+test('a fully validated RD closes a vacant post, even with one candidate and no NNI; reopening restores pending',()=>{
+ const vacant={...cr,detail:{...cr.detail,events:[unknown]}};
+ const unrelated={...winner,id:'other-post',reference:'AUTRE-POSTE',approved:true};
+ const final={...rd,status:'validated',detail:{...rd.detail,events:[unrelated]}};
+ const result=resolve(final,vacant);const e=result.detail.events[0];
+ assert.equal(cspNonRetained(e),true);assert.equal(e.nonRetainedByRD?.reason,'unfilled-post');assert.equal(e.nonRetainedByRD?.eventId,undefined);assert.equal(e.nonRetainedByRD?.page,undefined);assert.equal(e.approved,undefined);
+ assert.equal(cspProgress('review',result.detail).pending,0);assert.deepEqual(activeCspEvents(result.detail),[]);
+ assert.deepEqual(resolveNominationOutcomes([final,vacant])[1],result);
+ for(const source of [{...final,status:'review'},{...final,status:'disabled:validated'},{...final,date:'2026-05-01'},{...final,detail:{...final.detail,events:[{...unrelated,approved:false}]}},{...final,detail:{...final.detail,events:[]}}])assert.equal(resolve(source,result).detail.events.some(cspNonRetained),false);
+ const legacy={...final,detail:{documentType:'rd',events:[{...unrelated,approved:undefined}]}};
+ assert.equal(resolveNominationOutcomes([vacant,legacy])[0].detail.events[0].nonRetainedByRD?.reason,'unfilled-post');
+ const data={sources:[{id:'annual',date:'2025-12-31',primary:true}],records:[],events:[],issues:[],updated:''} as any;
+ const documents=[{...final,documentType:'rd' as const,events:final.detail.events}];
+ for(const current of [undefined,{id:vacant.id,name:vacant.name,documentType:'cr' as const}]){
+  const preview=prepareCspDocuments(data,vacant.detail.events,[],vacant.date,documents,current);
+  assert.equal(preview[0].state,'not-retained');assert.equal(preview[0].after,undefined);assert.match(preview[0].problem,/poste non pourvu/);
+  assert.equal(prepareCspDocuments(data,vacant.detail.events,[],vacant.date,[{...documents[0],events:[{...unrelated,approved:false}]}],current)[0].state,'blocked');
+ }
+});
+test('vacant-post inference waits for all active RDs and preserves uncertain or nominated posts',()=>{
+ const vacant={...cr,detail:{...cr.detail,events:[unknown,internal]}};
+ const final={...rd,status:'validated',detail:{...rd.detail,events:[{...winner,reference:'AUTRE-POSTE',approved:true}]}};
+ assert.ok(resolve(final,vacant).detail.events.every(cspNonRetained));
+ for(const patch of [{reference:undefined},{extractionIssue:'Lecture incertaine'},{effective:''},{reference:unknown.reference,selected:false}])assert.equal(resolve({...final,detail:{...final.detail,events:[{...final.detail.events[0],...patch}]}},vacant).detail.events.some(cspNonRetained),false);
+ assert.equal(resolveNominationOutcomes([vacant,final,{...rd,id:'pending-rd',detail:{...rd.detail,events:[{...winner,reference:'TROISIEME-POSTE'}]}}])[0].detail.events.some(cspNonRetained),false);
+ const reopened={...vacant,detail:{...vacant.detail,events:[{...unknown,reference:undefined},{...internal,extractionIssue:'Vérifier la lecture'}]}};
+ assert.equal(resolve(final,reopened).detail.events.some(cspNonRetained),false);
+ // A nominated post follows the existing nominee matching rules; a conflicting
+ // identity must not fall back to an absence-based rejection.
+ const nominated={...final,detail:{...final.detail,events:[{...winner,approved:true,agentId:'Z99999'}]}};
+ assert.equal(resolve(nominated).detail.events.some(cspNonRetained),false);
+});

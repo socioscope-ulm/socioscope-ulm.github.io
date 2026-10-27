@@ -26,8 +26,10 @@ test('draft RD can prepare the matching without applying any candidature, and ap
  assert.equal(projectCsp(data,[{...cr,status:'validated',events:[acknowledged]}],'2026-10-26').data.records.find(r=>r.source===CSP_SOURCE)?.agency,'AMT CENTRE');
  assert.equal(cspProgress('validated',{events:[acknowledged],perEventValidation:true}).approved,1);
 });
-test('only retained candidates, same post and same CSP match; other candidates remain waiting',()=>{
- for(const d of [{...rd,date:'2026-04-24'},{...rd,events:[{...nomination,reference:'26-00002.01'}]},{...rd,events:[{...nomination,selected:false}]},{...rd,events:[{...nomination,name:'AUTRE BOB'}]}])assert.equal(preview([d]).state,'blocked');
+test('only retained candidates match; a vacant post closes only with a fully validated RD',()=>{
+ for(const d of [{...rd,date:'2026-04-24'},{...rd,events:[{...nomination,selected:false}]},{...rd,events:[{...nomination,name:'AUTRE BOB'}]}])assert.equal(preview([d]).state,'blocked');
+ assert.equal(preview([{...rd,events:[{...nomination,reference:'26-00002.01'}]}]).state,'not-retained');
+ assert.equal(preview([{...rd,status:'review',events:[{...nomination,reference:'26-00002.01'}]}]).state,'blocked');
  assert.equal(preview([rd],{...candidate,reference:''}).state,'blocked');
 });
 test('ambiguous or conflicting identities, destinations and situations remain blocked',()=>{
