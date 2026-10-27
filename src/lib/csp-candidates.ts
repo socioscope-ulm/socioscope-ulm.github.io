@@ -1,3 +1,4 @@
+import {activeCspEvents} from './csp-validation.ts';
 import {cumulativeNomination} from './csp-cumulative.ts';
 import {resolveNominationOutcomes} from './csp-nomination-outcomes.ts';
 import {acknowledgeCspDecisions} from './csp-acknowledgement.ts';
@@ -51,7 +52,7 @@ export function prepareCspDocuments(data:AgentData,events:CspEvent[],prior:CspIm
    // Keep earlier approved decisions from this same RD in the reference, but
    // exclude the matched decision so that its GF increase is never replayed.
    const own={...d,events:d.events.filter(other=>other.id!==e.id&&other.selected&&other.approved&&!other.candidacy)};
-   const current:CspImport={id:'csp-current-approved',name:'Décisions déjà validées de ce document',date,status:'validated',events:events.filter(e=>e.approved&&e.selected&&!e.candidacy)};
+   const current:CspImport={id:'csp-current-approved',name:'Décisions déjà validées de ce document',date,status:'validated',events:activeCspEvents({events,perEventValidation:true})};
    const context=[...prior.filter(i=>i.id!==d.id),own,current];
    const scopedContext=context.map(i=>({...i,events:i.events.filter(event=>event.agentId===p.agentId)}));
    const decision=prepareCsp(forAgent(p.agentId!),[e],scopedContext,d.date)[0];

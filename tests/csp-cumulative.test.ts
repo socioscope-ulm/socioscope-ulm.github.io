@@ -52,3 +52,21 @@ test('relative RD movements already cumulate without relying on the ordering of 
   }
  }
 });
+
+test('saved CR acknowledgement does not replay salary before the original dated RD when checking the remaining candidature',()=>{
+ const {rd,cr,document}=fixture(1,1);
+ const original={...document(rd),created:'2026-05-21T10:00:00Z'};
+ const saved={...acknowledgeCspDecisions([rd,cr])[1],status:'validated'};
+ const current={...document(saved),created:'2026-06-02T10:00:00Z'};
+ const applicable=[{...original,events:activeCspEvents(rd.detail)},{...current,events:activeCspEvents(saved.detail)}];
+ const preview=prepareCspDocuments(base,saved.detail.events,applicable,saved.date,[original,current],{id:current.id,name:current.name,status:current.status,documentType:'cr'});
+ assert.equal(preview[0].state,'ready',preview[0].problem);
+ assert.equal(preview[0].after?.nr,125);
+ const isolated=saved.detail.events.map(e=>({...e,selected:e.id==='cr-candidate'||e.approved===true}));
+ const checked=prepareCspDocuments(base,isolated,applicable.filter(d=>d.id!==current.id),saved.date,[original,current],{id:current.id,name:current.name,status:current.status,documentType:'cr'});
+ assert.equal(checked[0].state,'ready',checked[0].problem);
+ assert.deepEqual(checked[0].after,preview[0].after);
+ const projected=projectCsp(base,applicable,'2026-10-26');
+ assert.deepEqual(projected.issues,[]);
+ assert.equal(projected.data.records.find(r=>r.source===CSP_SOURCE)?.nr,125);
+});
