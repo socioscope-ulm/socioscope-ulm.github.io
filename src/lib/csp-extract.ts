@@ -1,3 +1,4 @@
+import {detectCspDocumentType} from './csp-document-type.ts';
 import {installPDFByteMethods} from '../../public/pdf-byte-compat.js';
 import {normalName} from './agents.ts';
 import {deduplicateCsp,validDate} from './csp.ts';
@@ -68,7 +69,15 @@ export function extractCspPages(pages:CspPage[],documentType:'rd'|'cr'='rd'){
  }
  const unique=deduplicateCsp(events);return {date:meetingDates.size===1?[...meetingDates][0]:'',events:unique,reports,rawCount:events.length,duplicates:events.length-unique.length};
 }
-export async function readCspPDF(file:File,progress:(value:string)=>void,documentType:'rd'|'cr'='rd'){
+// The existing explicit CR/RD parsers are shared by automatic and confirmed imports.
+export function analyzeCspDocument(pages:CspPage[],filename:string,override?:'rd'|'cr'){
+ const detection=detectCspDocumentType(pages,filename),documentType=override||detection.documentType;
+ if(!documentType)return {date:extractCspPages(pages,'rd').date,events:[] as CspEvent[],reports:[] as CspPageReport[],rawCount:0,duplicates:0,documentType:undefined,detection,pages};
+ const result=extractCspPages(pages,documentType);
+ if(!result.events.length){if(!override)return {...result,documentType:undefined,detection:{needsConfirmation:true,reason:'Aucune décision reconnue avec le type détecté. Confirmer CR ou RD et vérifier que le PDF contient du texte.'},pages};throw Error('Aucune décision reconnue. Vérifier le type de document et utiliser un PDF avec texte.');}
+ return {...result,documentType,detection,pages};
+}
+export async function readCspPDF(file:File,progress:(value:string)=>void,documentType:'rd'|'cr'|'auto'='rd'){
  if(!/\.pdf$/i.test(file.name)||file.size>20*1024*1024)throw Error('Choisir un PDF avec texte de moins de 20 Mo.');
  installPDFByteMethods();const pdfjs=await import('pdfjs-dist');pdfjs.GlobalWorkerOptions.workerSrc=import.meta.env.BASE_URL+'csp-pdf.worker.mjs';
  const pdf=await pdfjs.getDocument({data:new Uint8Array(await file.arrayBuffer()),isEvalSupported:false}).promise;
@@ -76,9 +85,9 @@ export async function readCspPDF(file:File,progress:(value:string)=>void,documen
   if(pdf.numPages>250)throw Error('Le relevé dépasse 250 pages.');
   const pages:CspPage[]=[];
   for(let page=1;page<=pdf.numPages;page++){
-   progress(`Lecture locale du ${documentType==='cr'?'CR de CSP':'RD'} : page ${page} / ${pdf.numPages}`);const p=await pdf.getPage(page),v=p.getViewport({scale:1});const content=await p.getTextContent();
+   progress(`Lecture locale du document CSP : page ${page} / ${pdf.numPages}`);const p=await pdf.getPage(page),v=p.getViewport({scale:1});const content=await p.getTextContent();
    const items=content.items.filter((i:any)=>typeof i.str==='string'&&Math.abs(i.transform[1])<.1&&Math.abs(i.transform[2])<.1).map((i:any)=>({str:i.str,x:i.transform[4],y:i.transform[5],width:i.width,height:i.height}));pages.push({page,width:v.width,height:v.height,items});p.cleanup();
   }
-  const result=extractCspPages(pages,documentType);if(!result.events.length)throw Error('Aucune décision reconnue. Vérifier le type de document choisi et utiliser un PDF avec texte.');return result;
+  return analyzeCspDocument(pages,file.name,documentType==='auto'?undefined:documentType);
  }finally{await pdf.destroy();}
 }
