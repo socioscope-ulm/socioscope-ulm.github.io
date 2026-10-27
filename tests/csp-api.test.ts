@@ -277,5 +277,14 @@ test('CSP API validates roles, previews without writes, saves one PDF, rejects i
  view=await (await get()).json();assert.equal(view.meta.automaticallyValidated,false);assert.equal(view.meta.pending,1);
  }
 
+ {
+ // A mutation cannot create an arrival until its interunit nature is confirmed.
+ const incoming={id:'interunit',name:'EXEMPLE ARRIVANTE',agentId:'Z00009',kind:'mutation',effective:'2026-05-01',page:1,selected:true,gfDelta:0,gfBefore:7,gfAfter:7,nrBefore:110,nrAfter:110,agency:'AGENCE FICTIVE'};
+ m.rows=[{id:rdId,name:'RD fictif.pdf',date:'2026-04-20',status:'review',count:1,detail:JSON.stringify({kind:'csp',documentType:'rd',events:[incoming]})}];
+ let r=await route.PATCH(request({id:rdId,action:'validate-event',eventId:incoming.id,events:[incoming],checked:true},'PATCH'));assert.equal(r.status,400);
+ r=await route.PATCH(request({id:rdId,action:'validate-event',eventId:incoming.id,events:[{...incoming,newAgent:true}],checked:true},'PATCH'));assert.equal(r.status,200,JSON.stringify(await r.clone().json()));
+ const stored=JSON.parse(m.rows[0].detail).events[0];assert.equal(stored.newAgent,true);assert.equal(stored.recordedAfter.gf,7);assert.equal(stored.recordedAfter.nr,110);assert.equal(m.rows[0].status,'validated');
+ }
+
 });
 

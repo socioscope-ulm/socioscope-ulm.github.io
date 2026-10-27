@@ -1,3 +1,4 @@
+import {mutationArrivalReferences} from './csp-mutation-arrival.ts';
 import {activeCspEvents} from './csp-validation.ts';
 import {cumulativeNomination} from './csp-cumulative.ts';
 import {resolveNominationOutcomes} from './csp-nomination-outcomes.ts';
@@ -15,6 +16,7 @@ export function prepareCspDocuments(data:AgentData,events:CspEvent[],prior:CspIm
  // Keep the saved status: approved ODJ decisions may be the original evidence
  // for acknowledged RD rows. Opening a preview must not turn that ODJ into a
  // draft and make an otherwise complete RD look partially validated.
+ const arrivals=mutationArrivalReferences(events,date,documents,current?.id);events=arrivals.events;
  const evidence=current?[...documents.filter(d=>d.id!==current.id),{...current,date,status:current.status??'review',events}]:documents;
  if(current){const acknowledged=acknowledgeCspDecisions(evidence.map(d=>({...d,detail:{documentType:d.documentType,perEventValidation:true,events:d.events}})));events=acknowledged.find(d=>d.id===current.id)!.detail.events;}
  if(!current){const id='csp-outcome-preview';events=resolveNominationOutcomes([...documents.map(d=>({...d,detail:{documentType:d.documentType,perEventValidation:true,events:d.events}})),{id,name:'Aperçu ODJ',date,status:'review',detail:{documentType:'cr',events}}]).find(d=>d.id===id)!.detail.events;}
@@ -38,6 +40,7 @@ export function prepareCspDocuments(data:AgentData,events:CspEvent[],prior:CspIm
  const scopedData=new Map<string,AgentData>();
  const forAgent=(id:string)=>{let scoped=scopedData.get(id);if(!scoped){scoped={...data,records:records.get(id)||[],cspIdentities:data.cspIdentities?.filter(i=>i.nni===id)};scopedData.set(id,scoped);}return scoped;};
  return preview.map(p=>{
+  if(arrivals.problems.has(p.id)&&!p.approved)return {...p,state:'blocked',problem:arrivals.problems.get(p.id)!};
   if(!p.candidacy||!p.selected)return p;
   if(cspNonRetained(p))return p;
   const blocked=(problem:string):CspPreview=>({...p,state:'blocked',problem});
