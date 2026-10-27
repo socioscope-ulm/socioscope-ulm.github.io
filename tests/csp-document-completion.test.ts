@@ -26,3 +26,24 @@ test('non-retained candidatures complete only with a validated RD as evidence',(
  assert.equal(cspAutomaticCompletion(row,[{...rd,status:'review'},row]),false);
  assert.equal(cspAutomaticCompletion({...row,detail:{...row.detail,events:[{...event,candidacy:true,nonRetained:true}]}},[rd]),false);
 });
+
+test('a RD fully acknowledged by an approved ODJ completes without publishing a second movement',()=>{
+ const source={...odj,status:'validated',detail:{...odj.detail,perEventValidation:true,events:[{...event,approved:true}]}};
+ const pending={...rd,status:'review',detail:{...rd.detail,events:[event]}};
+ const original=structuredClone([source,pending]);
+ const rows=acknowledgeCspDecisions([source,pending]);
+ assert.equal(cspAutomaticCompletion(rows[1],rows),true);
+ assert.equal(rows[1].status,'review');
+ assert.deepEqual(activeCspEvents(rows[1].detail),[]);
+ assert.deepEqual([source,pending],original);
+ for(const changed of [{...source,status:'review'},{...source,status:'disabled:validated'},{...source,detail:{...source.detail,events:[{...event,approved:false}]}}]){
+  const next=acknowledgeCspDecisions([changed,pending]);
+  assert.equal(cspAutomaticCompletion(next[1],next),false);
+ }
+});
+test('a partially acknowledged RD cannot complete',()=>{
+ const source={...odj,status:'validated',detail:{...odj.detail,perEventValidation:true,events:[{...event,approved:true}]}};
+ const pending={...rd,status:'review',detail:{...rd.detail,events:[event,{...event,id:'another',agentId:'Z00009',name:'EXEMPLE BENOIT'}]}};
+ const rows=acknowledgeCspDecisions([source,pending]);
+ assert.equal(cspAutomaticCompletion(rows[1],rows),false);
+});
