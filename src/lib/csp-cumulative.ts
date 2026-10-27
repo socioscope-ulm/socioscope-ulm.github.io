@@ -8,7 +8,7 @@ const same=(a:Salary,b:Salary)=>a.gf===b.gf&&a.nr===b.nr;
 const salary=(v:any):Salary|undefined=>Number.isInteger(v?.gf)&&Number.isInteger(v?.nr)?{gf:v.gf,nr:v.nr}:undefined;
 const person=(a:CspEvent,b:CspEvent)=>!!a.agentId&&a.agentId===b.agentId&&cspNameKey(a.name)===cspNameKey(b.name);
 const explicit=(e:CspEvent,before:Salary,after:Salary)=>[['gfBefore',before.gf],['nrBefore',before.nr],['gfAfter',after.gf],['nrAfter',after.nr]].every(([key,value])=>(e as any)[key]===undefined||(e as any)[key]===value);
-// Two independently validated RD decisions may commute: the CR can describe
+// Two independently validated RD decisions may commute: the ODJ can describe
 // nomination then advancement while the RD records advancement then nomination.
 // Accept only a complete, arithmetically proven pair with the same final total.
 export function cumulativeNomination(target:CspEvent,targets:CspEvent[],source:Source){

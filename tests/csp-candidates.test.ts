@@ -9,16 +9,16 @@ const data:AgentData={sources:[{id:'annual',date:'2025-12-31',primary:true,name:
 const candidate:CspEvent={id:'candidate',candidacy:true,kind:'nomination',name:'EXEMPLE ALICE',page:1,selected:true,effective:'',reference:'26-00001.01',job:'TECHNICIEN CONFIRME',agency:'AMT EST',gfBefore:9,nrBefore:140,note:'Note déjà saisie'};
 const nomination:CspEvent={id:'appointment',kind:'nomination',name:'EXEMPLE ALICE',agentId:'A12345',page:2,selected:true,effective:'2026-04-01',reference:candidate.reference,job:candidate.job,agency:candidate.agency,gfDelta:0,approved:true,recordedBefore:{gf:9,nr:140},recordedAfter:{gf:9,nr:140,job:candidate.job,agency:candidate.agency}};
 const rd:CspImport={id:'csp-rd',name:'RD mars',date:'2026-03-24',documentType:'rd',created:'2026-03-25',status:'validated',events:[nomination]};
-const cr:CspImport={id:'csp-cr',name:'CR mars',date:rd.date,documentType:'cr',created:'2026-10-26',status:'review',events:[candidate]};
+const cr:CspImport={id:'csp-cr',name:'ODJ mars',date:rd.date,documentType:'cr',created:'2026-10-26',status:'review',events:[candidate]};
 const preview=(documents:CspImport[],c: CspEvent=candidate,reference=data)=>prepareCspDocuments(reference,[c],documents.filter(d=>d.status==='validated'),rd.date,documents)[0];
-test('March CR candidature waits while old RD is disabled and becomes ready when the same RD is reactivated',()=>{
+test('March ODJ candidature waits while old RD is disabled and becomes ready when the same RD is reactivated',()=>{
  assert.equal(validateCspEvent(candidate),true);
  const disabled={...rd,status:'disabled:validated'};
  const before=preview([disabled,cr]);assert.equal(before.state,'blocked');assert.match(before.problem,/attente du RD/);
  const ready=preview([rd,cr]);assert.equal(ready.state,'ready');assert.equal(ready.matchedRD?.id,rd.id);assert.equal(ready.matchedRD?.eventId,nomination.id);assert.equal(ready.identityMethod,'rup');assert.equal(ready.effective,'2026-04-01');assert.equal(ready.after?.agency,'AMT EST');
  assert.equal(preview([cr,rd]).state,'ready');assert.equal(preview([{...rd,created:'2026-11-01'},cr]).state,'ready');assert.equal(preview([disabled,cr]).state,'blocked');assert.equal(candidate.effective,'');assert.equal(candidate.note,'Note déjà saisie');
 });
-test('draft RD can prepare the matching without applying any candidature, and approved CR never duplicates a validated nomination',()=>{
+test('draft RD can prepare the matching without applying any candidature, and approved ODJ never duplicates a validated nomination',()=>{
  assert.equal(preview([{...rd,status:'review',events:[{...nomination,approved:undefined}]},cr]).state,'ready');
  const acknowledged={...candidate,agentId:'A12345',approved:true,effective:nomination.effective};
  assert.deepEqual(activeCspEvents({events:[acknowledged],perEventValidation:true}),[]);
@@ -39,7 +39,7 @@ test('ambiguous or conflicting identities, destinations and situations remain bl
  const ambiguous={...data,cspIdentities:[...data.cspIdentities!,{name:candidate.name,nni:'B12345',source:'rup',date:'2026-09-30'}]};assert.equal(preview([rd],candidate,ambiguous).state,'blocked');
  assert.equal(preview([rd],{...candidate,extractionIssue:'Lecture incertaine'}).state,'blocked');
 });
-test('internal nominations with one or two GF become ready in RD and matching CR; other GF gains still require NR after',()=>{
+test('internal nominations with one or two GF become ready in RD and matching ODJ; other GF gains still require NR after',()=>{
  for(const delta of [1,2]){const internal={...rd,status:'review',events:[{...nomination,gfDelta:delta,approved:undefined,recordedBefore:undefined,recordedAfter:undefined}]};const result=preview([internal]);assert.equal(result.state,'ready');assert.equal(result.after?.gf,9+delta);assert.equal(result.after?.nr,150);assert.equal(result.matchedRD?.eventId,nomination.id);assert.equal(preview([],candidate).state,'blocked');}
  const changed={...rd,events:[{...nomination,gfDelta:3,nrAfter:undefined,approved:undefined,recordedBefore:undefined,recordedAfter:undefined}]};assert.match(preview([changed]).problem,/NR après/);
  const complete={...changed,events:[{...changed.events[0],nrAfter:145}]};const ready=preview([complete]);assert.equal(ready.state,'ready');assert.equal(ready.after?.gf,12);assert.equal(ready.after?.nr,145);
@@ -49,7 +49,7 @@ test('same RD earlier approved movements are retained when checking the nominati
  const advance={...nomination,id:'advance',kind:'avancement' as const,effective:'2026-01-01',gfDelta:undefined,nrSteps:1,reference:undefined};
  const d={...rd,events:[advance,{...nomination,nrBefore:145}]};assert.equal(preview([d],{...candidate,nrBefore:145}).state,'ready');
 });
-test('backfill preserves original annotations and approvals, adds only candidates and is idempotent for a validated legacy CR',()=>{
+test('backfill preserves original annotations and approvals, adds only candidates and is idempotent for a validated legacy ODJ',()=>{
  const existing={...nomination,id:'existing',note:'Annotation conservée'};const detail={documentType:'cr',events:[existing],reports:[{page:1,note:'Page contrôlée'}],checked:true};const old=structuredClone(detail);
  const updated=addCrCandidates(detail,'validated',[candidate]);assert.deepEqual(detail,old);assert.equal(updated.candidateVersion,1);assert.equal(updated.perEventValidation,true);assert.equal(updated.events[0].approved,true);assert.equal(updated.events[0].note,existing.note);assert.equal(updated.events[1].approved,undefined);assert.equal(updated.reports[0].note,'Page contrôlée');assert.equal(cspProgress('validated',updated).pending,1);
  assert.equal(addCrCandidates(updated,'validated',[candidate]).events.length,2);

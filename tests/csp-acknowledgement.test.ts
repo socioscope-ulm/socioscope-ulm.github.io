@@ -27,7 +27,7 @@ test('all actual decision types are acknowledged in either direction, including 
  }
 });
 
-test('a relative RD and detailed CR match only when all explicit GF/NR values agree with the validated evidence',()=>{
+test('a relative RD and detailed ODJ match only when all explicit GF/NR values agree with the validated evidence',()=>{
  const source=document('rd','rd',approved({...base,recordedBefore:{gf:11,nr:185},recordedAfter:{gf:11,nr:190}}));
  const detailed={...base,id:'cr-event',gfBefore:11,nrBefore:185,nrAfter:190};
  assert.equal(acknowledgeCspDecisions([source,document('cr','cr',detailed)])[1].detail.events[0].approved,true);

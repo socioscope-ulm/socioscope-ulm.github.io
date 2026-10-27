@@ -10,21 +10,21 @@ import type {CspEvent,CspImport,CspPreview} from './csp.ts';
 import type {AgentData,AgentRecord} from './agents.ts';
 
 // Documents are evidence, including drafts. Only `prior` contains applicable
-// approved movements. Import timestamps never determine CR/RD matching.
+// approved movements. Import timestamps never determine ODJ/RD matching.
 export function prepareCspDocuments(data:AgentData,events:CspEvent[],prior:CspImport[],date:string,documents:CspImport[]=[],current?:{id:string;name:string;documentType:'rd'|'cr';status?:string}):CspPreview[]{
- // Keep the saved status: approved CR decisions may be the original evidence
- // for acknowledged RD rows. Opening a preview must not turn that CR into a
+ // Keep the saved status: approved ODJ decisions may be the original evidence
+ // for acknowledged RD rows. Opening a preview must not turn that ODJ into a
  // draft and make an otherwise complete RD look partially validated.
  const evidence=current?[...documents.filter(d=>d.id!==current.id),{...current,date,status:current.status??'review',events}]:documents;
  if(current){const acknowledged=acknowledgeCspDecisions(evidence.map(d=>({...d,detail:{documentType:d.documentType,perEventValidation:true,events:d.events}})));events=acknowledged.find(d=>d.id===current.id)!.detail.events;}
- if(!current){const id='csp-outcome-preview';events=resolveNominationOutcomes([...documents.map(d=>({...d,detail:{documentType:d.documentType,perEventValidation:true,events:d.events}})),{id,name:'Aperçu CR',date,status:'review',detail:{documentType:'cr',events}}]).find(d=>d.id===id)!.detail.events;}
+ if(!current){const id='csp-outcome-preview';events=resolveNominationOutcomes([...documents.map(d=>({...d,detail:{documentType:d.documentType,perEventValidation:true,events:d.events}})),{id,name:'Aperçu ODJ',date,status:'review',detail:{documentType:'cr',events}}]).find(d=>d.id===id)!.detail.events;}
  const context=prior.map(d=>({...d,events:d.events.filter(e=>!e.salaryReference||salaryReferenceSupported(e,evidence))}));
  const initial=prepareCsp(data,events,context,date);
  const checks=salaryReferenceChecks(data,events,date,evidence);
  // Keep independent annual references independent from documentary fallback.
  for(const p of initial){
   const ref=checks.references.get(p.id);
-  if(ref&&!p.approved&&!['duplicate','covered'].includes(p.state)&&((p.before?.gf!==undefined&&p.before.gf!==ref.gf)||(p.before?.nr!==undefined&&p.before.nr!==ref.nr)))checks.problems.set(p.id,'Mesure salariale : la situation connue contredit les valeurs avant du CR. Vérifier la référence GF/NR.');
+  if(ref&&!p.approved&&!['duplicate','covered'].includes(p.state)&&((p.before?.gf!==undefined&&p.before.gf!==ref.gf)||(p.before?.nr!==undefined&&p.before.nr!==ref.nr)))checks.problems.set(p.id,'Mesure salariale : la situation connue contredit les valeurs avant de l’ODJ. Vérifier la référence GF/NR.');
   if(p.before?.gf!==undefined&&p.before?.nr!==undefined)checks.references.delete(p.id);
  }
  const preview=checks.references.size||checks.problems.size?prepareCsp(data,events,context,date,checks):initial;
@@ -42,7 +42,7 @@ export function prepareCspDocuments(data:AgentData,events:CspEvent[],prior:CspIm
   if(cspNonRetained(p))return p;
   const blocked=(problem:string):CspPreview=>({...p,state:'blocked',problem});
   if(p.extractionIssue)return blocked(p.extractionIssue);
-  if(!p.reference)return blocked('Numéro de publication du poste absent : vérifier le CR.');
+  if(!p.reference)return blocked('Numéro de publication du poste absent : vérifier l’ODJ.');
   const samePost=rd.flatMap(d=>d.events.filter(e=>!e.candidacy&&e.kind==='nomination'&&e.reference===p.reference).map(e=>({d,e})));
   const matches=samePost.filter(({e})=>e.selected&&cspNameKey(e.name)===cspNameKey(p.name));
   if(!matches.length)return blocked('En attente du RD : aucune nomination retenue et concordante pour ce candidat et ce poste.');
@@ -58,7 +58,7 @@ export function prepareCspDocuments(data:AgentData,events:CspEvent[],prior:CspIm
    const decision=prepareCsp(forAgent(p.agentId!),[e],scopedContext,d.date)[0];
    return {d,e,decision};
   });
-  if(checked.some(({decision})=>decision.agentId!==p.agentId))return blocked('Le CR et le RD ne désignent pas le même NNI : vérifier le rapprochement RUP.');
+  if(checked.some(({decision})=>decision.agentId!==p.agentId))return blocked('Le ODJ et le RD ne désignent pas le même NNI : vérifier le rapprochement RUP.');
   if(checked.some(({decision})=>!['ready','scheduled','covered','duplicate'].includes(decision.state)))return blocked('Nomination du RD à vérifier : '+checked.find(({decision})=>!['ready','scheduled','covered','duplicate'].includes(decision.state))!.decision.problem);
   const signature=({e,decision}:{e:CspEvent;decision:CspPreview})=>JSON.stringify([e.effective,e.gfDelta,e.gfAfter,e.nrAfter,e.nrConfirmed,normalName(e.agency),normalName(e.job),decision.after]);
   if(new Set(checked.map(signature)).size>1)return blocked('Plusieurs RD actifs donnent des nominations différentes pour ce poste et ce candidat.');
@@ -67,10 +67,10 @@ export function prepareCspDocuments(data:AgentData,events:CspEvent[],prior:CspIm
   if(!e.agency||!e.job)return blocked('Destination de la nomination incomplète dans le RD : vérifier l’agence et l’emploi.');
   for(const [field,key] of [['gfBefore','gf'],['nrBefore','nr']] as const){
    const expected=e[field]??decision.before?.[key]??e.recordedBefore?.[key];
-   if(p[field]!==undefined&&expected!==undefined&&p[field]!==expected&&!cumulative)return blocked(`${key.toUpperCase()} du candidat dans le CR (${p[field]}) différent de la situation avant du RD (${expected}). Vérifier les documents.`);
+   if(p[field]!==undefined&&expected!==undefined&&p[field]!==expected&&!cumulative)return blocked(`${key.toUpperCase()} du candidat dans l’ODJ (${p[field]}) différent de la situation avant du RD (${expected}). Vérifier les documents.`);
   }
-  for(const field of ['agency','job'] as const)if(p[field]&&e[field]&&normalName(p[field])!==normalName(e[field]))return blocked('Destination différente entre le CR et le RD : vérifier '+(field==='job'?'l’emploi.':'l’agence.'));
-  return {...p,state:decision.state==='scheduled'?'scheduled':'ready',effective:e.effective,before:decision.before||e.recordedBefore,after:decision.after||e.recordedAfter,matchedRD:{id:d.id,eventId:e.id,name:d.name,page:e.page,approved:e.approved===true},problem:(cumulative?'Cumul nomination (+2 NR) et avancement (+'+(cspNRSteps(cumulative.advance)||0)+' NR) concordant malgré un ordre différent entre CR et RD. ':'')+'Candidat retenu confirmé par le RD « '+d.name+' ». La prise de poste est appliquée uniquement par le RD validé, sans double comptage.'};
+  for(const field of ['agency','job'] as const)if(p[field]&&e[field]&&normalName(p[field])!==normalName(e[field]))return blocked('Destination différente entre l’ODJ et le RD : vérifier '+(field==='job'?'l’emploi.':'l’agence.'));
+  return {...p,state:decision.state==='scheduled'?'scheduled':'ready',effective:e.effective,before:decision.before||e.recordedBefore,after:decision.after||e.recordedAfter,matchedRD:{id:d.id,eventId:e.id,name:d.name,page:e.page,approved:e.approved===true},problem:(cumulative?'Cumul nomination (+2 NR) et avancement (+'+(cspNRSteps(cumulative.advance)||0)+' NR) concordant malgré un ordre différent entre ODJ et RD. ':'')+'Candidat retenu confirmé par le RD « '+d.name+' ». La prise de poste est appliquée uniquement par le RD validé, sans double comptage.'};
  });
 }
 

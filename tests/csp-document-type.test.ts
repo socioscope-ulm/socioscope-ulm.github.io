@@ -1,3 +1,4 @@
+import {cspDocumentLabel,cspDocumentText} from '../src/lib/csp-document-label.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {detectCspDocumentType} from '../src/lib/csp-document-type.ts';
@@ -33,4 +34,13 @@ test('automatic and manually confirmed imports use unchanged extraction rules an
  const unclear=[{...rd,items:rd.items.filter(i=>i.str!=='RELEVÉ DE DÉCISIONS')}];
  const waiting=analyzeCspDocument(unclear,'document.pdf');assert.equal(waiting.documentType,undefined);assert.equal(waiting.events.length,0);
  const confirmed=analyzeCspDocument(unclear,'document.pdf','rd');assert.equal(confirmed.documentType,'rd');assert.deepEqual(confirmed.events,extractCspPages(unclear,'rd').events);
+});
+
+test('ODJ titles and filenames reuse the historical parser while RD remains authoritative',()=>{
+ for(const title of ['ORDRE DU JOUR','Ordre du jour de la CSP','ODJ CSP'])assert.equal(detectCspDocumentType([page(title)],'ODJ.pdf').documentType,'cr');
+ assert.equal(detectCspDocumentType([rd],'ODJ_seance.pdf').needsConfirmation,true);
+ const agenda={...cr,items:cr.items.map(i=>i.str==='COMPTE RENDU'?{...i,str:'ORDRE DU JOUR'}:i)};
+ assert.deepEqual(analyzeCspDocument([agenda],'ODJ.pdf').events,extractCspPages([agenda],'cr').events);
+ assert.equal(cspDocumentLabel('cr'),'ODJ');assert.equal(cspDocumentLabel('rd'),'RD');
+ assert.equal(cspDocumentText('Candidature du CR : en attente du RD.'),'Candidature de l’ODJ : en attente du RD.');
 });

@@ -69,12 +69,12 @@ export function extractCspPages(pages:CspPage[],documentType:'rd'|'cr'='rd'){
  }
  const unique=deduplicateCsp(events);return {date:meetingDates.size===1?[...meetingDates][0]:'',events:unique,reports,rawCount:events.length,duplicates:events.length-unique.length};
 }
-// The existing explicit CR/RD parsers are shared by automatic and confirmed imports.
+// The existing explicit ODJ/RD parsers are shared by automatic and confirmed imports.
 export function analyzeCspDocument(pages:CspPage[],filename:string,override?:'rd'|'cr'){
  const detection=detectCspDocumentType(pages,filename),documentType=override||detection.documentType;
  if(!documentType)return {date:extractCspPages(pages,'rd').date,events:[] as CspEvent[],reports:[] as CspPageReport[],rawCount:0,duplicates:0,documentType:undefined,detection,pages};
  const result=extractCspPages(pages,documentType);
- if(!result.events.length){if(!override)return {...result,documentType:undefined,detection:{needsConfirmation:true,reason:'Aucune décision reconnue avec le type détecté. Confirmer CR ou RD et vérifier que le PDF contient du texte.'},pages};throw Error('Aucune décision reconnue. Vérifier le type de document et utiliser un PDF avec texte.');}
+ if(!result.events.length){if(!override)return {...result,documentType:undefined,detection:{needsConfirmation:true,reason:'Aucune décision reconnue avec le type détecté. Confirmer ODJ ou RD et vérifier que le PDF contient du texte.'},pages};throw Error('Aucune décision reconnue. Vérifier le type de document et utiliser un PDF avec texte.');}
  return {...result,documentType,detection,pages};
 }
 export async function readCspPDF(file:File,progress:(value:string)=>void,documentType:'rd'|'cr'|'auto'='rd'){

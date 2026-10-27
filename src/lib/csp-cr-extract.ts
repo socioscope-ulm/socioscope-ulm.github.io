@@ -19,7 +19,7 @@ function crTable(pg:CspPage){
  return {head,header,columns};
 }
 
-// CR tables print absolute situations, whereas the RD tables print increments.
+// ODJ tables print absolute situations, whereas the RD tables print increments.
 // Locate columns by their headers instead of reusing the RD's fixed positions.
 export function extractCrPage(pg:CspPage,kind:CspKind,report:CspPageReport):CspEvent[]{
  const table=crTable(pg);if(!table){report.status='unsupported';report.note='En-tête du tableau non reconnu.';return [];}
@@ -37,7 +37,7 @@ export function extractCrPage(pg:CspPage,kind:CspKind,report:CspPageReport):CspE
  if(dateCol)for(const i of content.filter(i=>inColumn(i,dateCol)&&date(i.str)))if(!anchors.some(y=>Math.abs(y-i.y)<2))anchors.push(i.y);
  if(!anchors.length)anchors.push(...content.filter(i=>inColumn(i,nameCol)).map(i=>i.y));
  const ys=[...new Set(anchors)].sort((a,b)=>b-a),events:CspEvent[]=[];
- if(!nameCol||!dateCol||!ys.length){report.status='unsupported';report.note='Colonnes ou lignes du CR non reconnues : aucune décision appliquée.';return [];}
+ if(!nameCol||!dateCol||!ys.length){report.status='unsupported';report.note='Colonnes ou lignes de l’ODJ non reconnues : aucune décision appliquée.';return [];}
  for(let ix=0;ix<ys.length;ix++){
   const hi=ix?(ys[ix-1]+ys[ix])/2:head.y-12,lo=ix+1<ys.length?(ys[ix]+ys[ix+1])/2:pg.height*.07;
   const band=content.filter(i=>i.y<hi&&i.y>lo),cell=(c?:Column)=>text(band.filter(i=>inColumn(i,c))),num=(c?:Column)=>{const v=cell(c);return /^\d{1,3}$/.test(v)?Number(v):undefined;};
@@ -98,7 +98,7 @@ export function extractCrCandidates(pg:CspPage,report:CspPageReport):CspEvent[]{
   const band=content.filter(i=>i.y<hi&&i.y>lo),cell=(c?:Column)=>text(band.filter(i=>inColumn(i,c)));
   const name=cell(nameCol);if(!name||/PAS DE CANDIDAT/.test(normalName(name)))continue;
   const gf=cell(gfCol),nr=cell(nrCol);
-  events.push({id:`p${pg.page}c${ix}`,name,kind:'nomination',candidacy:true,effective:'',page:pg.page,selected:true,reference:ref,job,agency,team,m3e,...(/^\d{1,2}$/.test(gf)&&+gf>0&&+gf<=30?{gfBefore:+gf}:{}),...(/^\d{1,3}$/.test(nr)&&+nr>0?{nrBefore:+nr}:{}),note:'Candidature du CR : en attente de confirmation par un RD.'});
+  events.push({id:`p${pg.page}c${ix}`,name,kind:'nomination',candidacy:true,effective:'',page:pg.page,selected:true,reference:ref,job,agency,team,m3e,...(/^\d{1,2}$/.test(gf)&&+gf>0&&+gf<=30?{gfBefore:+gf}:{}),...(/^\d{1,3}$/.test(nr)&&+nr>0?{nrBefore:+nr}:{}),note:'Candidature de l’ODJ : en attente de confirmation par un RD.'});
  }
  report.section='Candidatures';report.count=events.length;report.status=events.length?'read':text(pg.items).includes('PAS DE CANDIDAT')?'empty':'unsupported';
  report.note=events.length?'Candidatures en attente du RD : aucune prise de poste appliquée.':report.status==='empty'?'Aucun candidat : aucun mouvement individuel.':'Aucune candidature lisible : vérifier le PDF.';

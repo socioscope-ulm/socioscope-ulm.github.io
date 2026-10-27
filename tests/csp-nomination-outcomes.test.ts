@@ -9,10 +9,10 @@ const candidate:CspEvent={id:'winner-cr',name:'EXEMPLE ALICE',agentId:'Z00001',k
 const unknown={...candidate,id:'unknown-cr',name:'EXEMPLE BOB',agentId:undefined};
 const internal={...candidate,id:'internal-cr',name:'EXEMPLE CHARLIE',agentId:'Z00002'};
 const winner={...candidate,id:'winner-rd',candidacy:false,effective:'2026-04-01',gfDelta:1};
-const cr={id:'csp-cr',name:'CR fictif',date:'2026-03-24',status:'review',detail:{documentType:'cr',perEventValidation:true,events:[candidate,unknown,internal]}};
+const cr={id:'csp-cr',name:'ODJ fictif',date:'2026-03-24',status:'review',detail:{documentType:'cr',perEventValidation:true,events:[candidate,unknown,internal]}};
 const rd={id:'csp-rd',name:'RD fictif',date:cr.date,status:'review',detail:{documentType:'rd',perEventValidation:true,events:[winner]}};
 const resolve=(source=rd,target=cr)=>resolveNominationOutcomes([target,source])[0];
-test('an active RD automatically treats the other CR candidates, including unknown identities, without approval or career movements',()=>{
+test('an active RD automatically treats the other ODJ candidates, including unknown identities, without approval or career movements',()=>{
  const original=structuredClone([cr,rd]);const result=resolve();
  assert.equal(result.detail.events[0].nonRetainedByRD,undefined);
  for(const e of result.detail.events.slice(1)){assert.equal(cspNonRetained(e),true);assert.equal(e.nonRetainedByRD?.id,rd.id);assert.equal(e.approved,undefined);assert.equal(e.nonRetained,undefined);}
@@ -21,7 +21,7 @@ test('an active RD automatically treats the other CR candidates, including unkno
  assert.deepEqual(activeCspEvents(result.detail),[]);
  assert.deepEqual([cr,rd],original);
  assert.deepEqual(resolveNominationOutcomes([result,rd])[0],result);
- // Arrival order and CR/RD timestamps have no bearing on the classification.
+ // Arrival order and ODJ/RD timestamps have no bearing on the classification.
  assert.deepEqual(resolveNominationOutcomes([rd,cr])[1],result);
 });
 test('no matching post, winner, meeting or clear selection means no inferred rejection',()=>{

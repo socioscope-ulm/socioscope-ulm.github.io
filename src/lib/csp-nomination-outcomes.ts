@@ -7,7 +7,7 @@ const post=(date:string,reference:string)=>JSON.stringify([date,reference.trim()
 const active=(d:Document)=>['review','validated'].includes(d.status);
 const complete=(d:Document)=>d.status==='validated'&&!!d.detail.events?.some(e=>e.selected)&&d.detail.events.every(e=>!e.selected||!e.candidacy&&!e.extractionIssue&&validDate(e.effective)&&(!d.detail.perEventValidation||e.approved===true));
 // This is a documentary disposition, never an approval or a career movement.
-// Rebuild it on every read so that withdrawing/correcting the RD reopens the CR.
+// Rebuild it on every read so that withdrawing/correcting the RD reopens the ODJ.
 export function resolveNominationOutcomes<T extends Document>(rows:T[]):T[]{
  const nominations=new Map<string,{row:T;event:CspEvent}[]>();
  for(const row of rows)if(active(row)&&row.detail.documentType!=='cr'&&validDate(row.date))for(const event of row.detail.events||[]){
@@ -37,7 +37,7 @@ export function resolveNominationOutcomes<T extends Document>(rows:T[]):T[]{
   const byName=new Map<string,Set<string>>(),byDocument=new Map<string,Set<string>>();
   for(const m of group){const name=cspNameKey(m.event.name),value=signature(m.event),versions=byName.get(name)||new Set<string>(),list=byDocument.get(m.row.id)||new Set<string>();versions.add(value);list.add(value);byName.set(name,versions);byDocument.set(m.row.id,list);}
   if([...byName.values()].some(versions=>versions.size!==1)||new Set([...byDocument.values()].map(list=>JSON.stringify([...list].sort()))).size!==1)return e;
-  // Require every nominee to be present on this CR post. Never infer rejection
+  // Require every nominee to be present on this ODJ post. Never infer rejection
   // merely from the absence of an appointment for the current candidate.
   for(const {event:winner} of group){
    const winners=candidates.get(post(cspNameKey(winner.name),e.reference))||[];

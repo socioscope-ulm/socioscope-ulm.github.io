@@ -28,7 +28,7 @@ export function salaryReferenceChecks(data:AgentData,events:CspEvent[],date:stri
   if(!complete.length)continue;
   const first=complete[0],gf=first.e.gfBefore!,nr=first.e.nrBefore!,nrAfter=first.e.nrAfter!,steps=cspNRSteps(first.e);
   const conflict=[...matching.map(v=>v.e),e].some(v=>v.extractionIssue||v.agentId&&v.agentId!==nni||cspNRSteps(v)!==steps||(v.gfDelta??0)!==0||v.gfBefore!==undefined&&v.gfBefore!==gf||v.gfAfter!==undefined&&v.gfAfter!==gf||v.nrBefore!==undefined&&v.nrBefore!==nr||v.nrAfter!==undefined&&v.nrAfter!==nrAfter);
-  if(!steps||nrAfter!==nr+steps*5||conflict){problems.set(e.id,'Mesure salariale : valeurs CR/RD contradictoires ou progression NR incohérente. Vérifier les documents.');continue;}
+  if(!steps||nrAfter!==nr+steps*5||conflict){problems.set(e.id,'Mesure salariale : valeurs ODJ/RD contradictoires ou progression NR incohérente. Vérifier les documents.');continue;}
   const proof=(v:typeof first)=>({id:v.d.id,name:v.d.name,eventId:v.e.id,page:v.e.page});
   references.set(e.id,{nni,gf,nr,nrAfter,steps,effective:e.effective,agency:rup[0].agency,rup:{source:rup[0].source,date:rup[0].date},cr:proof(first),rd:proof(rd[0])});
  }

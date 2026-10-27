@@ -16,11 +16,11 @@ function fixture(gf:number,steps:number){
  const candidate:CspEvent={...common,id:'cr-candidate',kind:'nomination',candidacy:true,reference:appointment.reference,effective:'',gfBefore:7,nrBefore:110,approved:undefined};
  const salary:CspEvent={...common,id:'cr-advance',kind:'avancement',nrSteps:steps,gfBefore:7+gf,nrBefore:120,nrAfter:120+steps*5,approved:undefined};
  const rd={id:'csp-rd',name:'RD fictif',date:'2026-05-20',status:'validated',detail:{documentType:'rd',perEventValidation:true,events:[advance,appointment]}};
- const cr={id:'csp-cr',name:'CR fictif',date:rd.date,status:'review',detail:{documentType:'cr',perEventValidation:true,events:[candidate,salary]}};
+ const cr={id:'csp-cr',name:'ODJ fictif',date:rd.date,status:'review',detail:{documentType:'cr',perEventValidation:true,events:[candidate,salary]}};
  const document=(d:typeof cr):CspImport=>({...d,documentType:d.detail.documentType as 'cr'|'rd',events:d.detail.events});
  return {rd,cr,document,advance,appointment,candidate,salary};
 }
-test('nomination (+1 or +2 GF, +2 NR) cumulates with +1 or +2 NR even when CR and RD describe opposite orders',()=>{
+test('nomination (+1 or +2 GF, +2 NR) cumulates with +1 or +2 NR even when ODJ and RD describe opposite orders',()=>{
  for(const gf of [1,2])for(const steps of [1,2]){
   const {rd,cr,document}=fixture(gf,steps),original=structuredClone([rd,cr]);
   const matched=acknowledgeCspDecisions([rd,cr]);const salary=matched[1].detail.events[1];
@@ -53,7 +53,7 @@ test('relative RD movements already cumulate without relying on the ordering of 
  }
 });
 
-test('saved CR acknowledgement does not replay salary before the original dated RD when checking the remaining candidature',()=>{
+test('saved ODJ acknowledgement does not replay salary before the original dated RD when checking the remaining candidature',()=>{
  const {rd,cr,document}=fixture(1,1);
  const original={...document(rd),created:'2026-05-21T10:00:00Z'};
  const saved={...acknowledgeCspDecisions([rd,cr])[1],status:'validated'};

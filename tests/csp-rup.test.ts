@@ -38,7 +38,7 @@ test('mutation d’office is ready with GF/NR preserved and destination applied,
 });
 
 
-test('CR candidates consult the active RUP even when the NNI is already present in an annual photograph',async()=>{
+test('ODJ candidates consult the active RUP even when the NNI is already present in an annual photograph',async()=>{
  const {build}=await import('esbuild');(globalThis as any).__candidateRupLoads=0;
  const b=await build({entryPoints:[new URL('../src/lib/agents-store.ts',import.meta.url).pathname],bundle:true,write:false,platform:'node',format:'esm',plugins:[{name:'candidate-rup-fixture',setup(build){
   build.onResolve({filter:/\/(store|seeds)(\.ts)?$/},a=>({path:a.path.split('/').at(-1)!.replace('.ts',''),namespace:'candidate-rup-fixture'}));

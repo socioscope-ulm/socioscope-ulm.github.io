@@ -7,7 +7,7 @@ import type {CspEvent} from '../src/lib/csp.ts';
 
 const event:CspEvent={id:'one',kind:'titularisation',name:'EXEMPLE ALICE',agentId:'A12345',effective:'2024-12-16',selected:true,page:2,note:'Annotation conservée'};
 const rd={id:'rd',name:'RD mars',date:'2026-03-24',status:'validated',detail:{documentType:'rd',perEventValidation:true,events:[{...event,approved:true,approvedAt:'2026-10-25T15:30:20Z'}]}};
-const cr={id:'cr',name:'CR mars',date:rd.date,status:'validated',detail:{documentType:'cr',perEventValidation:true,events:[event],reports:[{page:2,note:'Page contrôlée'}]}};
+const cr={id:'cr',name:'ODJ mars',date:rd.date,status:'validated',detail:{documentType:'cr',perEventValidation:true,events:[event],reports:[{page:2,note:'Page contrôlée'}]}};
 
 test('25 exact titularisations leave pending automatically without mutating stored documents or replaying an event',()=>{
  const events=Array.from({length:25},(_,i)=>({...event,id:'e'+i,name:'EXEMPLE '+i,agentId:'A'+String(i).padStart(5,'0')}));

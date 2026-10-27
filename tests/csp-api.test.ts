@@ -98,7 +98,7 @@ test('CSP API validates roles, previews without writes, saves one PDF, rejects i
  // A single future decision must not borrow an unapproved prerequisite.
  m.rows=[{id:individualId,date:'2026-03-24',status:'review',count:2,detail:JSON.stringify({kind:'csp',events:[ready,future]})}];
  response=await route.PATCH(request({id:individualId,action:'validate-event',eventId:future.id,checked:true,events:[ready,future]},'PATCH'));assert.equal(response.status,400);assert.match((await response.json()).error,/dépend/);
- // CR documents use the same workflow, persist their type and cannot approve
+ // ODJ documents use the same workflow, persist their type and cannot approve
  // extraction conflicts until the administrator has reviewed and corrected them.
  const crEvent={...ready,extractionIssue:'Deux versions de la situation sont présentes.'};
  m.rows=[];const crForm=new FormData();crForm.append('file',new File(['%PDF-cr-fixture'],'cr.pdf',{type:'application/pdf'}));crForm.append('extraction',JSON.stringify({date:'2026-03-24',documentType:'cr',events:[crEvent],reports:[]}));
@@ -110,13 +110,13 @@ test('CSP API validates roles, previews without writes, saves one PDF, rejects i
  assert.equal((await route.PATCH(request({id:crBatch.id,action:'disable'},'PATCH'))).status,200);
  assert.equal((await route.PATCH(request({id:crBatch.id,action:'enable',checked:true},'PATCH'))).status,200);
 
- // Backfill a previously imported CR after a partially validated March RD.
+ // Backfill a previously imported ODJ after a partially validated March RD.
  // Activation order does not matter; PDF and approved rows remain unchanged.
  const rdId='csp-march-rd',crId='csp-march-cr';
  const named={...ready,name:'TEST ALICE',pages:[1],approved:true,note:'Annotation validée conservée'};
  const picked={id:'picked',name:'TEST ALICE',agentId:'A12345',kind:'nomination',effective:'2026-04-01',gfDelta:0,nrBefore:205,agency:'AMTE',job:'Responsable',reference:'26-00001.01',page:2,selected:true,approved:true};
  const candidature={id:'candidate',name:'TEST ALICE',kind:'nomination',candidacy:true,effective:'',gfBefore:9,nrBefore:205,agency:'AMTE',job:'Responsable',reference:picked.reference,page:5,selected:true};
- m.rows=[{id:rdId,date:'2026-03-24',name:'RD mars.pdf',status:'disabled:validated',count:1,detail:JSON.stringify({kind:'csp',events:[picked],perEventValidation:true})},{id:crId,date:'2026-03-24',name:'CR mars.pdf',status:'validated',count:1,detail:JSON.stringify({kind:'csp',documentType:'cr',events:[named],reports:[{page:1,note:'Annotation de page'}]})}];
+ m.rows=[{id:rdId,date:'2026-03-24',name:'RD mars.pdf',status:'disabled:validated',count:1,detail:JSON.stringify({kind:'csp',events:[picked],perEventValidation:true})},{id:crId,date:'2026-03-24',name:'ODJ mars.pdf',status:'validated',count:1,detail:JSON.stringify({kind:'csp',documentType:'cr',events:[named],reports:[{page:1,note:'Annotation de page'}]})}];
  const beforeBackfillPuts=m.puts.length;
  response=await route.PATCH(request({id:crId,action:'add-candidates',events:[candidature]},'PATCH','viewer'));assert.equal(response.status,403);
  response=await route.PATCH(request({id:crId,action:'add-candidates',events:[candidature]},'PATCH'));assert.equal(response.status,200);
@@ -133,13 +133,13 @@ test('CSP API validates roles, previews without writes, saves one PDF, rejects i
  m.rows=[prior,{id:individualId,date:'2026-03-24',status:'review',count:1,detail:JSON.stringify({kind:'csp',events:[ready]})}];
  response=await route.PATCH(request({id:individualId,action:'validate-event',eventId:ready.id,checked:true,events:[ready]},'PATCH'));assert.equal(response.status,200);assert.equal(JSON.parse(m.rows[1].detail).events[0].approved,true);
 
- // CR/RD salary references are regenerated server-side during individual and
+ // ODJ/RD salary references are regenerated server-side during individual and
  // state validation; drafts, annotations, PDFs and existing approvals survive.
  // Fictional identity and salary figures; no production personnel data.
  const salaryRD={id:'salary-rd',name:'EXEMPLE BOB',agentId:'Z00001',identityMethod:'rup',kind:'mesure',effective:'2026-01-01',nrSteps:1,page:50,selected:true,note:'Motif conservé'};
  const salaryCR={...salaryRD,id:'salary-cr',gfBefore:8,nrBefore:120,nrAfter:125,page:40};
  (m as any).identities=[{name:salaryRD.name,nni:'Z00001',source:'rup-active',date:'2026-09-30',agency:'AMT OUEST'}];
- m.rows=[{id:rdId,name:'RD mars.pdf',date:'2026-03-24',status:'validated',count:1,detail:JSON.stringify({kind:'csp',perEventValidation:true,events:[salaryRD]})},{id:crId,name:'CR mars.pdf',date:'2026-03-24',status:'validated',count:1,detail:JSON.stringify({kind:'csp',documentType:'cr',perEventValidation:true,events:[salaryCR],reports:[{page:40,note:'Vérifié'}]})}];
+ m.rows=[{id:rdId,name:'RD mars.pdf',date:'2026-03-24',status:'validated',count:1,detail:JSON.stringify({kind:'csp',perEventValidation:true,events:[salaryRD]})},{id:crId,name:'ODJ mars.pdf',date:'2026-03-24',status:'validated',count:1,detail:JSON.stringify({kind:'csp',documentType:'cr',perEventValidation:true,events:[salaryCR],reports:[{page:40,note:'Vérifié'}]})}];
  const noWrites=m.puts.length;
  const salaryPreview=await (await route.POST(request({id:rdId,date:'2026-03-24',events:[salaryRD]}))).json();assert.equal(salaryPreview.events[0].state,'ready');assert.equal(salaryPreview.events[0].before.nr,120);assert.equal(salaryPreview.events[0].after.nr,125);
  response=await route.PATCH(request({id:rdId,action:'validate-event',eventId:salaryRD.id,checked:true,events:[salaryRD]},'PATCH'));assert.equal(response.status,200,JSON.stringify(await response.clone().json()));
@@ -151,7 +151,7 @@ test('CSP API validates roles, previews without writes, saves one PDF, rejects i
  // an authorized later save compares the original stored detail, not the view.
  const titular={id:'titular',name:'TEST ALICE',agentId:'A12345',kind:'titularisation',effective:'2024-12-16',page:2,pages:[2],selected:true,note:'Note conservée'};
  const unresolved={...pending,id:'still-pending'};
- m.rows=[{id:rdId,name:'RD mars.pdf',date:'2026-03-24',status:'validated',count:1,detail:JSON.stringify({kind:'csp',perEventValidation:true,events:[{...titular,approved:true}]})},{id:crId,name:'CR mars.pdf',date:'2026-03-24',status:'validated',count:2,detail:JSON.stringify({kind:'csp',documentType:'cr',perEventValidation:true,events:[titular,unresolved],reports:[{page:2,note:'Page conservée'}]})}];
+ m.rows=[{id:rdId,name:'RD mars.pdf',date:'2026-03-24',status:'validated',count:1,detail:JSON.stringify({kind:'csp',perEventValidation:true,events:[{...titular,approved:true}]})},{id:crId,name:'ODJ mars.pdf',date:'2026-03-24',status:'validated',count:2,detail:JSON.stringify({kind:'csp',documentType:'cr',perEventValidation:true,events:[titular,unresolved],reports:[{page:2,note:'Page conservée'}]})}];
  const raw=m.rows[1].detail;const writes=m.queries.filter(q=>q.startsWith('UPDATE')).length;
  const acknowledged=await (await route.GET(new Request('https://fixture.test/api/csp?id='+crId,{headers}))).json();assert.equal(acknowledged.meta.approved,1);assert.equal(acknowledged.meta.pending,1);assert.equal(acknowledged.events[0].acknowledgedByDocument.id,rdId);assert.equal(m.rows[1].detail,raw);assert.equal(m.queries.filter(q=>q.startsWith('UPDATE')).length,writes);
  const previewAcknowledged=await (await route.POST(request({id:crId,date:'2026-03-24',events:[titular,unresolved]}))).json();assert.ok(previewAcknowledged.events,JSON.stringify(previewAcknowledged));assert.equal(previewAcknowledged.events[0].state,'duplicate');assert.equal(previewAcknowledged.events[0].approved,true);assert.equal(previewAcknowledged.events[0].matchedDocument.id,rdId);assert.equal(m.rows[1].detail,raw);
@@ -160,10 +160,10 @@ test('CSP API validates roles, previews without writes, saves one PDF, rejects i
  response=await route.PATCH(request({id:rdId,action:'disable'},'PATCH'));assert.equal(response.status,200);
  const restored=await (await route.GET(new Request('https://fixture.test/api/csp?id='+crId,{headers}))).json();assert.equal(restored.events[0].approved,undefined);assert.equal(restored.meta.pending,2);assert.equal(restored.events[0].note,'Note conservée');
 
- // Validate in the CR first: the draft RD must immediately leave pending too.
+ // Validate in the ODJ first: the draft RD must immediately leave pending too.
  const crFirst={...ready,id:'cr-first',pages:[1],gfBefore:9,nrBefore:200,nrAfter:205};
  const rdSecond={...ready,id:'rd-second',pages:[1]};
- m.rows=[{id:crId,name:'CR premier.pdf',date:'2026-03-24',status:'review',count:1,detail:JSON.stringify({kind:'csp',documentType:'cr',events:[crFirst]})},{id:rdId,name:'RD second.pdf',date:'2026-03-24',status:'review',count:1,detail:JSON.stringify({kind:'csp',documentType:'rd',events:[rdSecond]})}];
+ m.rows=[{id:crId,name:'ODJ premier.pdf',date:'2026-03-24',status:'review',count:1,detail:JSON.stringify({kind:'csp',documentType:'cr',events:[crFirst]})},{id:rdId,name:'RD second.pdf',date:'2026-03-24',status:'review',count:1,detail:JSON.stringify({kind:'csp',documentType:'rd',events:[rdSecond]})}];
  response=await route.PATCH(request({id:crId,action:'validate-event',eventId:crFirst.id,checked:true,events:[crFirst]},'PATCH'));assert.equal(response.status,200,JSON.stringify(await response.clone().json()));
  const reverseMatch=await (await route.GET(new Request('https://fixture.test/api/csp?id='+rdId,{headers}))).json();assert.equal(reverseMatch.meta.approved,1);assert.equal(reverseMatch.meta.pending,0);assert.equal(reverseMatch.events[0].acknowledgedByDocument.documentType,'cr');
  const reversePreview=await (await route.POST(request({id:rdId,date:'2026-03-24',events:[rdSecond]}))).json();assert.equal(reversePreview.events[0].state,'duplicate');assert.equal(reversePreview.events[0].matchedDocument.id,crId);
@@ -176,7 +176,7 @@ test('CSP API validates roles, previews without writes, saves one PDF, rejects i
  // it without revising or withdrawing the already applied decision.
  const unknown={id:'unknown-candidate',name:'EXEMPLE INCONNU',kind:'nomination',candidacy:true,effective:'',page:1,selected:true,reference:'SYNTHETIC-POST'};
  const approvedDecision={...ready,pages:[1],approved:true,recordedBefore:{gf:9,nr:200},recordedAfter:{gf:9,nr:205}};
- m.rows=[{id:crId,name:'CR fictif.pdf',date:'2026-03-24',status:'validated',count:2,detail:JSON.stringify({kind:'csp',documentType:'cr',perEventValidation:true,events:[approvedDecision,unknown]})}];
+ m.rows=[{id:crId,name:'ODJ fictif.pdf',date:'2026-03-24',status:'validated',count:2,detail:JSON.stringify({kind:'csp',documentType:'cr',perEventValidation:true,events:[approvedDecision,unknown]})}];
  response=await route.PATCH(request({id:crId,action:'save',events:[approvedDecision,{...unknown,nonRetained:true}]},'PATCH'));
  assert.equal(response.status,200);report=await response.json();assert.equal(report.pending,0);assert.equal(report.approved,1);
  let closure=JSON.parse(m.rows[0].detail);assert.equal(closure.events[1].approved,undefined);assert.equal(closure.events[1].nonRetained,true);assert.deepEqual(closure.events[0],approvedDecision);
@@ -185,11 +185,11 @@ test('CSP API validates roles, previews without writes, saves one PDF, rejects i
  assert.equal(response.status,200);assert.equal((await response.json()).pending,1);assert.deepEqual(JSON.parse(m.rows[0].detail).events[0],approvedDecision);
 
  // An internal RD award of either one or two GF provides exactly two NR
- // steps; the matching CR candidate uses the same calculation without applying it.
+ // steps; the matching ODJ candidate uses the same calculation without applying it.
  for(const delta of [1,2]){
   const internal={id:'internal-nomination',name:'TEST ALICE',agentId:'A12345',kind:'nomination',effective:'2026-04-01',gfDelta:delta,page:1,pages:[1],selected:true,reference:'SYNTHETIC-INTERNAL',agency:'AMTE',job:'EMPLOI FICTIF'};
   const candidacy={id:'internal-candidate',name:internal.name,kind:'nomination',candidacy:true,effective:'',page:1,pages:[1],selected:true,reference:internal.reference,gfBefore:9,nrBefore:200};
-  m.rows=[{id:rdId,name:'RD fictif.pdf',date:'2026-03-24',status:'review',count:1,detail:JSON.stringify({kind:'csp',documentType:'rd',events:[internal]})},{id:crId,name:'CR fictif.pdf',date:'2026-03-24',status:'review',count:1,detail:JSON.stringify({kind:'csp',documentType:'cr',events:[candidacy]})}];
+  m.rows=[{id:rdId,name:'RD fictif.pdf',date:'2026-03-24',status:'review',count:1,detail:JSON.stringify({kind:'csp',documentType:'rd',events:[internal]})},{id:crId,name:'ODJ fictif.pdf',date:'2026-03-24',status:'review',count:1,detail:JSON.stringify({kind:'csp',documentType:'cr',events:[candidacy]})}];
   for(const [id,events] of [[rdId,[internal]],[crId,[candidacy]]] as const){const prepared=await (await route.POST(request({id,date:'2026-03-24',events}))).json();assert.equal(prepared.events[0].state,'ready');assert.equal(prepared.events[0].after.gf,9+delta);assert.equal(prepared.events[0].after.nr,210);}
   response=await route.PATCH(request({id:rdId,action:'validate-event',eventId:internal.id,events:[internal],checked:true},'PATCH'));assert.equal(response.status,200);
   const validated=JSON.parse(m.rows[0].detail).events[0];assert.equal(validated.recordedAfter.nr,210);assert.equal(validated.recordedAfter.gf,9+delta);
@@ -200,7 +200,7 @@ test('CSP API validates roles, previews without writes, saves one PDF, rejects i
  const notChosen={...selectedCandidate,id:'other-cr',name:'TEST ALICE',agentId:'A12345'};
  const unknownCandidate={...selectedCandidate,id:'external-cr',name:'EXEMPLE BOB',agentId:undefined};
  const appointment={...selectedCandidate,id:'chosen-rd',candidacy:false,effective:'2026-04-01',newAgent:true,gfAfter:8,nrAfter:120,agency:'AMTE',job:'EMPLOI FICTIF',approved:true};
- m.rows=[{id:rdId,name:'RD fictif.pdf',date:'2026-03-24',status:'validated',count:1,detail:JSON.stringify({kind:'csp',documentType:'rd',perEventValidation:true,events:[appointment]})},{id:crId,name:'CR fictif.pdf',date:'2026-03-24',status:'review',count:3,detail:JSON.stringify({kind:'csp',documentType:'cr',perEventValidation:true,events:[selectedCandidate,notChosen,unknownCandidate]})}];
+ m.rows=[{id:rdId,name:'RD fictif.pdf',date:'2026-03-24',status:'validated',count:1,detail:JSON.stringify({kind:'csp',documentType:'rd',perEventValidation:true,events:[appointment]})},{id:crId,name:'ODJ fictif.pdf',date:'2026-03-24',status:'review',count:3,detail:JSON.stringify({kind:'csp',documentType:'cr',perEventValidation:true,events:[selectedCandidate,notChosen,unknownCandidate]})}];
  const originalRows=structuredClone(m.rows);
  let auto=await (await route.GET(new Request('https://fixture.test/api/csp?id='+crId,{headers}))).json();
  assert.equal(auto.meta.pending,1);assert.equal(auto.meta.approved,0);assert.equal(auto.events[0].nonRetainedByRD,undefined);
@@ -224,16 +224,16 @@ test('CSP API validates roles, previews without writes, saves one PDF, rejects i
  separate=JSON.parse(m.rows[0].detail).events;assert.deepEqual(separate[0],publishedAward);assert.equal(separate[1].approved,true);assert.equal(separate[1].recordedBefore.nr,205);assert.equal(separate[1].recordedAfter.nr,205);assert.equal(separate[1].recordedAfter.agency,'AMTE');
  response=await route.PATCH(request({id:rdId,action:'validate-event',eventId:transfer.id,events:separate,checked:true},'PATCH'));assert.equal(response.status,409);
 
- // A completed RD also closes the sole CR candidature on an unfilled post.
+ // A completed RD also closes the sole ODJ candidature on an unfilled post.
  const vacantCandidate={id:'vacant-candidate',name:'EXEMPLE CANDIDAT',kind:'nomination',candidacy:true,effective:'',page:1,reference:'POSTE-NON-POURVU-FICTIF',selected:true};
- m.rows=[{id:rdId,name:'RD fictif.pdf',date:'2026-03-24',status:'validated',count:1,detail:JSON.stringify({kind:'csp',documentType:'rd',perEventValidation:true,events:[{...award,approved:true}]})},{id:crId,name:'CR fictif.pdf',date:'2026-03-24',status:'validated',count:1,detail:JSON.stringify({kind:'csp',documentType:'cr',perEventValidation:true,events:[vacantCandidate]})}];
+ m.rows=[{id:rdId,name:'RD fictif.pdf',date:'2026-03-24',status:'validated',count:1,detail:JSON.stringify({kind:'csp',documentType:'rd',perEventValidation:true,events:[{...award,approved:true}]})},{id:crId,name:'ODJ fictif.pdf',date:'2026-03-24',status:'validated',count:1,detail:JSON.stringify({kind:'csp',documentType:'cr',perEventValidation:true,events:[vacantCandidate]})}];
  const beforeVacant=structuredClone(m.rows);
  let vacant=await (await route.GET(new Request('https://fixture.test/api/csp?id='+crId,{headers}))).json();assert.equal(vacant.meta.pending,0);assert.equal(vacant.events[0].nonRetainedByRD.reason,'unfilled-post');assert.equal(vacant.events[0].approved,undefined);assert.deepEqual(m.rows,beforeVacant);
  preview=await (await route.POST(request({id:crId,date:'2026-03-24',events:vacant.events}))).json();assert.equal(preview.events[0].state,'not-retained');assert.equal(preview.events[0].after,undefined);
- // The RD can be complete through acknowledgements of original CR approvals.
- // Previewing that validated CR must preserve its evidentiary status.
+ // The RD can be complete through acknowledgements of original ODJ approvals.
+ // Previewing that validated ODJ must preserve its evidentiary status.
  const originalSalary={...award,id:'original-cr-award',pages:[1],approved:true,recordedBefore:{gf:9,nr:200},recordedAfter:{gf:9,nr:205}};
- const rdSalary={...originalSalary,id:'acknowledged-rd-award',acknowledgedByDocument:{id:crId,eventId:originalSalary.id,name:'CR fictif.pdf',page:1,documentType:'cr'}};
+ const rdSalary={...originalSalary,id:'acknowledged-rd-award',acknowledgedByDocument:{id:crId,eventId:originalSalary.id,name:'ODJ fictif.pdf',page:1,documentType:'cr'}};
  m.rows[0].detail=JSON.stringify({kind:'csp',documentType:'rd',perEventValidation:true,events:[rdSalary]});
  m.rows[1].detail=JSON.stringify({kind:'csp',documentType:'cr',perEventValidation:true,events:[originalSalary,vacantCandidate]});
  vacant=await (await route.GET(new Request('https://fixture.test/api/csp?id='+crId,{headers}))).json();assert.equal(vacant.meta.pending,0);assert.equal(vacant.events[1].nonRetainedByRD.reason,'unfilled-post');
