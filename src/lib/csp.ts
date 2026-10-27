@@ -141,7 +141,7 @@ export function projectCsp(data:AgentData,imports:CspImport[],asOf=parisToday(),
 function posthumousReference(current:AgentRecord|undefined,e:CspEvent,historical?:AgentRecord){
  if(e.kind!=='posthume'||!current||e.nrBefore===undefined||current.nr===e.nrBefore)return {before:current||historical,historicalOnly:false};
  const steps=cspNRSteps(e);
- if(!steps||steps<1||e.nrAfter===undefined||e.nrAfter!==e.nrBefore+steps*5)return {before:current,historicalOnly:false};
+ if(!steps||steps<1||(e.nrAfter!==undefined&&e.nrAfter!==e.nrBefore+steps*5))return {before:current,historicalOnly:false};
  if(e.gfBefore!==undefined&&current.gf!==undefined&&historical?.gf!==e.gfBefore&&current.gf!==e.gfBefore)return {before:current,historicalOnly:false};
  const before=historical?.nr===e.nrBefore?historical:{...current,nr:e.nrBefore};
  return {before,historicalOnly:true};
