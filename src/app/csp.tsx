@@ -62,7 +62,8 @@ function CspMethod(){
  return <section className="panel csp-method" aria-labelledby="csp-method-title">
   <h2 id="csp-method-title">Méthode de travail — CR puis RD</h2>
   <p>Importer le <b>CR</b> pour préparer les situations, puis importer ou réactiver le <b>RD de la même CSP</b> pour confirmer les nominations. Les NNI sont recherchés dans les RUP actifs.</p>
-  <div className="table-scroll"><table><thead><tr><th>Situation restant à vérifier</th><th>Où terminer les corrections et la validation ?</th></tr></thead><tbody>
+  <p><b>Mode d’emploi général :</b> les exemples ci-dessous indiquent où effectuer la première validation. Ils ne signalent aucune situation en attente dans vos documents. Le statut de chaque CR ou RD est indiqué dans « Relevés enregistrés ».</p>
+  <div className="table-scroll"><table><thead><tr><th>Type de situation</th><th>Où effectuer la première validation ?</th></tr></thead><tbody>
    <tr><td><b>Prise de poste / nomination</b></td><td><b>Dans le RD</b>, qui confirme la personne retenue et applique le mouvement à sa fiche.</td></tr>
    <tr><td>Autre mouvement présent dans le CR et le RD</td><td>Dans le document où les corrections ont déjà commencé, pour conserver les annotations. Les doublons sont contrôlés.</td></tr>
    <tr><td>Mouvement présent uniquement dans le CR</td><td>Dans le CR.</td></tr>
