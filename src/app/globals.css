@@ -61,11 +61,11 @@
 .csp-records td{vertical-align:middle}
 .csp-records td:nth-child(2){min-width:180px;overflow-wrap:anywhere;white-space:normal}
 .csp-records td:nth-child(4){min-width:170px}
-.csp-record-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;width:260px}
-.csp-record-actions .btn{min-width:0;min-height:36px;padding:8px 10px;font-size:11px;line-height:1.3}
+.csp-record-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;width:360px}
+.csp-record-actions .btn{min-width:0;min-height:40px;padding:10px 12px;font-size:11px;line-height:1.3;white-space:normal;text-align:center}
 .csp-record-actions .btn svg{flex-shrink:0}
 .csp-import .panel-heading>.file-input{flex-shrink:0}
-@media(max-width:760px){.csp-import .panel-heading{flex-wrap:wrap}.csp-record-actions{width:240px}}
+@media(max-width:760px){.csp-import .panel-heading{flex-wrap:wrap}.csp-record-actions{width:260px;grid-template-columns:minmax(0,1fr)}}
 
 .csp-method{padding:20px 24px;border-left:4px solid #738d63}
 .csp-method h2{font-size:17px;margin:0 0 10px}
