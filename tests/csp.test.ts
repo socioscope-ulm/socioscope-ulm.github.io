@@ -91,3 +91,19 @@ test('admission can be integrated without inventing an entry NR; identity and co
  assert.equal(prepareCsp(base,[{...admission,newAgent:false}])[0].state,'blocked');assert.equal(prepareCsp(base,[{...admission,agentId:undefined}])[0].state,'blocked');
 });
 
+
+test('transfer quoting a pre-award salary keeps the independently validated award',()=>{
+ const advance=event({id:'award',kind:'avancement',gfDelta:undefined,nrSteps:1,gfBefore:9,nrBefore:200,nrAfter:205,approved:true});
+ const transfer=event({id:'transfer',kind:'mutation',gfDelta:0,nrSteps:0,gfBefore:9,gfAfter:9,nrBefore:200,nrAfter:200,agency:'AMTE',job:'Nouvel emploi'});
+ for(const effective of ['2026-01-01','2026-02-01']){
+  const move={...transfer,effective};
+  const preview=prepareCsp(base,[advance,move]);assert.equal(preview[1].state,'ready');assert.equal(preview[1].before?.nr,205);assert.equal(preview[1].after?.nr,205);
+  const prior=imported([advance]);assert.equal(prepareCsp(base,[move],[prior])[0].state,'ready');
+  const result=projectCsp(base,[imported([advance,move])],'2026-06-01');assert.deepEqual(result.issues,[]);assert.equal(current(result.data).nr,205);assert.equal(current(result.data).agency,'AMTE');assert.equal(current(result.data).nrDate,advance.effective);
+  const reversed=projectCsp(base,[imported([move,advance])],'2026-06-01');assert.deepEqual(reversed.issues,[]);assert.equal(current(reversed.data).nr,205);assert.equal(current(reversed.data).agency,'AMTE');
+ }
+ assert.equal(prepareCsp(base,[transfer])[0].after?.nr,200);
+ for(const patch of [{nrBefore:195,nrAfter:195},{nrAfter:210},{nrSteps:1},{gfBefore:8,gfAfter:8}])assert.equal(prepareCsp(base,[advance,{...transfer,...patch}])[1].state,'blocked');
+ assert.equal(prepareCsp(base,[advance,{...transfer,nrAfter:205}])[1].after?.nr,205);
+ const other=event({id:'nomination',kind:'nomination',gfDelta:0,nrAfter:210});assert.equal(prepareCsp(base,[other,transfer])[1].state,'blocked');
+});

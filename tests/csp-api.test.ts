@@ -212,5 +212,17 @@ test('CSP API validates roles, previews without writes, saves one PDF, rejects i
  response=await route.PATCH(request({id:rdId,action:'disable'},'PATCH'));assert.equal(response.status,200);
  auto=await (await route.GET(new Request('https://fixture.test/api/csp?id='+crId,{headers}))).json();assert.equal(auto.meta.pending,3);assert.ok(auto.events.every((v:any)=>!v.nonRetainedByRD));
 
+ // Independent validation: an award remains published while an administrative
+ // transfer quoting the pre-award salary can be validated on its own.
+ const award={id:'separate-award',name:'TEST ALICE',agentId:'A12345',kind:'avancement',effective:'2026-01-01',nrSteps:1,gfBefore:9,nrBefore:200,nrAfter:205,page:1,selected:true};
+ const transfer={id:'separate-transfer',name:'TEST ALICE',agentId:'A12345',kind:'mutation',effective:'2026-02-01',gfDelta:0,nrSteps:0,gfBefore:9,gfAfter:9,nrBefore:200,nrAfter:200,agency:'AMTE',page:2,selected:true};
+ m.rows=[{id:rdId,name:'RD fictif.pdf',date:'2026-03-24',status:'review',count:2,detail:JSON.stringify({kind:'csp',documentType:'rd',events:[award,transfer]})}];
+ response=await route.PATCH(request({id:rdId,action:'validate-event',eventId:award.id,events:[award,transfer],checked:true},'PATCH'));assert.equal(response.status,200);
+ let separate=JSON.parse(m.rows[0].detail).events;const publishedAward=structuredClone(separate[0]);assert.equal(publishedAward.recordedAfter.nr,205);assert.equal(separate[1].approved,undefined);
+ preview=await (await route.POST(request({id:rdId,date:'2026-03-24',events:separate}))).json();assert.equal(preview.events[1].state,'ready');assert.equal(preview.events[1].after.nr,205);
+ response=await route.PATCH(request({id:rdId,action:'validate-event',eventId:transfer.id,events:separate,checked:true},'PATCH'));assert.equal(response.status,200);assert.equal((await response.json()).pending,0);
+ separate=JSON.parse(m.rows[0].detail).events;assert.deepEqual(separate[0],publishedAward);assert.equal(separate[1].approved,true);assert.equal(separate[1].recordedBefore.nr,205);assert.equal(separate[1].recordedAfter.nr,205);assert.equal(separate[1].recordedAfter.agency,'AMTE');
+ response=await route.PATCH(request({id:rdId,action:'validate-event',eventId:transfer.id,events:separate,checked:true},'PATCH'));assert.equal(response.status,409);
+
 });
 
