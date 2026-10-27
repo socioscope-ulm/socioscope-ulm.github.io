@@ -17,7 +17,7 @@ export function validDate(v:unknown):v is string {if(typeof v!=='string'||!/^\d{
 export const parisToday=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Paris',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
 const nameKey=cspNameKey;
 // A salary measure is one NR step unless an explicit count or absolute NR is supplied.
-export const cspNRSteps=(e:CspEvent)=>e.nrSteps??(e.kind==='mesure'&&e.nrAfter===undefined?1:undefined);
+export const cspNRSteps=(e:CspEvent)=>e.nrSteps??(e.kind==='posthume'&&e.nrBefore!==undefined&&e.nrAfter!==undefined&&e.nrAfter>e.nrBefore&&(e.nrAfter-e.nrBefore)%5===0?(e.nrAfter-e.nrBefore)/5:e.kind==='mesure'&&e.nrAfter===undefined?1:undefined);
 export function cspKey(e:CspEvent){
  if(e.candidacy)return JSON.stringify(['candidacy',nameKey(e.name),e.reference||'',e.agency||'']);
  const identity=[e.agentId||nameKey(e.name),e.kind,e.effective],nrSteps=cspNRSteps(e);
@@ -105,7 +105,7 @@ export function prepareCsp(data:AgentData,events:CspEvent[],prior:CspImport[]=[]
  const combined=[...existing.map(e=>({event:e,prior:true})),...resolved.map(e=>({event:e,prior:false}))].sort((a,b)=>a.event.effective.localeCompare(b.event.effective)||Number(b.prior)-Number(a.prior));
  const results=new Map<string,CspPreview>();const seen=new Set<string>();const salaryHistory=new Map<string,AgentRecord[]>();
  for(const {event:e,prior:isPrior} of combined){
-  const key=cspKey(e);if(isPrior){if(e.effective>base.date&&!seen.has(key)){seen.add(key);const before=salaryReferenceRow(state.get(e.agentId!),e);const a=applyEvent(before,e,salaryHistory.get(e.agentId!));rememberSalary(salaryHistory,before,a.row,e);if(a.row)state.set(e.agentId!,a.row);}continue;}
+  const key=cspKey(e);if(isPrior){if(e.effective>base.date&&!seen.has(key)){seen.add(key);const current=state.get(e.agentId!);const historical=e.kind==='posthume'?cspHistoricalRecord(data,e.agentId!,e.effective):undefined;const posthume=posthumousReference(current,e,historical);const before=salaryReferenceRow(posthume.before,e);const a=applyEvent(before,e,salaryHistory.get(e.agentId!));if(!posthume.historicalOnly)rememberSalary(salaryHistory,before,a.row,e);if(a.row&&!posthume.historicalOnly)state.set(e.agentId!,a.row);}continue;}
   const current=state.get(e.agentId!);const historical=e.kind==='posthume'?cspHistoricalRecord(data,e.agentId!,e.effective):undefined;const posthume=posthumousReference(current,e,historical);const historicalPosthume=posthume.historicalOnly;const before=salaryReferenceRow(posthume.before,e);const out:CspPreview={...e,before:before?summary(before):undefined,state:'ready',problem:''};
   if(e.candidacy&&cspNonRetained(e)){out.state='not-retained';out.problem=e.nonRetainedByRD?.reason==='unfilled-post'?'Traité automatiquement : le RD entièrement validé « '+e.nonRetainedByRD.name+' » ne comporte aucune nomination pour ce poste. Candidature non retenue, poste non pourvu ; aucun effet sur la situation RH.':e.nonRetainedByRD?'Traité automatiquement : le RD « '+e.nonRetainedByRD.name+' » désigne un ou plusieurs autres candidats pour ce poste. Aucun effet sur la situation RH.':'Candidature clôturée sans nomination : aucun effet sur la situation de l’agent. Conservée dans le bordereau.';}
   else if(!e.selected){out.state='excluded';out.problem='Écarté de cet import.';}
