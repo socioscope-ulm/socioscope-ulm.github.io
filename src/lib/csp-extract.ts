@@ -25,7 +25,23 @@ export function extractCspPages(pages:CspPage[],documentType:'rd'|'cr'='rd'){
   const headerY=head.y;
   const cutoff=pg.width*(kind==='reclassement'?.35:kind==='avancement'?.32:kind==='mutation'?.18:kind==='nomination'?.255:.20);
   const content=pg.items.filter(i=>i.y<headerY-7&&i.y>pg.height*.07);
-  const nameRows=lines(content.filter(i=>i.x+i.width/2<cutoff)).filter(r=>/^[A-ZÀ-Ÿ][A-ZÀ-Ÿ '\-’]+$/.test(r.text.replace(/\s+/g,' ').trim())&&r.text.trim().length>4&&!/NOM PRENOM|PAGE |C2 LIMITE|PAS DE CANDIDAT|LA SITUATION/.test(normalName(r.text)));
+  let nameRows=lines(content.filter(i=>i.x+i.width/2<cutoff)).filter(r=>/^[A-ZÀ-Ÿ][A-ZÀ-Ÿ '\-’]+$/.test(r.text.replace(/\s+/g,' ').trim())&&r.text.trim().length>4&&!/NOM PRENOM|PAGE |C2 LIMITE|PAS DE CANDIDAT|LA SITUATION/.test(normalName(r.text)));
+  // One person may occupy several printed name baselines. Merge only short
+  // continuations tied to the SAME dated row; distinct dated people stay separate.
+  const dateAnchors=lines(content.filter(i=>i.x+i.width/2>=cutoff&&!!iso(i.str)));
+  const nearest=(y:number)=>dateAnchors.reduce<number>((best,r,ix)=>best<0||Math.abs(r.y-y)<Math.abs(dateAnchors[best].y-y)?ix:best,-1);
+  const joined:typeof nameRows=[];
+  for(const row of nameRows){
+   const previous=joined.at(-1),last=previous?.items.reduce((y,i)=>Math.min(y,i.y),Infinity);
+   const height=Math.max(...row.items.map(i=>i.height),...(previous?.items.map(i=>i.height)||[0]),8);
+   const close=previous&&last!-row.y>0&&last!-row.y<=height*2.4;
+   const fragments=previous&&(/[-‐‑]$/.test(previous.text.trim())||/^[-‐‑]/.test(row.text.trim())||previous.text.trim().split(/\s+/).length===1||row.text.trim().split(/\s+/).length===1);
+   const anchor=nearest(row.y),prior=previous?nearest(previous.y):-1;
+   if(close&&fragments&&anchor>=0&&anchor===prior&&Math.abs(dateAnchors[anchor].y-row.y)<=height*3&&Math.abs(dateAnchors[anchor].y-previous!.y)<=height*3){
+    previous!.text=previous!.text.trim()+(/[-‐‑]$/.test(previous!.text.trim())?'':' ')+row.text.trim();previous!.items.push(...row.items);
+   }else joined.push({...row,items:[...row.items]});
+  }
+  nameRows=joined;
   if(!nameRows.length){report.status=/PAS DE CANDIDAT/.test(n)?'empty':'unsupported';report.note=report.status==='empty'?'Aucun candidat : aucun mouvement individuel.':'Aucune ligne nominative lisible.';continue;}
   const upper=rows.filter(r=>r.y>headerY+10&&r.y<pg.height*.75).flatMap(r=>r.items);
   // The vacancy's destination is in the upper panel; row localization is the origin.

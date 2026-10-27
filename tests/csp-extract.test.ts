@@ -18,3 +18,19 @@ test('salary increments are read separately from date and agency, and duplicate 
 test('no-candidate, collective information and unsupported pages have explicit coverage reports',()=>{
  const r=extractCspPages([page(1,'NOMINATIONS AUX POSTES VACANTS',[item('NOM PRENOM',75,280),item('PAS DE CANDIDAT',650,330)]),page(2,'SITUATION DES SALARIES EN LONGUE MALADIE AU REGARD DES AVANCEMENTS AU CHOIX',[]),page(3,'RUBRIQUE NOUVELLE',[])]);assert.equal(r.events.length,0);assert.deepEqual(r.reports.map(p=>p.status),['empty','empty','unsupported']);
 });
+
+test('a wrapped compound first name belongs to one dated RD mutation, including its full destination',()=>{
+ const p=page(1,'MUTATION D’OFFICE',[
+  item('NOM PRENOM',35,400,100),item('EMPLOI',370,400,70),item('LOCALISATION',600,400,120),item('GF',710,400,20),item('DATE D’EFFET',770,400,50),
+  item('EXEMPLE PAUL',35,350,100),item('EMILE',35,338,50),item('RESPONSABLE',365,344,90),item('UNITE LOGISTIQUE MAINTENANCE / AGENCE FICTIVE /',590,350,90),item('SERVICE FICTIF / SITE FICTIF',590,338,90),item('GF constant',700,344,45),item('01/02/2026',770,344,60)
+ ]);
+ const r=extractCspPages([p],'rd');assert.equal(r.events.length,1);const e=r.events[0];assert.equal(e.name,'EXEMPLE PAUL EMILE');assert.equal(e.effective,'2026-02-01');assert.equal(e.gfDelta,0);assert.equal(e.agency,'AGENCE FICTIVE');assert.equal(e.team,'SERVICE FICTIF');assert.equal(e.selected,true);assert.equal(r.reports[0].count,1);
+ const hyphen={...p,items:p.items.map(i=>i.str==='EXEMPLE PAUL'?{...i,str:'EXEMPLE PAUL-'}:i)};assert.equal(extractCspPages([hyphen],'rd').events[0].name,'EXEMPLE PAUL-EMILE');
+});
+test('two people with independent date cells remain two decisions even when a name is incomplete',()=>{
+ const p=page(1,'MUTATION D’OFFICE',[
+  item('NOM PRENOM',35,400,100),item('DATE D’EFFET',770,400,50),
+  item('EXEMPLE PAUL',35,350,100),item('AUTRE',35,338,50),item('01/02/2026',770,350,60),item('01/02/2026',770,338,60)
+ ]);
+ assert.equal(extractCspPages([p],'rd').events.length,2);
+});
