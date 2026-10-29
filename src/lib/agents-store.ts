@@ -1,3 +1,4 @@
+import {isPendingAdmission,resolvePendingAdmissions} from './csp-pending-admission';
 import {cspNameKey,findCspRupIdentities} from './csp-rup';
 import type {CspEvent} from './csp';
 import {activeCspEvents} from './csp-validation';
@@ -25,6 +26,10 @@ const decisions=(await db.prepare('SELECT * FROM agent_decisions ORDER BY create
   try{const v=JSON.parse(d.note||'{}');if(typeof v.date==='string'&&(typeof v.row==='number'||v.row===null)&&typeof d.source==='string'&&typeof v.reason==='string')corrections[agent]={date:v.date,source:d.source,row:v.row,contract:String(v.contract||''),reason:v.reason,actor:String(v.actor||''),created:d.created};}catch{}
  }
  rup.corrections=corrections;
+ if(includeCsp&&cspImports.some(i=>i.events.some(isPendingAdmission))){
+  data.cspIdentities=await findCspRupIdentities(rup,[],[],cspImports.flatMap(i=>i.events.filter(isPendingAdmission).map(e=>e.name)),async()=>[]);
+  cspImports.splice(0,cspImports.length,...resolvePendingAdmissions(data,cspImports));
+ }
  if(focusAgentId){data.records=data.records.filter(r=>r.agentId===focusAgentId);data.events=data.events.filter(e=>e.agentId===focusAgentId);rup.records=rup.records.filter(r=>r.nni===focusAgentId);}// Enrich sex only once; presence records inherit it from their source.
  // Historical observed records are used for movement comparisons, where
  // career dates are irrelevant and should not trigger another RUP traversal.
@@ -120,7 +125,7 @@ await resources().db.prepare('INSERT INTO agent_decisions (id,agent,kind,target,
 
 export async function cspIdentityData(data:AgentData,events:CspEvent[]){
  const known=new Map<string,Set<string>>();for(const r of data.records)if(r.nni){const key=cspNameKey(r.name),ids=known.get(key)||new Set<string>();ids.add(r.nni);known.set(key,ids);}
- const names=events.filter(e=>!e.approved&&e.selected&&(e.candidacy||e.kind==='admission'||e.kind==='mutation'&&e.newAgent||e.kind==='mesure'||e.identityMethod==='rup'||!e.agentId&&known.get(cspNameKey(e.name))?.size!==1)).map(e=>e.name);if(!names.length)return data;
+ const names=events.filter(e=>(!e.approved||isPendingAdmission(e))&&e.selected&&(e.candidacy||e.kind==='admission'||e.kind==='mutation'&&e.newAgent||e.kind==='mesure'||e.identityMethod==='rup'||!e.agentId&&known.get(cspNameKey(e.name))?.size!==1)).map(e=>e.name);if(!names.length)return data;
  await loadSeeds(['rup-seed']);
  const {db,bucket}=resources();const imports=(await db.prepare('SELECT id,name,date,status,detail FROM agent_imports ORDER BY date DESC,created DESC').all<any>()).results;
  const excluded=(await db.prepare('SELECT source_id FROM rup_source_exclusions').all<{source_id:string}>()).results.map(r=>r.source_id);

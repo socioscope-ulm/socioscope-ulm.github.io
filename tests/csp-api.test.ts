@@ -75,6 +75,17 @@ test('CSP API validates roles, previews without writes, saves one PDF, rejects i
  assert.equal(JSON.parse(m.rows[0].detail).events[0].newAgent,true);assert.equal(JSON.parse(m.rows[0].detail).events[0].agentId,'C12345');
  response=await route.PATCH(request({id:arrival.id,action:'validate-state',state:'ready',checked:true,events:[admitted]},'PATCH'));assert.equal(response.status,200);const approvedAdmission=JSON.parse(m.rows[0].detail).events[0];assert.equal(approvedAdmission.approved,true);assert.equal(approvedAdmission.newAgent,true);assert.equal(approvedAdmission.identityMethod,'rup');assert.equal(approvedAdmission.recordedAfter.gf,8);assert.equal(approvedAdmission.recordedAfter.nr,undefined);
 
+ // A verified admission without a known NNI follows the real validation route.
+ m.identities=[];
+ const withoutNNI={id:'arrival-pending',name:'FICTIF CAMILLE',kind:'admission',effective:'2026-04-01',page:1,selected:true,newAgent:true,identityPending:true,gfAfter:6,agency:'AGENCE TEST',job:'EMPLOI TEST'};
+ m.rows=[{id:'csp-no-nni',name:'RD fictif sans NNI.pdf',date:'2026-03-24',status:'review',count:1,detail:JSON.stringify({kind:'csp',events:[withoutNNI],reports:[]})}];
+ response=await route.PATCH(request({id:'csp-no-nni',action:'validate-event',eventId:withoutNNI.id,checked:true,events:[withoutNNI]},'PATCH'));assert.equal(response.status,200,JSON.stringify(await response.clone().json()));
+ const pendingIdentity=JSON.parse(m.rows[0].detail).events[0];assert.equal(pendingIdentity.approved,true);assert.match(pendingIdentity.agentId,/^pending-csp-/);assert.equal(pendingIdentity.recordedAfter.gf,6);assert.equal(pendingIdentity.recordedAfter.nr,undefined);
+ assert.equal((await route.PATCH(request({id:'csp-no-nni',action:'save',events:[pendingIdentity]},'PATCH'))).status,409);
+ const provisionalListing=await (await route.GET(new Request('https://fixture.test/api/csp',{headers}))).json();assert.equal(provisionalListing.records.length,1);assert.equal(provisionalListing.records[0].identityPending,true);
+ assert.equal((await route.PATCH(request({id:'csp-no-nni',action:'disable'},'PATCH'))).status,200);
+ assert.equal((await route.PATCH(request({id:'csp-no-nni',action:'enable',checked:true},'PATCH'))).status,200);
+
  // Validate a single decision in an existing draft; preserve all notes and other rows.
  (m as any).identities=[];
  const individualId='csp-individual';

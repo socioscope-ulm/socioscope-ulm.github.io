@@ -1,3 +1,4 @@
+import {isPendingAdmission,resolvePendingAdmissions} from '../../../lib/csp-pending-admission';
 import {recoverCspPages,confirmCspPage} from '../../../lib/csp-recovery';
 import {cspUnreadPages} from '../../../lib/csp-coverage';
 import {cspAutomaticCompletion} from '../../../lib/csp-document-completion';
@@ -26,19 +27,22 @@ export async function GET(request:Request){try{
  if(id){await agentAuth(request,true);const row=rows.find(r=>r.id===id);if(!row)fail('Relevé introuvable.',404);return Response.json({meta:metadata(row),events:row.detail.events||[]});}
  const q=(p.get('q')||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase(),kind=p.get('kind')||'',meeting=p.get('meeting')||'',agent=p.get('agent')||'';
  const offset=Math.max(0,Math.floor(Number(p.get('offset'))||0)),pageSize=60;
- const decisions=rows.filter(r=>r.status==='validated'&&(!meeting||r.id===meeting)).flatMap(r=>activeCspEvents(r.detail).filter(e=>(!kind||e.kind===kind)&&(!agent||e.agentId===agent)&&(!q||(e.name+' '+e.agentId+' '+e.agency).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().includes(q))).map(e=>({...e,importId:r.id,meetingDate:r.date,document:r.name}))).sort((a,b)=>b.effective.localeCompare(a.effective)||a.name.localeCompare(b.name,'fr'));
+ const pending=rows.filter(r=>r.status==='validated').flatMap(r=>activeCspEvents(r.detail).filter(isPendingAdmission));
+ let history=rows;
+ if(pending.length){const {data}=await agentData(true);const resolved=resolvePendingAdmissions(data,rows.map(r=>({...r,events:activeCspEvents(r.detail)})));history=rows.map((r,index)=>({...r,detail:{...r.detail,events:resolved[index].events,perEventValidation:false}}));}
+ const decisions=history.filter(r=>r.status==='validated'&&(!meeting||r.id===meeting)).flatMap(r=>activeCspEvents(r.detail).filter(e=>(!kind||e.kind===kind)&&(!agent||e.agentId===agent)&&(!q||(e.name+' '+e.agentId+' '+e.agency).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().includes(q))).map(e=>({...e,importId:r.id,meetingDate:r.date,document:r.name}))).sort((a,b)=>b.effective.localeCompare(a.effective)||a.name.localeCompare(b.name,'fr'));
  const unique=new Map<string,typeof decisions[number]>();for(const e of decisions)if(!unique.has(cspKey(e)))unique.set(cspKey(e),e);const list=[...unique.values()];
  return Response.json({imports:rows.map(metadata),total:list.length,records:list.slice(offset,offset+pageSize),kinds:cspKinds,pageSize});
 }catch(e){return agentError(e);}}
 export async function POST(request:Request){try{
  await agentAuth(request,true);const isForm=request.headers.get('content-type')?.startsWith('multipart/form-data');
- if(!isForm){const body=await request.json();const rows=await imports();const evidence=documents(rows);const saved=body.id?rows.find(r=>r.id===body.id):null;const events=preserveApproved(input(body),saved?.detail.events||[],saved?.status==='review'||saved?.status==='validated'&&saved.detail.perEventValidation===true);const {data:baseData,cspImports}=await agentData(true,undefined,parisToday(),false);const data=await cspIdentityData(baseData,events);const preview=prepareCspDocuments(data,events,cspImports.filter(i=>i.id!==body.id),body.date,evidence,saved?currentDocument(saved):{id:'csp-unsaved',name:'Document en cours',documentType:body.documentType==='cr'?'cr':'rd'});return Response.json({events:preview.map(e=>e.approved?{...e,state:e.acknowledgedByDocument?'duplicate':'validated',before:e.recordedBefore,after:e.recordedAfter,...(e.acknowledgedByDocument?{matchedDocument:e.acknowledgedByDocument}:{}),problem:e.acknowledgedByDocument?.cumulative?'Cumul nomination et avancement confirmé par le RD validé : même résultat final malgré un ordre différent, aucune nouvelle application.':e.acknowledgedByDocument?'Décision déjà validée dans le document '+cspDocumentLabel(e.acknowledgedByDocument.documentType)+' : reconnue automatiquement, sans nouvelle application.':'Décision déjà validée et intégrée.'}:e),base:latestAnnual(data),blocked:preview.filter(e=>e.selected&&!e.approved&&e.state==='blocked').length});}
+ if(!isForm){const body=await request.json();const rows=await imports();const evidence=documents(rows);const saved=body.id?rows.find(r=>r.id===body.id):null;const events=preserveApproved(input(body),saved?.detail.events||[],saved?.status==='review'||saved?.status==='validated'&&saved.detail.perEventValidation===true);const {data:baseData,cspImports}=await agentData(true,undefined,parisToday(),false);const data=await cspIdentityData(baseData,[...events,...cspImports.flatMap(i=>i.events.filter(isPendingAdmission))]);const preview=prepareCspDocuments(data,events,cspImports.filter(i=>i.id!==body.id),body.date,evidence,saved?currentDocument(saved):{id:'csp-unsaved',name:'Document en cours',documentType:body.documentType==='cr'?'cr':'rd'});return Response.json({events:preview.map(e=>e.approved?{...e,state:e.acknowledgedByDocument?'duplicate':'validated',before:e.recordedBefore,after:e.recordedAfter,...(e.acknowledgedByDocument?{matchedDocument:e.acknowledgedByDocument}:{}),problem:e.acknowledgedByDocument?.cumulative?'Cumul nomination et avancement confirmé par le RD validé : même résultat final malgré un ordre différent, aucune nouvelle application.':e.acknowledgedByDocument?'Décision déjà validée dans le document '+cspDocumentLabel(e.acknowledgedByDocument.documentType)+' : reconnue automatiquement, sans nouvelle application.':'Décision déjà validée et intégrée.'}:e),base:latestAnnual(data),blocked:preview.filter(e=>e.selected&&!e.approved&&e.state==='blocked').length});}
  const f=await request.formData(),file=f.get('file'),raw=f.get('extraction');
  if(!(file instanceof File)||!file.size||file.size>20*1024*1024||!/\.pdf$/i.test(file.name)||typeof raw!=='string'||raw.length>1500000)fail('Choisir un PDF de moins de 20 Mo.');
  const body=JSON.parse(raw),events=preserveApproved(input(body),[],false);const bytes=await file.arrayBuffer();if(new TextDecoder().decode(bytes.slice(0,5))!=='%PDF-')fail('Le fichier n’est pas un PDF.');
  const hash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)),b=>b.toString(16).padStart(2,'0')).join('');const {db,bucket}=resources();
  const existing=await db.prepare('SELECT id FROM agent_imports WHERE hash=?').bind(hash).first<any>();if(existing)return Response.json({id:existing.id,existing:true});
- const {data:baseData,cspImports}=await agentData(true,undefined,parisToday(),false);const data=await cspIdentityData(baseData,events);const id='csp-'+crypto.randomUUID();const preview=prepareCspDocuments(data,events,cspImports,body.date,documents(await imports()),{id,name:file.name,documentType:body.documentType==='cr'?'cr':'rd'});
+ const {data:baseData,cspImports}=await agentData(true,undefined,parisToday(),false);const data=await cspIdentityData(baseData,[...events,...cspImports.flatMap(i=>i.events.filter(isPendingAdmission))]);const id='csp-'+crypto.randomUUID();const preview=prepareCspDocuments(data,events,cspImports,body.date,documents(await imports()),{id,name:file.name,documentType:body.documentType==='cr'?'cr':'rd'});
  const stored=events.map(e=>cspResolvedEvent(e,preview.find(p=>p.id===e.id)!));
  const reports=Array.isArray(body.reports)?body.reports.slice(0,250).map((r:any)=>({page:Number(r.page),section:String(r.section||'').slice(0,80),count:Number(r.count)||0,status:['read','empty','unsupported'].includes(r.status)?r.status:'unsupported',note:String(r.note||'').slice(0,200)})):[];
  const detail={kind:'csp',version:1,documentType:body.documentType==='cr'?'cr':'rd',candidateVersion:body.documentType==='cr'&&body.candidateVersion===1?1:0,events:stored,reports,duplicates:Math.max(0,Number(body.duplicates)||0),checked:false};
@@ -83,8 +87,8 @@ export async function PATCH(request:Request){try{
   if(!b.event||b.event.id!==b.eventId)fail('Choisir une seule décision à corriger.');
   const events=correctionEvents(row,b.event);
   const rows=await imports();
-  const {data:baseData}=await agentData(true,undefined,parisToday(),false);
-  const data=await cspIdentityData(baseData,events);
+  const {data:baseData,cspImports}=await agentData(true,undefined,parisToday(),false);
+  const data=await cspIdentityData(baseData,[...events,...cspImports.flatMap(i=>i.events.filter(isPendingAdmission))]);
   const plan=planCspCorrection(data,rows,row,b.event);
   const bytes=new TextEncoder().encode(JSON.stringify([rows.map(r=>[r.id,r.status,r.rawDetail]),b.event,b.reason.trim()]));
   const token=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)),v=>v.toString(16).padStart(2,'0')).join('');
@@ -110,7 +114,7 @@ export async function PATCH(request:Request){try{
  if(!['save','validate','validate-state','validate-event','enable'].includes(b.action))fail('Action inconnue.');
  if(b.action==='save'&&row.status!=='review'&&!partial)fail('Utiliser « Corriger » pour modifier des décisions déjà validées.',409);
  const events=b.action==='enable'?row.detail.events:preserveApproved(input({date:row.date,events:b.events}),row.detail.events||[],partial||row.status==='review');
- const {data:baseData,cspImports}=await agentData(true,undefined,parisToday(),false);const data=await cspIdentityData(baseData,events);const others=cspImports.filter(i=>i.id!==b.id);const evidence=documents(await imports());
+ const {data:baseData,cspImports}=await agentData(true,undefined,parisToday(),false);const data=await cspIdentityData(baseData,[...events,...cspImports.flatMap(i=>i.events.filter(isPendingAdmission))]);const others=cspImports.filter(i=>i.id!==b.id);const evidence=documents(await imports());
  const preview=prepareCspDocuments(data,b.action==='enable'&&row.detail.perEventValidation?events.map((e:CspEvent)=>({...e,selected:e.selected&&e.approved===true})):events,others,row.date,evidence,currentDocument(row));
  let chosen=new Set<string>();
  if(['validate','validate-state','validate-event','enable'].includes(b.action)){
