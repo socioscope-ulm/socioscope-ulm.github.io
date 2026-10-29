@@ -29,7 +29,7 @@ export function recoverCspPages(detail:any,status:string,incoming:CspEvent[],rep
   if(!targets.has(oldReport.page))return oldReport;
   const fresh=reports.find(r=>r.page===oldReport.page&&r.section===oldReport.section);
   const extracted=incoming.filter(e=>e.page===oldReport.page&&e.kind===oldReport.section&&validateCspEvent(e));
-  if(!fresh||!extracted.length)return oldReport;
+  if(!fresh||!extracted.length)return {...oldReport,count:Math.max(Number(oldReport.count)||0,[...old,...additions].filter(e=>e.page===oldReport.page).length)};
   if(fresh.status!=='read')return {...oldReport,count:extracted.length,note:String(fresh.note||oldReport.note||'Lecture encore incomplète.').slice(0,500)};
   return {...oldReport,status:'read',count:extracted.length,note:String(fresh.note||'Lecture reprise avec succès.').slice(0,500)};
  });

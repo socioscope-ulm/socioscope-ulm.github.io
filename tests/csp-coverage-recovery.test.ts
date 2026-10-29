@@ -43,3 +43,11 @@ test('manual completion of a partially read page requires its known decisions to
  const detail={events:[{...old,page:6,approved:false}],reports:[unread]};assert.throws(()=>confirmCspPage(detail,6));
  const ready={...detail,events:[{...old,page:6}]};const confirmed=confirmCspPage(ready,6);assert.equal(cspUnreadPages(confirmed.reports).length,0);assert.equal(cspUnreadPages(ready.reports).length,1);assert.deepEqual(confirmed.events,ready.events);
 });
+
+test('manual avancement entry on an unread page creates a pending row and preserves its rubrique and coverage warning',()=>{
+ const detail={events:[old],reports:[unread],perEventValidation:true};
+ const row:CspEvent={id:'manual',name:'EXEMPLE CAMILLE',kind:'avancement',page:6,effective:'2026-02-01',nrSteps:2,selected:true};
+ const result=recoverCspPages(detail,'validated',[row],[]);
+ assert.equal(result.events.length,2);assert.deepEqual(result.events[0],old);assert.equal(result.events[1].kind,'avancement');assert.equal(result.events[1].nrSteps,2);assert.equal(result.events[1].approved,undefined);assert.equal(result.reports[0].section,'avancement');assert.equal(result.reports[0].count,1);assert.equal(cspUnreadPages(result.reports).length,1);
+ assert.equal(recoverCspPages(detail,'validated',[{...row,kind:'mutation'}],[]).events.length,1);
+});
