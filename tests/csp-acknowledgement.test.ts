@@ -60,3 +60,20 @@ test('acknowledgements cannot form chains or survive source disabling; client-pr
  assert.ok(cycle.every(d=>!d.detail.events[0].approved));assert.equal(preserveApproved([fake],[],false)[0].acknowledgedByDocument,undefined);
  const client=cspResolvedEvent(target.detail.events[0],{...e,state:'duplicate',problem:''});assert.equal(client.approved,true);assert.equal(client.acknowledgedByDocument?.documentType,'cr');
 });
+
+
+test('an incomplete RD reclassement recognizes a fully documented approved ODJ without replaying the movement',()=>{
+ const event:CspEvent={...base,kind:'reclassement',nrSteps:undefined,gfDelta:1,gfBefore:8,gfAfter:9,nrBefore:150,nrAfter:160,recordedBefore:{gf:8,nr:150},recordedAfter:{gf:9,nr:160,agency:'AGENCE FICTIVE'}};
+ const original=document('odj','cr',approved(event));
+ const missing:CspEvent={...base,id:'missing',kind:'reclassement',nrSteps:undefined,agency:'AGENCE FICTIVE 1',note:'Nombre de GF/NR non reconnu : à renseigner.'};
+ for(const status of ['review','validated']){
+  const target=document('rd','rd',missing,status);
+  const result=acknowledgeCspDecisions([original,target]);const matched=result[1].detail.events[0];
+  assert.equal(matched.approved,true);assert.equal(matched.acknowledgedByDocument?.id,'odj');assert.equal(matched.recordedAfter?.nr,160);
+  assert.equal(cspProgress(status,result[1].detail).pending,0);assert.deepEqual(activeCspEvents(result[1].detail),[]);
+  assert.deepEqual(acknowledgeCspDecisions(result),result);
+  assert.equal(acknowledgeCspDecisions([{...original,status:'disabled:validated'},result[1]])[1].detail.events[0].approved,undefined);
+ }
+ for(const patch of [{gfDelta:2},{gfDelta:0},{nrAfter:165},{nrBefore:155},{gfAfter:10},{nrSteps:1},{effective:'2026-02-01'},{agentId:'B12345'},{extractionIssue:'Lecture incertaine'}])assert.equal(acknowledgeCspDecisions([original,document('rd','rd',{...missing,...patch})])[1].detail.events[0].approved,undefined);
+ for(const source of [{...original,status:'review'},{...original,detail:{...original.detail,events:[{...event,approved:false}]}},{...original,detail:{...original.detail,events:[approved({...event,nrAfter:165})]}},{...original,detail:{...original.detail,events:[approved({...event,recordedAfter:{gf:10,nr:160}})]}}])assert.equal(acknowledgeCspDecisions([source,document('rd','rd',missing)])[1].detail.events[0].approved,undefined);
+});

@@ -23,19 +23,29 @@ function facts(e:CspEvent){
  return {gfBefore,nrBefore,gfAfter,nrAfter};
 }
 function identical(target:CspEvent,source:CspEvent){
- if(cspKey(target)!==cspKey(source)||(target.gfDelta??0)!==(source.gfDelta??0))return false;
- if(['titularisation','mutation','admission'].includes(target.kind)&&cspNRSteps(target)!==cspNRSteps(source))return false;
  const known=facts(source);
+ // A short RD may omit the GF count. An already approved, fully documented
+ // counterpart can establish this same decision, never another movement.
+ const incompleteReclassement=target.kind==='reclassement'&&source.kind==='reclassement'&&target.gfDelta===undefined&&
+  (source.gfDelta??0)>0&&known.gfBefore!==undefined&&known.gfAfter!==undefined&&known.nrBefore!==undefined&&known.nrAfter!==undefined&&
+  known.gfAfter===known.gfBefore+source.gfDelta!&&known.nrAfter>=known.nrBefore&&(known.nrAfter-known.nrBefore)%5===0&&
+  (source.reclassementNRConfirmed||known.nrAfter===known.nrBefore+source.gfDelta!*10)&&
+  (source.nrSteps===undefined||source.nrSteps===(known.nrAfter-known.nrBefore)/5)&&
+  (target.nrSteps===undefined||target.nrSteps===(known.nrAfter-known.nrBefore)/5);
+ if(!incompleteReclassement&&(cspKey(target)!==cspKey(source)||(target.gfDelta??0)!==(source.gfDelta??0)))return false;
+ if(['titularisation','mutation','admission'].includes(target.kind)&&cspNRSteps(target)!==cspNRSteps(source))return false;
  for(const field of ['gfBefore','nrBefore','gfAfter','nrAfter'] as const)if(target[field]!==undefined&&target[field]!==known[field])return false;
  for(const [field,part,key] of [['gfBefore','recordedBefore','gf'],['nrBefore','recordedBefore','nr'],['gfAfter','recordedAfter','gf'],['nrAfter','recordedAfter','nr']] as const){
   if(source[field]!==undefined&&source[part]?.[key]!==undefined&&source[field]!==source[part]![key])return false;
  }
  for(const field of ['agency','job','team','m3e','reference'] as const){
+  // Location columns on a reclassement are observations, not destinations.
+  if(target.kind==='reclassement'&&field!=='reference')continue;
   const proposed=target[field];if(!proposed)continue;
   const documented=source[field]??(field==='reference'?undefined:source.recordedAfter?.[field]);
   if(!documented||normalName(proposed)!==normalName(documented))return false;
  }
- if(target.location&&normalName(target.location)!==normalName(source.location))return false;
+ if(target.kind!=='reclassement'&&target.location&&normalName(target.location)!==normalName(source.location))return false;
  if(target.nrConfirmed&&!source.nrConfirmed&&source.nrAfter===undefined)return false;
  return true;
 }

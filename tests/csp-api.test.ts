@@ -352,5 +352,18 @@ test('CSP API validates roles, previews without writes, saves one PDF, rejects i
  m.identities=[];
  }
 
+ {
+ // A completed ODJ makes the short RD read as already treated; GET never writes a second approval.
+ const complete={id:'complete-reclassification',name:'TEST ALICE',agentId:'A12345',kind:'reclassement',effective:'2026-02-01',gfBefore:9,gfAfter:10,nrBefore:200,nrAfter:210,gfDelta:1,page:1,selected:true,approved:true,recordedBefore:{gf:9,nr:200},recordedAfter:{gf:10,nr:210,agency:'AMTC'}};
+ const incomplete={id:'short-reclassification',name:complete.name,agentId:complete.agentId,kind:'reclassement',effective:complete.effective,page:1,selected:true,agency:'AMTC 1'};
+ m.rows=[{id:crId,name:'ODJ fictif.pdf',date:'2026-03-24',status:'validated',count:1,detail:JSON.stringify({kind:'csp',documentType:'cr',perEventValidation:true,events:[complete]})},{id:rdId,name:'RD fictif.pdf',date:'2026-03-24',status:'validated',count:1,detail:JSON.stringify({kind:'csp',documentType:'rd',perEventValidation:true,events:[incomplete]})}];
+ const unchanged=structuredClone(m.rows);
+ const result=await (await route.GET(new Request('https://fixture.test/api/csp?id='+rdId,{headers}))).json();
+ assert.equal(result.meta.pending,0);assert.equal(result.events[0].approved,true);assert.equal(result.events[0].acknowledgedByDocument.id,crId);assert.equal(result.events[0].recordedAfter.nr,210);assert.deepEqual(m.rows,unchanged);
+ const listing=await (await route.GET(new Request('https://fixture.test/api/csp',{headers}))).json();assert.equal(listing.total,1);
+ assert.equal((await route.PATCH(request({id:crId,action:'disable'},'PATCH'))).status,200);
+ const reopened=await (await route.GET(new Request('https://fixture.test/api/csp?id='+rdId,{headers}))).json();assert.equal(reopened.meta.pending,1);assert.equal(reopened.events[0].approved,undefined);
+ }
+
 });
 
