@@ -114,7 +114,7 @@ export async function handler(req:Request){
   const trustedOrigin=origin&&ALLOWED_ORIGINS.has(origin)?origin:CLIENT_ORIGIN;
   const internal=new Request(trustedOrigin+path+u.search,{method:req.method,headers:h,...(!['GET','HEAD'].includes(req.method)?{body:await req.arrayBuffer()}:{})});
   return finish(await cachedAgentRead(internal,path,user.id+':'+member.role,async()=>{
-   const requiredSeeds:import('./seed-loader').SeedName[]=path==='/api/csp'?['agents-seed']:seedsForPath(path);await loadSeeds([...requiredSeeds]);if(requiredSeeds.includes('seed'))initializeBase();
+   const requiredSeeds:import('./seed-loader').SeedName[]=path==='/api/csp'?['agents-seed','rup-seed']:seedsForPath(path);await loadSeeds([...requiredSeeds]);if(requiredSeeds.includes('seed'))initializeBase();
    return await fn(internal,{params:Promise.resolve({id:match[1]?decodeURIComponent(match[1]):''})});
   }));
  }
