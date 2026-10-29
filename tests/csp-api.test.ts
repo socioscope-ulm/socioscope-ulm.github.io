@@ -316,5 +316,22 @@ test('CSP API validates roles, previews without writes, saves one PDF, rejects i
  assert.equal(reopened.events[0].reclassementNRConfirmed,true);
  }
 
+ {
+ // A later NR award must be individually validated, stored and reread, not merely given a documentary reference.
+ const retro={id:'retroactive-proof',name:'TEST ALICE',agentId:'A12345',kind:'reclassement',effective:'2025-03-01',gfDelta:1,gfBefore:9,gfAfter:10,nrBefore:200,nrAfter:200,reclassementNRConfirmed:true,page:1,selected:true,approved:true};
+ const increment={id:'following-nr',name:'TEST ALICE',agentId:'A12345',kind:'avancement',effective:'2026-02-01',gfBefore:10,nrBefore:200,nrAfter:205,nrSteps:1,page:2,selected:true};
+ m.rows=[{id:rdId,name:'ODJ rétroactif fictif.pdf',date:'2026-04-05',status:'validated',count:1,detail:JSON.stringify({kind:'csp',documentType:'cr',perEventValidation:true,events:[retro]})},{id:crId,name:'ODJ suivant fictif.pdf',date:'2026-04-12',status:'validated',count:1,detail:JSON.stringify({kind:'csp',documentType:'cr',perEventValidation:true,events:[increment]})}];
+ const untouched=structuredClone(m.rows[0]);
+ const p=await (await route.POST(request({id:crId,date:'2026-04-12',events:[increment]}))).json();
+ assert.equal(p.events[0].state,'ready');assert.equal(p.events[0].before.gf,10);assert.equal(p.events[0].after.nr,205);
+ const r=await route.PATCH(request({id:crId,action:'validate-event',eventId:increment.id,events:[increment],checked:true},'PATCH'));
+ assert.equal(r.status,200,JSON.stringify(await r.clone().json()));assert.equal((await r.json()).pending,0);
+ const stored=JSON.parse(m.rows[1].detail).events[0];
+ assert.equal(stored.approved,true);assert.equal(stored.recordedBefore.gf,10);assert.equal(stored.recordedBefore.nr,200);assert.equal(stored.recordedAfter.gf,10);assert.equal(stored.recordedAfter.nr,205);
+ assert.deepEqual(m.rows[0],untouched);
+ const reopened=await (await route.GET(new Request('https://fixture.test/api/csp?id='+crId,{headers}))).json();
+ assert.equal(reopened.events[0].approved,true);assert.equal(reopened.events[0].recordedAfter.nr,205);
+ }
+
 });
 
