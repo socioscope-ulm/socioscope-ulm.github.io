@@ -29,6 +29,7 @@ test('missing internal GF/NR can be completed, +1 or +2 GF retain the +2 NR rule
  for(const gfDelta of [1,2]){const p=preview(internal,{...retained,gfDelta});assert.equal(p.state,'ready');assert.equal(p.after?.gf,10+gfDelta);assert.equal(p.after?.nr,165);}
  const known={...internal,records:[{...internal.records[0],nr:155}]};const p=preview(known);assert.equal(p.state,'ready');assert.equal(p.nominationReference,undefined);
  const conflicting={...internal,records:[{...internal.records[0],gf:11}]};assert.equal(preview(conflicting).state,'blocked');
+ const salaryConflict={...internal,records:[150,155].map((nr,i)=>({...internal.records[0],id:'conflict-'+i,nr}))};assert.equal(preview(salaryConflict).state,'blocked');
  const externalGain=preview(data,{...retained,gfDelta:1});assert.equal(externalGain.state,'blocked');
  const explicit=preview(data,{...retained,gfDelta:1,nrAfter:165});assert.equal(explicit.state,'ready');assert.equal(explicit.after?.nr,165);
 });

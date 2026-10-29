@@ -49,6 +49,7 @@ function nominationNRSteps(e:CspEvent,row:Partial<AgentRecord>|undefined){return
 function applyEvent(row:AgentRecord|undefined,e:CspEvent,salaryHistory:AgentRecord[]=[]):{row?:AgentRecord;problem:string}{
  if(e.candidacy)return {problem:'Candidature de l’ODJ : en attente de confirmation par un RD.'};
  const extractionIssue=cspExtractionIssue(e);if(extractionIssue)return {problem:extractionIssue};
+ if(e.nominationReference&&((row as any)?.conflicts||[]).some((field:string)=>['gf','nr'].includes(field)))return {problem:'Nomination : GF/NR de départ contradictoires dans les fichiers individuels. Vérifier la référence avant de reprendre les valeurs de l’ODJ.'};
  if(e.kind==='nomination'&&e.nominationReference&&!row){const ref=e.nominationReference;e={...e,gfBefore:e.gfBefore??ref.gf,nrBefore:e.nrBefore??ref.nr,newAgent:e.newAgent||ref.arrivalConfirmed};}
  if(e.kind==='mutation'&&e.job&&/^[-–—\s]+$/.test(e.job))e={...e,job:undefined};
  const nrSteps=cspNRSteps(e)??nominationNRSteps(e,row);
