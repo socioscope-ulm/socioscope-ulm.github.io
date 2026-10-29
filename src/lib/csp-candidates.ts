@@ -8,17 +8,34 @@ import {acknowledgeCspDecisions} from './csp-acknowledgement.ts';
 import {salaryReferenceChecks} from './csp-salary-reference.ts';
 import {normalName} from './agents.ts';
 import {cspNameKey} from './csp-rup.ts';
-import {prepareCsp,salaryReferenceSupported,cspNonRetained,cspNRSteps} from './csp.ts';
+import {prepareCsp,salaryReferenceSupported,cspNonRetained,cspNRSteps,validDate} from './csp.ts';
 import type {CspEvent,CspImport,CspPreview} from './csp.ts';
 import type {AgentData,AgentRecord} from './agents.ts';
 
 // Documents are evidence, including drafts. Only `prior` contains applicable
 // approved movements. Import timestamps never determine ODJ/RD matching.
+
+export function preparePendingCspArrivals(data:AgentData,events:CspEvent[],date:string,documents:CspImport[],current?:{id:string;documentType:'rd'|'cr'}):CspEvent[]{
+ if(current?.documentType!=='rd')return events;
+ const known=new Set([...data.records.filter(r=>r.nni).map(r=>cspNameKey(r.name)),...(data.cspIdentities||[]).map(r=>cspNameKey(r.name))]);
+ const odjs=documents.filter(d=>d.id!==current.id&&d.date===date&&d.documentType==='cr'&&!d.status.startsWith('disabled'));
+ return events.map(event=>{
+  if(event.approved||!event.selected||event.candidacy||event.agentId&&!event.agentId.startsWith('pending-csp-')||known.has(cspNameKey(event.name)))return event;
+  if(event.kind==='admission')return event.newAgent===true&&event.gfAfter!==undefined&&!!event.agency&&!!event.job&&validDate(event.effective)?{...event,identityPending:true}:event;
+  if(event.kind!=='nomination'||event.gfDelta!==0||!event.reference||!event.agency||!event.job||!validDate(event.effective))return event;
+  const matches=odjs.flatMap(d=>d.events.filter(c=>c.candidacy&&c.selected&&!c.nonRetained&&!c.nonRetainedByRD&&!c.extractionIssue&&c.kind==='nomination'&&c.reference===event.reference&&cspNameKey(c.name)===cspNameKey(event.name)&&c.gfBefore!==undefined&&c.nrBefore!==undefined&&(!c.agency||normalName(c.agency)===normalName(event.agency))&&(!c.job||normalName(c.job)===normalName(event.job))));
+  if(matches.length!==1)return event;
+  const c=matches[0];
+  if(event.gfBefore!==undefined&&event.gfBefore!==c.gfBefore||event.nrBefore!==undefined&&event.nrBefore!==c.nrBefore)return event;
+  return {...event,agentId:undefined,newAgent:true,identityPending:true,gfBefore:c.gfBefore,nrBefore:c.nrBefore};
+ });
+}
+
 export function prepareCspDocuments(data:AgentData,events:CspEvent[],prior:CspImport[],date:string,documents:CspImport[]=[],current?:{id:string;name:string;documentType:'rd'|'cr';status?:string}):CspPreview[]{
  // Keep the saved status: approved ODJ decisions may be the original evidence
  // for acknowledged RD rows. Opening a preview must not turn that ODJ into a
  // draft and make an otherwise complete RD look partially validated.
- const arrivals=mutationArrivalReferences(events,date,documents,current?.id);events=arrivals.events;
+ const arrivals=mutationArrivalReferences(events,date,documents,current?.id);events=preparePendingCspArrivals(data,arrivals.events,date,documents,current);
  const evidence=current?[...documents.filter(d=>d.id!==current.id),{...current,date,status:current.status??'review',events}]:documents;
  if(current){const acknowledged=acknowledgeCspDecisions(evidence.map(d=>({...d,detail:{documentType:d.documentType,perEventValidation:true,events:d.events}})));events=acknowledged.find(d=>d.id===current.id)!.detail.events;}
  if(!current){const id='csp-outcome-preview';events=resolveNominationOutcomes([...documents.map(d=>({...d,detail:{documentType:d.documentType,perEventValidation:true,events:d.events}})),{id,name:'Aperçu ODJ',date,status:'review',detail:{documentType:'cr',events}}]).find(d=>d.id===id)!.detail.events;}
