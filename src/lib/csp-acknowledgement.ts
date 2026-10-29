@@ -12,6 +12,34 @@ const eligible=(e:CspEvent)=>e.selected&&!e.candidacy&&!cspExtractionIssue(e)&&!
 const key=(date:string,e:CspEvent)=>JSON.stringify([date,e.agentId,cspNameKey(e.name),e.kind,e.effective]);
 const identity=(date:string,e:CspEvent)=>JSON.stringify([date,e.agentId,cspNameKey(e.name),e.kind]);
 const acknowledgement=(e:CspEvent)=>e.acknowledgedByDocument||e.acknowledgedByRD;
+const rdNameKey=(date:string,e:CspEvent)=>JSON.stringify([date,cspNameKey(e.name),e.kind]);
+// Recognition of an ODJ by an already approved RD is display-only.
+// The original ODJ row stays untouched, including its notes and audit trail.
+function odjConfirmedByRd<T extends Document>(row:T,e:CspEvent,verified:Map<string,{row:T;event:CspEvent}[]>):CspEvent|undefined{
+ if(type(row)!=='cr'||!['review','validated'].includes(row.status)||!e.selected||e.approved||cspExtractionIssue(e)||e.nonRetained||e.nonRetainedByRD)return;
+ if(!e.candidacy&&e.kind!=='admission')return;
+ const candidates=(verified.get(rdNameKey(row.date,e))||[]).filter(({event:rd})=>!e.candidacy||rd.reference===e.reference);
+ // Conflicting or repeated approvals cannot silently establish a correspondence.
+ if(candidates.length!==1)return;
+ const {row:source,event:rd}=candidates[0];
+ if(e.agentId&&e.agentId!==rd.agentId)return;
+ const same=(field:'agency'|'job'|'team')=>!e[field]||!!rd[field]&&normalName(e[field]!)===normalName(rd[field]!);
+ if(!same('agency')||!same('job')||!same('team'))return;
+ if(e.candidacy){
+  if(e.kind!=='nomination'||!e.reference||!validDate(rd.effective)||e.effective!==''&&e.effective!==rd.effective||e.gfBefore===undefined||e.nrBefore===undefined)return;
+  const gfBefore=rd.gfBefore??rd.recordedBefore?.gf??(rd.gfDelta===0?rd.recordedAfter?.gf:undefined);
+  const nrBefore=rd.nrBefore??rd.recordedBefore?.nr??(rd.gfDelta===0&&!cspNRSteps(rd)?rd.recordedAfter?.nr:undefined);
+  if(gfBefore!==e.gfBefore||nrBefore!==e.nrBefore)return;
+ }else{
+  if(rd.kind!=='admission'||rd.newAgent!==true||!validDate(e.effective)||e.effective!==rd.effective||e.gfAfter===undefined||e.gfAfter!==(rd.gfAfter??rd.recordedAfter?.gf))return;
+  if(e.nrAfter!==undefined&&e.nrAfter!==(rd.nrAfter??rd.recordedAfter?.nr))return;
+  if(e.gfBefore!==undefined&&e.gfBefore!==(rd.gfBefore??rd.recordedBefore?.gf))return;
+  if(e.nrBefore!==undefined&&e.nrBefore!==(rd.nrBefore??rd.recordedBefore?.nr))return;
+ }
+ const proof:CspAcknowledgement={id:source.id,eventId:rd.id,name:source.name,page:rd.page,documentType:'rd'};
+ return {...e,approved:true,approvedAt:rd.approvedAt,recordedBefore:rd.recordedBefore,recordedAfter:rd.recordedAfter,acknowledgedByDocument:proof};
+}
+
 const clear=(e:CspEvent):CspEvent=>{
  if(!acknowledgement(e))return e;
  const {acknowledgedByDocument,acknowledgedByRD,approved,approvedAt,recordedBefore,recordedAfter,...pending}=e;return pending;
@@ -55,14 +83,19 @@ function identical(target:CspEvent,source:CspEvent){
 // Recomputed from original approvals on every read. An acknowledgement can
 // never approve another document or publish a second career movement.
 export function acknowledgeCspDecisions<T extends Document>(rows:T[]):T[]{
- const confirmed=new Map<string,{row:T;event:CspEvent}[]>(),dates=new Map<string,Set<string>>();
+ const confirmed=new Map<string,{row:T;event:CspEvent}[]>(),dates=new Map<string,Set<string>>(),verified=new Map<string,{row:T;event:CspEvent}[]>();
  for(const row of rows)if(row.status==='validated')for(const event of row.detail.events||[]){
   if(!eligible(event)||acknowledgement(event)||row.detail.perEventValidation&&!event.approved)continue;
+  if(type(row)==='rd'){
+   const k=rdNameKey(row.date,event),values=verified.get(k)||[];values.push({row,event});verified.set(k,values);
+  }
   const k=key(row.date,event),matches=confirmed.get(k)||[];matches.push({row,event});confirmed.set(k,matches);
   const id=identity(row.date,event),values=dates.get(id)||new Set<string>();values.add(event.effective);dates.set(id,values);
  }
  return resolveNominationOutcomes(rows.map(row=>({...row,detail:{...row.detail,events:(row.detail.events||[]).map(original=>{
   const e=clear(original);
+  const linked=odjConfirmedByRd(row,e,verified);
+  if(linked)return linked;
   if(!['review','validated'].includes(row.status)||row.status==='validated'&&!row.detail.perEventValidation||e.approved||!eligible(e))return e;
   const candidates=(confirmed.get(key(row.date,e))||[]).filter(m=>m.row.id!==row.id&&type(m.row)!==type(row));
   const cumulative=candidates.map(m=>identical(e,m.event)?undefined:cumulativeNomination(e,row.detail.events||[],{status:m.row.status,documentType:type(m.row),events:m.row.detail.events||[]}));
