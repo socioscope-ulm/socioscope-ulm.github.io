@@ -1,3 +1,4 @@
+import {reclassementReferenceChecks,reclassementReferenceSupported} from './csp-reclassement-reference.ts';
 import {nominationReferenceChecks,nominationReferenceSupported} from './csp-nomination-reference.ts';
 import {mutationArrivalReferences} from './csp-mutation-arrival.ts';
 import {activeCspEvents} from './csp-validation.ts';
@@ -21,9 +22,13 @@ export function prepareCspDocuments(data:AgentData,events:CspEvent[],prior:CspIm
  const evidence=current?[...documents.filter(d=>d.id!==current.id),{...current,date,status:current.status??'review',events}]:documents;
  if(current){const acknowledged=acknowledgeCspDecisions(evidence.map(d=>({...d,detail:{documentType:d.documentType,perEventValidation:true,events:d.events}})));events=acknowledged.find(d=>d.id===current.id)!.detail.events;}
  if(!current){const id='csp-outcome-preview';events=resolveNominationOutcomes([...documents.map(d=>({...d,detail:{documentType:d.documentType,perEventValidation:true,events:d.events}})),{id,name:'Aperçu ODJ',date,status:'review',detail:{documentType:'cr',events}}]).find(d=>d.id===id)!.detail.events;}
- const context=prior.map(d=>({...d,events:d.events.filter(e=>(!e.salaryReference||salaryReferenceSupported(e,evidence))&&(!e.nominationReference||nominationReferenceSupported(e,evidence)))}));
+ const context=prior.map(d=>({...d,events:d.events.filter(e=>(!e.salaryReference||salaryReferenceSupported(e,evidence))&&(!e.nominationReference||nominationReferenceSupported(e,evidence))&&(!e.reclassementReference||reclassementReferenceSupported(e,evidence)))}));
  const initial=prepareCsp(data,events,context,date);
  const checks=salaryReferenceChecks(data,events,date,evidence);
+ const reclassifications=reclassementReferenceChecks(initial,date,evidence);
+ checks.reclassementReferences=reclassifications.references;
+ for(const p of initial)if(['ready','scheduled','covered','duplicate'].includes(p.state)) {reclassifications.references.delete(p.id);if(!reclassifications.problems.get(p.id)?.includes('valeurs explicites du RD'))reclassifications.problems.delete(p.id);}
+ for(const [id,problem] of reclassifications.problems)checks.problems.set(id,problem);
  const nominations=nominationReferenceChecks(data,events,date,evidence);
  checks.nominationReferences=nominations.references;
  for(const p of initial){
@@ -38,7 +43,7 @@ export function prepareCspDocuments(data:AgentData,events:CspEvent[],prior:CspIm
   if(ref&&!p.approved&&!['duplicate','covered'].includes(p.state)&&((p.before?.gf!==undefined&&p.before.gf!==ref.gf)||(p.before?.nr!==undefined&&p.before.nr!==ref.nr)))checks.problems.set(p.id,'Mesure salariale : la situation connue contredit les valeurs avant de l’ODJ. Vérifier la référence GF/NR.');
   if(p.before?.gf!==undefined&&p.before?.nr!==undefined)checks.references.delete(p.id);
  }
- const preview=checks.references.size||checks.nominationReferences.size||checks.problems.size?prepareCsp(data,events,context,date,checks):initial;
+ const preview=checks.references.size||checks.nominationReferences.size||checks.reclassementReferences.size||checks.problems.size?prepareCsp(data,events,context,date,checks):initial;
  const rd=documents.filter(d=>d.documentType!=='cr'&&d.date===date&&!d.status.startsWith('disabled'));
  // Resolve identities against the complete history above, then examine each RD
  // using only that person's history. Rebuilding the full name/snapshot indexes

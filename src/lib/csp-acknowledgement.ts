@@ -1,3 +1,4 @@
+import {reclassementEvent} from './csp-reclassement-reference.ts';
 import {cumulativeNomination} from './csp-cumulative.ts';
 import {resolveNominationOutcomes} from './csp-nomination-outcomes.ts';
 import {cspNameKey} from './csp-rup.ts';
@@ -23,6 +24,7 @@ function facts(e:CspEvent){
  return {gfBefore,nrBefore,gfAfter,nrAfter};
 }
 function identical(target:CspEvent,source:CspEvent){
+ target=reclassementEvent(target);source=reclassementEvent(source);
  const known=facts(source);
  // A short RD may omit the GF count. An already approved, fully documented
  // counterpart can establish this same decision, never another movement.

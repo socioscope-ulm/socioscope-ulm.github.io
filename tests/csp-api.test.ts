@@ -365,5 +365,18 @@ test('CSP API validates roles, previews without writes, saves one PDF, rejects i
  const reopened=await (await route.GET(new Request('https://fixture.test/api/csp?id='+rdId,{headers}))).json();assert.equal(reopened.meta.pending,1);assert.equal(reopened.events[0].approved,undefined);
  }
 
+ {
+ // Complete ODJ facts prepare an unvalidated short RD and survive individual publication and reread.
+ const full={id:'full-draft',name:'TEST ALICE',agentId:'A12345',kind:'reclassement',effective:'2026-02-01',page:1,selected:true,gfBefore:9,gfAfter:10,nrBefore:200,nrAfter:210,gfDelta:1};
+ const short={id:'short-draft',name:full.name,kind:'reclassement',effective:full.effective,page:1,selected:true,agency:'AMTC 1'};
+ m.rows=[{id:crId,name:'ODJ fictif.pdf',date:'2026-03-24',status:'review',count:1,detail:JSON.stringify({kind:'csp',documentType:'cr',candidateVersion:1,events:[full]})},{id:rdId,name:'RD fictif.pdf',date:'2026-03-24',status:'review',count:1,detail:JSON.stringify({kind:'csp',documentType:'rd',events:[short]})}];
+ const unchanged=structuredClone(m.rows);
+ const p=await (await route.POST(request({id:rdId,date:'2026-03-24',events:[short]}))).json();assert.equal(p.events[0].state,'ready');assert.equal(p.events[0].gfDelta,1);assert.equal(p.events[0].after.nr,210);assert.deepEqual(m.rows,unchanged);
+ const r=await route.PATCH(request({id:rdId,action:'validate-event',eventId:short.id,events:[short],checked:true},'PATCH'));assert.equal(r.status,200,JSON.stringify(await r.clone().json()));
+ const stored=JSON.parse(m.rows[1].detail).events[0];assert.equal(stored.approved,true);assert.equal(stored.recordedAfter.gf,10);assert.equal(stored.recordedAfter.nr,210);assert.equal(stored.reclassementReference.cr.id,crId);assert.deepEqual(m.rows[0],unchanged[0]);
+ const reopened=await (await route.GET(new Request('https://fixture.test/api/csp?id='+rdId,{headers}))).json();assert.equal(reopened.events[0].reclassementReference.gfDelta,1);
+ const odj=await (await route.GET(new Request('https://fixture.test/api/csp?id='+crId,{headers}))).json();assert.equal(odj.events[0].acknowledgedByDocument.id,rdId);
+ }
+
 });
 
