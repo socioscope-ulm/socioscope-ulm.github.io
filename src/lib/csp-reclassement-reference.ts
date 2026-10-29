@@ -4,12 +4,13 @@ import type {CspEvent,CspImport,CspReclassementReference} from './csp.ts';
 const fields=['gfBefore','gfAfter','nrBefore','nrAfter','gfDelta'] as const;
 const same=(v:CspEvent,e:CspEvent)=>v.selected&&!v.candidacy&&v.kind==='reclassement'&&!!e.agentId&&(!v.agentId||v.agentId===e.agentId)&&cspNameKey(v.name)===cspNameKey(e.name)&&v.effective===e.effective;
 // Draft documentary facts can prepare a decision; they never approve it.
-export function reclassementReferenceChecks(events:CspEvent[],date:string,documents:CspImport[]){
+export function reclassementReferenceChecks(events:CspEvent[],date:string,documents:CspImport[],currentId?:string){
  const references=new Map<string,CspReclassementReference>(),problems=new Map<string,string>();
+ if(!currentId)return {references,problems};
  const active=documents.filter(d=>d.date===date&&!d.status.startsWith('disabled'));
  for(const e of events){
   if(e.kind!=='reclassement'||!e.selected||e.approved||e.extractionIssue||!e.agentId||!validDate(e.effective))continue;
-  const rd=active.filter(d=>d.documentType!=='cr').flatMap(d=>d.events.filter(v=>v.id===e.id&&same(v,e)).map(event=>({document:d,event})));
+  const rd=active.filter(d=>d.id===currentId&&d.documentType!=='cr').flatMap(d=>d.events.filter(v=>v.id===e.id&&same(v,e)).map(event=>({document:d,event})));
   if(rd.length!==1)continue;
   const candidates=active.filter(d=>d.documentType==='cr').flatMap(d=>d.events.filter(v=>same(v,e)).map(event=>({document:d,event})));
   if(!candidates.length)continue;

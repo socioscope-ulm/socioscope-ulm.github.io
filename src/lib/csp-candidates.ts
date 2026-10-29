@@ -25,7 +25,7 @@ export function prepareCspDocuments(data:AgentData,events:CspEvent[],prior:CspIm
  const context=prior.map(d=>({...d,events:d.events.filter(e=>(!e.salaryReference||salaryReferenceSupported(e,evidence))&&(!e.nominationReference||nominationReferenceSupported(e,evidence))&&(!e.reclassementReference||reclassementReferenceSupported(e,evidence)))}));
  const initial=prepareCsp(data,events,context,date);
  const checks=salaryReferenceChecks(data,events,date,evidence);
- const reclassifications=reclassementReferenceChecks(initial,date,evidence);
+ const reclassifications=reclassementReferenceChecks(initial,date,evidence,current?.documentType==='rd'?current.id:undefined);
  checks.reclassementReferences=reclassifications.references;
  for(const p of initial)if(['ready','scheduled','covered','duplicate'].includes(p.state)) {reclassifications.references.delete(p.id);if(!reclassifications.problems.get(p.id)?.includes('valeurs explicites du RD'))reclassifications.problems.delete(p.id);}
  for(const [id,problem] of reclassifications.problems)checks.problems.set(id,problem);

@@ -46,3 +46,10 @@ test('changing or disabling the ODJ invalidates the borrowed reference rather th
   const p=projectCsp(data,[source,published],'2026-10-01');assert.equal(p.issues.length,1);assert.equal(p.data.records.find(r=>r.source===CSP_SOURCE)?.nr,150);
  }
 });
+
+
+test('an ODJ cannot use itself as a documentary fallback for its own missing annual starting salary',()=>{
+ const incomplete={...data,records:[{...data.records[0],gf:undefined}]};
+ const p=prepareCspDocuments(incomplete,[full],[],odj.date,[odj,rd],{id:odj.id,name:odj.name,documentType:'cr',status:'review'})[0];
+ assert.equal(p.reclassementReference,undefined);assert.equal(p.state,'blocked');
+});
