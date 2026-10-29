@@ -1,3 +1,5 @@
+import {unheadedAvancements} from './csp-unheaded-avancement.ts';
+import {cspNameHeader} from './csp-table-header.ts';
 import {detectCspDocumentType} from './csp-document-type.ts';
 import {installPDFByteMethods} from '../../public/pdf-byte-compat.js';
 import {normalName} from './agents.ts';
@@ -20,8 +22,8 @@ export function extractCspPages(pages:CspPage[],documentType:'rd'|'cr'='rd'){
   if(documentType==='cr'&&n.includes('BORDEREAU DES CANDIDATS')){events.push(...extractCrCandidates(pg,report));continue;}
   if(!kind){report.status=n.includes('LONGUE MALADIE')?'empty':'unsupported';report.note=n.includes('LONGUE MALADIE')?'Information collective : aucun changement individuel importé.':'Mise en page ou rubrique non reconnue : à examiner.';continue;}
   if(documentType==='cr'&&kind!=='nomination'){events.push(...extractCrPage(pg,kind,report));continue;}
-  const head=rows.find(r=>/NOM\s+PR[EÉ]NOM/.test(r.text));
-  if(!head){report.status='unsupported';report.note='En-tête du tableau non reconnu.';continue;}
+  const head=cspNameHeader(pg.items)?.head;
+  if(!head){if(kind==='avancement'){events.push(...unheadedAvancements(pg,report));continue;}report.status='unsupported';report.note='En-tête du tableau non reconnu.';continue;}
   const headerY=head.y;
   const cutoff=pg.width*(kind==='reclassement'?.35:kind==='avancement'?.32:kind==='mutation'?.18:kind==='nomination'?.255:.20);
   const content=pg.items.filter(i=>i.y<headerY-7&&i.y>pg.height*.07);

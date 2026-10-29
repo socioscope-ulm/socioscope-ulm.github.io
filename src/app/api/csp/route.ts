@@ -1,3 +1,5 @@
+import {recoverCspPages,confirmCspPage} from '../../../lib/csp-recovery';
+import {cspUnreadPages} from '../../../lib/csp-coverage';
 import {cspAutomaticCompletion} from '../../../lib/csp-document-completion';
 import {cspDocumentLabel} from '../../../lib/csp-document-label';
 import {correctionEvents,planCspCorrection} from '../../../lib/csp-correction';
@@ -10,7 +12,7 @@ import {cspKinds,cspKey,cspNonRetained,cspResolvedEvent,validateCspEvent,dedupli
 import type {CspEvent} from '../../../lib/csp';
 function fail(message:string,status=400):never{throw Object.assign(Error(message),{status});}
 const parse=(row:any)=>{let detail:any={};try{detail=JSON.parse(row.detail||'{}');}catch{}return {...row,detail,rawDetail:detail};};
-const metadata=(row:any)=>({id:row.id,name:row.name,date:row.date,status:row.status,automaticallyValidated:!!row.automaticallyValidated,count:row.count,documentType:row.detail.documentType==='cr'?'cr':'rd',created:row.created,duplicates:row.detail.duplicates||0,reports:row.detail.reports||[],perEventValidation:!!row.detail.perEventValidation,candidateVersion:row.detail.candidateVersion||0,corrections:(row.detail.corrections||[]).map((c:any)=>({eventId:c.eventId,reason:c.reason,at:c.at})),...cspProgress(row.status,row.detail)});
+const metadata=(row:any)=>({id:row.id,name:row.name,date:row.date,status:row.status,automaticallyValidated:!!row.automaticallyValidated,count:row.count,documentType:row.detail.documentType==='cr'?'cr':'rd',created:row.created,duplicates:row.detail.duplicates||0,reports:row.detail.reports||[],unreadPages:cspUnreadPages(row.detail.reports).length,perEventValidation:!!row.detail.perEventValidation,candidateVersion:row.detail.candidateVersion||0,corrections:(row.detail.corrections||[]).map((c:any)=>({eventId:c.eventId,reason:c.reason,at:c.at})),...cspProgress(row.status,row.detail)});
 async function imports(){const rows=acknowledgeCspDecisions((await resources().db.prepare('SELECT * FROM agent_imports WHERE id LIKE ? ORDER BY date,created,id').bind('csp-%').all<any>()).results.map(parse).filter(r=>r.detail.kind==='csp'));return rows.map(row=>({...row,automaticallyValidated:cspAutomaticCompletion(row,rows)}));}
 const currentDocument=(row:any)=>({id:row.id,name:row.name,status:row.status,documentType:row.detail.documentType==='cr'?'cr' as const:'rd' as const});
 const documents=(rows:any[])=>rows.map(r=>({id:r.id,name:r.name,date:r.date,status:r.status,created:r.created,documentType:r.detail.documentType==='cr'?'cr' as const:'rd' as const,events:(r.detail.events||[]).map((e:CspEvent)=>r.status==='validated'&&!r.detail.perEventValidation&&e.selected?{...e,approved:true}:e)}));
@@ -46,6 +48,23 @@ export async function POST(request:Request){try{
 }catch(e){return agentError(e);}}
 export async function PATCH(request:Request){try{
  await agentAuth(request,true);const b=await request.json();if(typeof b.id!=='string'||!b.id.startsWith('csp-'))fail('Relevé invalide.');const {db}=resources();const row=(await imports()).find(r=>r.id===b.id);if(!row||row.detail.kind!=='csp')fail('Relevé introuvable.',404);
+ if(b.action==='confirm-page'){
+  if(!['review','validated'].includes(row.status)||b.checked!==true||!Number.isInteger(b.page))fail('Confirmer la vérification complète de la page.');
+  const confirmed=confirmCspPage(row.detail,b.page);
+  const detail={...confirmed,pageReviews:[...(row.detail.pageReviews||[]),{page:b.page,at:new Date().toISOString(),actor:request.headers.get('oai-authenticated-user-email')}]};
+  const changed=await db.prepare('UPDATE agent_imports SET detail=?,status=?,count=? WHERE id=? AND status=? AND detail=?').bind(JSON.stringify(detail),row.status,row.count,b.id,row.status,JSON.stringify(row.rawDetail||row.detail)).run();
+  if(changed.meta.changes!==1)fail('Le document a changé. Recharger.',409);return Response.json({ok:true});
+ }
+ if(b.action==='recover-pages'){
+  if(!['review','validated'].includes(row.status))fail('Réactiver le document avant de reprendre sa lecture.',409);
+  if(!Array.isArray(b.events)||b.events.length>3000||!b.events.every(validateCspEvent)||!Array.isArray(b.reports)||b.reports.length>250)fail('Résultat de relecture invalide.');
+  const detail=recoverCspPages(row.detail,row.status,b.events,b.reports);
+  if(detail.events.length>3000)fail('Le document dépasse 3 000 décisions.');
+  const added=detail.events.length-(row.detail.events||[]).length;
+  const changed=await db.prepare('UPDATE agent_imports SET detail=?,status=?,count=? WHERE id=? AND status=? AND detail=?').bind(JSON.stringify(detail),row.status,detail.events.filter((e:CspEvent)=>e.selected).length,b.id,row.status,JSON.stringify(row.rawDetail||row.detail)).run();
+  if(changed.meta.changes!==1)fail('Le document a changé. Recharger avant de reprendre sa lecture.',409);
+  return Response.json({ok:true,added,unreadPages:cspUnreadPages(detail.reports).length});
+ }
  if(b.action==='add-candidates'){
   if(row.detail.documentType!=='cr'||row.status.startsWith('disabled')||!Array.isArray(b.events)||b.events.length>3000||!b.events.every((e:any)=>validateCspEvent(e)&&e.candidacy===true&&e.kind==='nomination'))fail('Candidatures de l’ODJ invalides.');
   const detail=addCrCandidates(row.detail,row.status,deduplicateCsp(b.events));

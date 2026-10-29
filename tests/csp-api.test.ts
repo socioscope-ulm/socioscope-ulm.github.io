@@ -378,5 +378,18 @@ test('CSP API validates roles, previews without writes, saves one PDF, rejects i
  const odj=await (await route.GET(new Request('https://fixture.test/api/csp?id='+crId,{headers}))).json();assert.equal(odj.events[0].acknowledgedByDocument.id,rdId);
  }
 
+ {
+ // Re-read only failed pages, preserve published decisions, and keep unread coverage explicit.
+ const existing={id:'existing-read',name:'TEST ALICE',agentId:'A12345',kind:'avancement',effective:'2026-01-01',nrSteps:1,page:1,selected:true,approved:true,recordedBefore:{gf:9,nr:200},recordedAfter:{gf:9,nr:205},note:'Annotation conservée'};
+ const report={page:6,section:'avancement',status:'unsupported',count:0,note:'En-tête non reconnu.'};
+ const recovered={id:'recovered',name:'TEST ALICE',agentId:'A12345',kind:'avancement',effective:'2026-02-01',nrSteps:1,page:6,selected:true,approved:true};
+ m.rows=[{id:rdId,name:'RD fictif.pdf',date:'2026-03-24',status:'validated',count:1,detail:JSON.stringify({kind:'csp',documentType:'rd',perEventValidation:true,events:[existing],reports:[report]})}];
+ const result=await route.PATCH(request({id:rdId,action:'recover-pages',events:[recovered],reports:[{...report,status:'read',count:1}]},'PATCH'));
+ assert.equal(result.status,200,JSON.stringify(await result.clone().json()));assert.equal((await result.json()).added,1);
+ const detail=JSON.parse(m.rows[0].detail);assert.deepEqual(detail.events[0],existing);assert.equal(detail.events[1].approved,undefined);assert.equal(m.rows[0].status,'validated');
+ const opened=await (await route.GET(new Request('https://fixture.test/api/csp?id='+rdId,{headers}))).json();assert.equal(opened.meta.pending,1);assert.equal(opened.meta.unreadPages,0);
+ assert.equal((await route.PATCH(request({id:rdId,action:'recover-pages',events:[recovered],reports:[report]},'PATCH','viewer'))).status,403);
+ }
+
 });
 

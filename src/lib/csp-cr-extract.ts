@@ -1,3 +1,5 @@
+import {unheadedAvancements} from './csp-unheaded-avancement.ts';
+import {cspNameHeader} from './csp-table-header.ts';
 import {normalName} from './agents.ts';
 import {validDate} from './csp.ts';
 import type {CspEvent,CspKind} from './csp.ts';
@@ -10,9 +12,8 @@ const date=(v:string)=>{const m=v.match(/\b(\d{2})\/(\d{2})\/(\d{4})\b/);const d
 const cleanAgency=(v:string)=>v.replace(/^UNITE LOGISTIQUE MAINTENANCE\s*\/\s*/i,'').replace(/-\s+/g,'-').trim();
 
 function crTable(pg:CspPage){
- const head=pg.items.find(i=>normalName(i.str)==='NOM PRENOM');
- if(!head)return undefined;
- const header=pg.items.filter(i=>i.str.trim()&&Math.abs(i.y-head.y)<=12);
+ const found=cspNameHeader(pg.items);if(!found)return undefined;const {head,members}=found;
+ const header=[...pg.items.filter(i=>!members.includes(i)&&i.str.trim()&&i.y>=Math.min(...members.map(m=>m.y))-12&&i.y<=Math.max(...members.map(m=>m.y))+12),head];
  const groups:{center:number;items:CspTextItem[]}[]=[];
  for(const i of header){let g=groups.find(g=>Math.abs(g.center-center(i))<5&&!g.items.some(j=>Math.abs(j.y-i.y)<2));if(!g){g={center:center(i),items:[]};groups.push(g);}g.items.push(i);}
  const columns:Column[]=groups.sort((a,b)=>a.center-b.center).map((g,ix,all)=>({label:normalName(text(g.items)),center:g.center,left:ix?(all[ix-1].center+g.center)/2:0,right:ix+1<all.length?(g.center+all[ix+1].center)/2:pg.width}));
@@ -22,7 +23,7 @@ function crTable(pg:CspPage){
 // ODJ tables print absolute situations, whereas the RD tables print increments.
 // Locate columns by their headers instead of reusing the RD's fixed positions.
 export function extractCrPage(pg:CspPage,kind:CspKind,report:CspPageReport):CspEvent[]{
- const table=crTable(pg);if(!table){report.status='unsupported';report.note='En-tête du tableau non reconnu.';return [];}
+ const table=crTable(pg);if(!table){if(kind==='avancement')return unheadedAvancements(pg,report);report.status='unsupported';report.note='En-tête du tableau non reconnu.';return [];}
  const {head,header,columns}=table;
  const find=(pattern:RegExp,last=false)=>{const found=columns.filter(c=>pattern.test(c.label));return last?found.at(-1):found[0];};
  const nameCol=find(/^NOM PRENOM$/),dateCol=find(kind==='admission'?/^DATE DEBUT STAGE$/:kind==='titularisation'?/^DATE TITULARISATION$/:/^DATE D EFFET$/);

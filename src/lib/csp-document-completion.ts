@@ -1,10 +1,11 @@
+import {cspUnreadPages} from './csp-coverage.ts';
 import {cspExtractionIssue} from './csp.ts';
 import type {CspEvent} from './csp.ts';
-type Document={id:string;status:string;detail:{documentType?:string;events?:CspEvent[]}};
+type Document={id:string;status:string;detail:{documentType?:string;events?:CspEvent[];reports?:any[]}};
 // Derived display-only completion: never publish a movement or persist an approval.
 // Rebuild acknowledgements from active, validated source documents before calling.
 export function cspAutomaticCompletion(row:Document,rows:Document[]){
- if(row.status!=='review')return false;
+ if(row.status!=='review'||cspUnreadPages(row.detail.reports).length)return false;
  const events=row.detail.events||[];
  const isCr=row.detail.documentType==='cr';
  const sources=new Set(rows.filter(d=>d.status==='validated'&&(d.detail.documentType==='cr')!==isCr).map(d=>d.id));
