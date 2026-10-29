@@ -29,7 +29,7 @@ export async function GET(request:Request){try{
  const offset=Math.max(0,Math.floor(Number(p.get('offset'))||0)),pageSize=60;
  const pending=rows.filter(r=>r.status==='validated').flatMap(r=>activeCspEvents(r.detail).filter(isPendingAdmission));
  let history=rows;
- if(pending.length){const {data}=await agentData(true);const resolved=resolvePendingAdmissions(data,rows.map(r=>({...r,events:activeCspEvents(r.detail)})));history=rows.map((r,index)=>({...r,detail:{...r.detail,events:resolved[index].events,perEventValidation:false}}));}
+ if(pending.length){const {data:baseData}=await agentData(true,undefined,parisToday(),false);const data=await cspIdentityData(baseData,pending);const resolved=resolvePendingAdmissions(data,rows.map(r=>({...r,events:activeCspEvents(r.detail)})));history=rows.map((r,index)=>({...r,detail:{...r.detail,events:resolved[index].events,perEventValidation:false}}));}
  const decisions=history.filter(r=>r.status==='validated'&&(!meeting||r.id===meeting)).flatMap(r=>activeCspEvents(r.detail).filter(e=>(!kind||e.kind===kind)&&(!agent||e.agentId===agent)&&(!q||(e.name+' '+e.agentId+' '+e.agency).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().includes(q))).map(e=>({...e,importId:r.id,meetingDate:r.date,document:r.name}))).sort((a,b)=>b.effective.localeCompare(a.effective)||a.name.localeCompare(b.name,'fr'));
  const unique=new Map<string,typeof decisions[number]>();for(const e of decisions)if(!unique.has(cspKey(e)))unique.set(cspKey(e),e);const list=[...unique.values()];
  return Response.json({imports:rows.map(metadata),total:list.length,records:list.slice(offset,offset+pageSize),kinds:cspKinds,pageSize});
