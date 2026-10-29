@@ -9,7 +9,7 @@ export function pendingAdmissionId(e:Pick<CspEvent,'name'|'effective'|'agency'|'
  const name=cspNameKey(e.name),identity=[name,normalName(e.agency),normalName(e.job)].join('|');let hash=2166136261;for(const c of identity)hash=Math.imul(hash^c.charCodeAt(0),16777619)>>>0;
  return 'pending-csp-'+name.replaceAll(' ','_').slice(0,50)+'-'+hash.toString(16)+'-'+e.effective;
 }
-export function isPendingAdmission(e:CspEvent){return e.kind==='admission'&&e.newAgent===true&&e.identityPending===true&&!normalizeNNI(e.agentId);}
+export function isPendingAdmission(e:CspEvent){return (e.kind==='admission'||e.kind==='nomination')&&e.newAgent===true&&e.identityPending===true&&!normalizeNNI(e.agentId);}
 
 // Reconciliation is derived from active evidence. Stored approvals and their
 // original audit trail stay intact; disabling a RUP removes its identity proof.
