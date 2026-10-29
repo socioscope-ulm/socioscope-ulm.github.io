@@ -1,3 +1,4 @@
+import {nominationReferenceChecks,nominationReferenceSupported} from './csp-nomination-reference.ts';
 import {mutationArrivalReferences} from './csp-mutation-arrival.ts';
 import {activeCspEvents} from './csp-validation.ts';
 import {cumulativeNomination} from './csp-cumulative.ts';
@@ -20,16 +21,24 @@ export function prepareCspDocuments(data:AgentData,events:CspEvent[],prior:CspIm
  const evidence=current?[...documents.filter(d=>d.id!==current.id),{...current,date,status:current.status??'review',events}]:documents;
  if(current){const acknowledged=acknowledgeCspDecisions(evidence.map(d=>({...d,detail:{documentType:d.documentType,perEventValidation:true,events:d.events}})));events=acknowledged.find(d=>d.id===current.id)!.detail.events;}
  if(!current){const id='csp-outcome-preview';events=resolveNominationOutcomes([...documents.map(d=>({...d,detail:{documentType:d.documentType,perEventValidation:true,events:d.events}})),{id,name:'Aperçu ODJ',date,status:'review',detail:{documentType:'cr',events}}]).find(d=>d.id===id)!.detail.events;}
- const context=prior.map(d=>({...d,events:d.events.filter(e=>!e.salaryReference||salaryReferenceSupported(e,evidence))}));
+ const context=prior.map(d=>({...d,events:d.events.filter(e=>(!e.salaryReference||salaryReferenceSupported(e,evidence))&&(!e.nominationReference||nominationReferenceSupported(e,evidence)))}));
  const initial=prepareCsp(data,events,context,date);
  const checks=salaryReferenceChecks(data,events,date,evidence);
+ const nominations=nominationReferenceChecks(data,events,date,evidence);
+ checks.nominationReferences=nominations.references;
+ for(const p of initial){
+  if(p.before?.gf!==undefined&&p.before?.nr!==undefined){nominations.references.delete(p.id);nominations.problems.delete(p.id);continue;}
+  const ref=nominations.references.get(p.id);if(!ref)continue;
+  if(p.before?.gf!==undefined&&p.before.gf!==ref.gf||p.before?.nr!==undefined&&p.before.nr!==ref.nr)checks.problems.set(p.id,'Nomination : la situation connue contredit les GF/NR du candidat dans l’ODJ.');
+ }
+ for(const [id,problem] of nominations.problems)checks.problems.set(id,problem);
  // Keep independent annual references independent from documentary fallback.
  for(const p of initial){
   const ref=checks.references.get(p.id);
   if(ref&&!p.approved&&!['duplicate','covered'].includes(p.state)&&((p.before?.gf!==undefined&&p.before.gf!==ref.gf)||(p.before?.nr!==undefined&&p.before.nr!==ref.nr)))checks.problems.set(p.id,'Mesure salariale : la situation connue contredit les valeurs avant de l’ODJ. Vérifier la référence GF/NR.');
   if(p.before?.gf!==undefined&&p.before?.nr!==undefined)checks.references.delete(p.id);
  }
- const preview=checks.references.size||checks.problems.size?prepareCsp(data,events,context,date,checks):initial;
+ const preview=checks.references.size||checks.nominationReferences.size||checks.problems.size?prepareCsp(data,events,context,date,checks):initial;
  const rd=documents.filter(d=>d.documentType!=='cr'&&d.date===date&&!d.status.startsWith('disabled'));
  // Resolve identities against the complete history above, then examine each RD
  // using only that person's history. Rebuilding the full name/snapshot indexes
@@ -58,7 +67,7 @@ export function prepareCspDocuments(data:AgentData,events:CspEvent[],prior:CspIm
    const current:CspImport={id:'csp-current-approved',name:'Décisions déjà validées de ce document',date,status:'validated',events:activeCspEvents({events,perEventValidation:true})};
    const context=[...prior.filter(i=>i.id!==d.id),own,current];
    const scopedContext=context.map(i=>({...i,events:i.events.filter(event=>event.agentId===p.agentId)}));
-   const decision=prepareCsp(forAgent(p.agentId!),[e],scopedContext,d.date)[0];
+   const decision=prepareCspDocuments(forAgent(p.agentId!),[e],scopedContext,d.date,evidence,{id:d.id,name:d.name,documentType:'rd',status:d.status})[0];
    return {d,e,decision};
   });
   if(checked.some(({decision})=>decision.agentId!==p.agentId))return blocked('Le ODJ et le RD ne désignent pas le même NNI : vérifier le rapprochement RUP.');

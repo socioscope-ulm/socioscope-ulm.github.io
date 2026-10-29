@@ -1,6 +1,6 @@
 import test from 'node:test';import assert from 'node:assert/strict';import {build} from 'esbuild';
 test('CSP API validates roles, previews without writes, saves one PDF, rejects incomplete decisions and protects concurrent changes',async()=>{
- const m={rows:[] as any[],puts:[] as string[],queries:[] as string[]};(globalThis as any).__cspAPI=m;
+ const m={rows:[] as any[],puts:[] as string[],queries:[] as string[],identities:[] as any[]};(globalThis as any).__cspAPI=m;
  const b=await build({entryPoints:[new URL('../src/app/api/csp/route.ts',import.meta.url).pathname],bundle:true,write:false,platform:'node',format:'esm',plugins:[{name:'csp-fixture',setup(build){
   build.onResolve({filter:/\/(store|agents-store)(\.ts)?$/},a=>({path:a.path.split('/').at(-1)!.replace('.ts',''),namespace:'csp-test'}));
   build.onLoad({filter:/.*/,namespace:'csp-test'},a=>({resolveDir:new URL('..',import.meta.url).pathname,contents:a.path==='agents-store'?`
@@ -331,6 +331,25 @@ test('CSP API validates roles, previews without writes, saves one PDF, rejects i
  assert.deepEqual(m.rows[0],untouched);
  const reopened=await (await route.GET(new Request('https://fixture.test/api/csp?id='+crId,{headers}))).json();
  assert.equal(reopened.events[0].approved,true);assert.equal(reopened.events[0].recordedAfter.nr,205);
+ }
+
+ {
+ // The actual individual-validation route must store and reload a nomination's ODJ reference.
+ const person={name:'EXEMPLE ARRIVANTE',agentId:'Z00009'};
+ const candidate={...person,id:'new-candidate',page:1,kind:'nomination',candidacy:true,selected:true,effective:'',reference:'26-00008.01',agency:'AGENCE FICTIVE',job:'EMPLOI FICTIF',gfBefore:10,nrBefore:155};
+ const appointment={...person,id:'new-appointment',page:2,kind:'nomination',selected:true,effective:'2026-08-01',reference:candidate.reference,agency:candidate.agency,job:candidate.job,gfDelta:0};
+ m.identities=[{name:person.name,nni:person.agentId,source:'rup-fiction',date:'2026-09-30'}];
+ m.rows=[{id:crId,name:'ODJ fictif.pdf',date:'2026-06-15',status:'review',count:1,detail:JSON.stringify({kind:'csp',documentType:'cr',candidateVersion:1,events:[candidate]})},{id:rdId,name:'RD fictif.pdf',date:'2026-06-15',status:'review',count:1,detail:JSON.stringify({kind:'csp',documentType:'rd',events:[appointment]})}];
+ const untouched=structuredClone(m.rows[0]);
+ const preview=await (await route.POST(request({id:rdId,date:'2026-06-15',events:[appointment]}))).json();
+ assert.equal(preview.events[0].state,'ready');assert.equal(preview.events[0].after.nr,155);assert.ok(preview.events[0].nominationReference);
+ const candidatePreview=await (await route.POST(request({id:crId,date:'2026-06-15',events:[candidate]}))).json();assert.equal(candidatePreview.events[0].state,'ready');
+ const response=await route.PATCH(request({id:rdId,action:'validate-event',eventId:appointment.id,events:[appointment],checked:true},'PATCH'));
+ assert.equal(response.status,200,JSON.stringify(await response.clone().json()));
+ const stored=JSON.parse(m.rows[1].detail).events[0];assert.equal(stored.approved,true);assert.equal(stored.recordedBefore.gf,10);assert.equal(stored.recordedAfter.nr,155);assert.equal(stored.nominationReference.cr.id,crId);assert.deepEqual(m.rows[0],untouched);
+ const reopened=await (await route.GET(new Request('https://fixture.test/api/csp?id='+rdId,{headers}))).json();assert.equal(reopened.events[0].nominationReference.nni,person.agentId);
+ const readAgain=await (await route.POST(request({id:rdId,date:'2026-06-15',events:reopened.events}))).json();assert.equal(readAgain.events[0].state,'validated');assert.equal(readAgain.events[0].after.nr,155);
+ m.identities=[];
  }
 
 });
