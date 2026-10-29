@@ -286,5 +286,18 @@ test('CSP API validates roles, previews without writes, saves one PDF, rejects i
  const stored=JSON.parse(m.rows[0].detail).events[0];assert.equal(stored.newAgent,true);assert.equal(stored.recordedAfter.gf,7);assert.equal(stored.recordedAfter.nr,110);assert.equal(m.rows[0].status,'validated');
  }
 
+ {
+ // A historical posthumous count remains independently validatable after an earlier award.
+ const previous={id:'previous-posthumous',name:'TEST ALICE',agentId:'A12345',kind:'posthume',effective:'2026-02-01',nrBefore:200,nrSteps:1,page:1,selected:true,approved:true};
+ const pending={...previous,id:'pending-posthumous',nrSteps:5,nrAfter:225,approved:undefined};
+ m.rows=[{id:rdId,name:'RD fictif.pdf',date:'2026-03-24',status:'validated',count:1,detail:JSON.stringify({kind:'csp',documentType:'rd',perEventValidation:true,events:[previous]})},{id:crId,name:'ODJ fictif.pdf',date:'2026-03-24',status:'validated',count:1,detail:JSON.stringify({kind:'csp',documentType:'cr',perEventValidation:true,events:[pending]})}];
+ const unchangedRD=structuredClone(m.rows[0]);
+ const p=await (await route.POST(request({id:crId,date:'2026-03-24',events:[pending]}))).json();
+ assert.equal(p.events[0].state,'ready');assert.equal(p.events[0].before.nr,200);assert.equal(p.events[0].after.nr,225);
+ const r=await route.PATCH(request({id:crId,action:'validate-event',eventId:pending.id,events:[pending],checked:true},'PATCH'));
+ assert.equal(r.status,200,JSON.stringify(await r.clone().json()));assert.equal((await r.json()).pending,0);
+ assert.equal(JSON.parse(m.rows[1].detail).events[0].recordedAfter.nr,225);assert.deepEqual(m.rows[0],unchangedRD);
+ }
+
 });
 
