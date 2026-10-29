@@ -127,3 +127,17 @@ test('manual reclassement exception preserves the documented NR without changing
  for(const invalid of [{nrBefore:undefined},{nrAfter:undefined},{nrAfter:199},{nrAfter:202},{kind:'nomination'},{reclassementNRConfirmed:'yes'}])assert.equal(validateCspEvent({...confirmed,...invalid}),false);
  assert.equal(prepareCsp(base,[{...confirmed,nrAfter:205}])[0].after?.nr,205);
 });
+
+
+test('confirming a reclassement exception resolves its parser warning, while other issues remain blocking',()=>{
+ const warning='progression NR différente de la règle de reclassement. Vérifier le document et corriger la ligne.';
+ const parsed=event({gfBefore:9,gfAfter:10,nrBefore:200,nrAfter:200,extractionIssue:warning});
+ assert.equal(prepareCsp(base,[parsed])[0].state,'blocked');
+ const confirmed={...parsed,reclassementNRConfirmed:true};
+ assert.equal(prepareCsp(base,[confirmed])[0].state,'ready');
+ assert.equal(prepareCsp(base,[{...confirmed,effective:'2025-01-01'}])[0].state,'covered');
+ const projection=projectCsp(base,[imported([confirmed])],'2026-06-01');
+ assert.deepEqual(projection.issues,[]);assert.equal(current(projection.data).nr,200);assert.equal(current(projection.data).gf,10);
+ for(const issue of ['GF avant absent ou illisible ; '+warning,'progression NR différente de la règle de reclassement ; GF après absent ou illisible. Vérifier le document et corriger la ligne.'])assert.equal(prepareCsp(base,[{...confirmed,extractionIssue:issue}])[0].state,'blocked');
+ assert.equal(prepareCsp(base,[{...confirmed,reclassementNRConfirmed:false}])[0].state,'blocked');
+});

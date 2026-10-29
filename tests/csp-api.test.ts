@@ -301,7 +301,7 @@ test('CSP API validates roles, previews without writes, saves one PDF, rejects i
 
  {
  // Explicit manual exception is checked, persisted and projected through the normal individual validation.
- const manual={id:'manual-reclassement',name:'TEST ALICE',agentId:'A12345',kind:'reclassement',effective:'2026-04-01',gfDelta:1,gfBefore:9,gfAfter:10,nrBefore:200,nrAfter:200,page:1,selected:true};
+ const manual={id:'manual-reclassement',name:'TEST ALICE',agentId:'A12345',kind:'reclassement',effective:'2026-04-01',gfDelta:1,gfBefore:9,gfAfter:10,nrBefore:200,nrAfter:200,page:1,selected:true,extractionIssue:'progression NR différente de la règle de reclassement. Vérifier le document et corriger la ligne.'};
  m.rows=[{id:crId,name:'ODJ fictif.pdf',date:'2026-03-24',status:'review',count:1,detail:JSON.stringify({kind:'csp',documentType:'cr',perEventValidation:true,events:[manual]})}];
  const validate=(event:any)=>route.PATCH(request({id:crId,action:'validate-event',eventId:event.id,events:[event],checked:true},'PATCH'));
  assert.equal((await validate(manual)).status,400);

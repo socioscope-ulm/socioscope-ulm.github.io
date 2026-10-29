@@ -1,3 +1,4 @@
+import {cspExtractionIssue} from './csp.ts';
 import {cspNameKey} from './csp-rup.ts';
 import {normalName} from './agents.ts';
 import {validDate} from './csp.ts';
@@ -5,7 +6,7 @@ import type {CspEvent,CspAcknowledgement,CspNonRetentionProof} from './csp.ts';
 type Document={id:string;name:string;date:string;status:string;detail:{documentType?:string;events?:CspEvent[];[key:string]:unknown};[key:string]:unknown};
 const post=(date:string,reference:string)=>JSON.stringify([date,reference.trim()]);
 const active=(d:Document)=>['review','validated'].includes(d.status);
-const complete=(d:Document)=>d.status==='validated'&&!!d.detail.events?.some(e=>e.selected)&&d.detail.events.every(e=>!e.selected||!e.candidacy&&!e.extractionIssue&&validDate(e.effective)&&(!d.detail.perEventValidation||e.approved===true));
+const complete=(d:Document)=>d.status==='validated'&&!!d.detail.events?.some(e=>e.selected)&&d.detail.events.every(e=>!e.selected||!e.candidacy&&!cspExtractionIssue(e)&&validDate(e.effective)&&(!d.detail.perEventValidation||e.approved===true));
 // This is a documentary disposition, never an approval or a career movement.
 // Rebuild it on every read so that withdrawing/correcting the RD reopens the ODJ.
 export function resolveNominationOutcomes<T extends Document>(rows:T[]):T[]{

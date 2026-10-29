@@ -10,6 +10,12 @@ export type CspSalaryChecks={references:Map<string,CspSalaryReference>;problems:
 export type CspAcknowledgement={id:string;eventId:string;name:string;page:number;documentType:'cr'|'rd';cumulative?:boolean};
 export type CspNonRetentionProof=Omit<CspAcknowledgement,'eventId'|'page'>&{eventId?:string;page?:number;reason?:'unfilled-post'};
 export type CspEvent={acknowledgedByDocument?:CspAcknowledgement;acknowledgedByRD?:{id:string;eventId:string;name:string;page:number};salaryReference?:CspSalaryReference;id:string;name:string;agentId?:string;kind:CspKind;effective:string;page:number;pages?:number[];agency?:string;job?:string;team?:string;m3e?:string;location?:string;reference?:string;gfDelta?:number;nrSteps?:number;gfBefore?:number;gfAfter?:number;nrBefore?:number;nrAfter?:number;identityMethod?:'rup'|'annual'|'manual';identitySource?:string;identityDate?:string;selected:boolean;candidacy?:boolean;nonRetained?:boolean;nonRetainedByRD?:CspNonRetentionProof;approved?:boolean;approvedAt?:string;note?:string;nrConfirmed?:boolean;reclassementNRConfirmed?:boolean;extractionIssue?:string;newAgent?:boolean;recordedBefore?:Partial<AgentRecord>;recordedAfter?:Partial<AgentRecord>};
+// A confirmed NR exception resolves only this business-rule warning, not extraction errors.
+export function cspExtractionIssue(e:CspEvent){
+ if(e.kind!=='reclassement'||!e.reclassementNRConfirmed||!e.extractionIssue)return e.extractionIssue;
+ const remaining=e.extractionIssue.split(' ; ').filter(part=>!/^progression NR différente de la règle de reclassement(?:\. Vérifier le document et corriger la ligne\.)?$/i.test(part.trim()));
+ return remaining.join(' ; ')||undefined;
+}
 export type CspImport={id:string;name:string;date:string;status:string;created?:string;events:CspEvent[];documentType?:'rd'|'cr';evidenceEvents?:CspEvent[]};
 export type CspPreview=CspEvent&{state:string;problem:string;matchedDocument?:CspAcknowledgement;matchedRD?:{id:string;eventId:string;name:string;page:number;approved:boolean};before?:Partial<AgentRecord>;after?:Partial<AgentRecord>;candidates?:{id:string;name:string;agency?:string}[]};
 export const cspNonRetained=(e:CspEvent)=>!!(e.nonRetained||e.nonRetainedByRD);
@@ -40,7 +46,7 @@ function nominationNRSteps(e:CspEvent,row:Partial<AgentRecord>|undefined){return
 // the transfer always retains the current salary, never the quoted old NR.
 function applyEvent(row:AgentRecord|undefined,e:CspEvent,salaryHistory:AgentRecord[]=[]):{row?:AgentRecord;problem:string}{
  if(e.candidacy)return {problem:'Candidature de l’ODJ : en attente de confirmation par un RD.'};
- if(e.extractionIssue)return {problem:e.extractionIssue};
+ const extractionIssue=cspExtractionIssue(e);if(extractionIssue)return {problem:extractionIssue};
  if(e.kind==='mutation'&&e.job&&/^[-–—\s]+$/.test(e.job))e={...e,job:undefined};
  const nrSteps=cspNRSteps(e)??nominationNRSteps(e,row);
  if(row&&e.kind==='mutation'&&!e.gfDelta&&!nrSteps&&
@@ -114,7 +120,7 @@ export function prepareCsp(data:AgentData,events:CspEvent[],prior:CspImport[]=[]
   if(e.candidacy&&cspNonRetained(e)){out.state='not-retained';out.problem=e.nonRetainedByRD?.reason==='unfilled-post'?'Traité automatiquement : le RD entièrement validé « '+e.nonRetainedByRD.name+' » ne comporte aucune nomination pour ce poste. Candidature non retenue, poste non pourvu ; aucun effet sur la situation RH.':e.nonRetainedByRD?'Traité automatiquement : le RD « '+e.nonRetainedByRD.name+' » désigne un ou plusieurs autres candidats pour ce poste. Aucun effet sur la situation RH.':'Candidature clôturée sans nomination : aucun effet sur la situation de l’agent. Conservée dans le bordereau.';}
   else if(!e.selected){out.state='excluded';out.problem='Écarté de cet import.';}
   else if(e.candidacy){out.state='blocked';out.problem='En attente du RD : aucune prise de poste confirmée.';}
-  else if(e.extractionIssue){out.state='blocked';out.problem=e.extractionIssue;}
+  else if(cspExtractionIssue(e)){out.state='blocked';out.problem=cspExtractionIssue(e)!;}
   else if(!e.agentId){out.state='blocked';out.problem=(e as CspPreview).candidates?.length?'Plusieurs agents possibles : choisir le NNI.':'Agent non rapproché : choisir le NNI ou confirmer une arrivée.';}
   else if(salaryChecks?.problems.has(e.id)){out.state='blocked';out.problem=salaryChecks.problems.get(e.id)!;}
   else if(known.has(key)||seen.has(key)){const old=known.get(key);const conflict=old&&['gfAfter','nrAfter'].some(k=>{const prior=(old as any)[k]??(old.recordedAfter as any)?.[k==='gfAfter'?'gf':'nr'];return (e as any)[k]!==undefined&&prior!==undefined&&(e as any)[k]!==prior;});out.state=conflict?'blocked':'duplicate';out.problem=conflict?'Une autre version de cette décision indique une situation après différente. Corriger le relevé existant.':'Décision identique déjà présente : aucun cumul.';}

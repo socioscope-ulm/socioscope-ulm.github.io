@@ -2,12 +2,12 @@ import {cumulativeNomination} from './csp-cumulative.ts';
 import {resolveNominationOutcomes} from './csp-nomination-outcomes.ts';
 import {cspNameKey} from './csp-rup.ts';
 import {normalName} from './agents.ts';
-import {cspKey,cspNRSteps,validDate} from './csp.ts';
+import {cspExtractionIssue,cspKey,cspNRSteps,validDate} from './csp.ts';
 import type {CspEvent,CspAcknowledgement} from './csp.ts';
 
 type Document={id:string;name:string;date:string;status:string;detail:{documentType?:string;perEventValidation?:boolean;events?:CspEvent[];[key:string]:unknown};[key:string]:unknown};
 const type=(row:Document)=>row.detail.documentType==='cr'?'cr':'rd';
-const eligible=(e:CspEvent)=>e.selected&&!e.candidacy&&!e.extractionIssue&&!!e.agentId&&validDate(e.effective);
+const eligible=(e:CspEvent)=>e.selected&&!e.candidacy&&!cspExtractionIssue(e)&&!!e.agentId&&validDate(e.effective);
 const key=(date:string,e:CspEvent)=>JSON.stringify([date,e.agentId,cspNameKey(e.name),e.kind,e.effective]);
 const identity=(date:string,e:CspEvent)=>JSON.stringify([date,e.agentId,cspNameKey(e.name),e.kind]);
 const acknowledgement=(e:CspEvent)=>e.acknowledgedByDocument||e.acknowledgedByRD;
