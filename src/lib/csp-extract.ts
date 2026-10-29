@@ -1,3 +1,4 @@
+import {extractBeneficiaryAdvancements} from './csp-beneficiary-advancements.ts';
 import {unheadedAvancements} from './csp-unheaded-avancement.ts';
 import {cspNameHeader} from './csp-table-header.ts';
 import {detectCspDocumentType} from './csp-document-type.ts';
@@ -17,10 +18,11 @@ export function extractCspPages(pages:CspPage[],documentType:'rd'|'cr'='rd'){
  for(const pg of pages){
   const rows=lines(pg.items),all=rows.map(r=>r.text).join('\n'),n=normalName(all);const header=rows.filter(r=>r.y>pg.height*.8).map(r=>r.text).join(' ');const md=iso(header);if(md)meetingDates.add(md);
   let kind:CspKind|undefined;
-  if(n.includes('NOMINATIONS AUX POSTES VACANTS'))kind='nomination';else if(n.includes('ADMISSION AU STAGE'))kind='admission';else if(n.includes('TITULARISATION'))kind='titularisation';else if(n.includes('MUTATION D OFFICE'))kind='mutation';else if(n.includes('RECLASSEMENT'))kind='reclassement';else if(n.includes('AVANCEMENT A TITRE POSTHUME'))kind='posthume';else if(n.includes('MESURES SALARIALES'))kind='mesure';else if(n.includes('AVANCEMENT AU CHOIX')&&!n.includes('LONGUE MALADIE'))kind='avancement';
+  if(n.includes('NOMINATIONS AUX POSTES VACANTS'))kind='nomination';else if(n.includes('ADMISSION AU STAGE'))kind='admission';else if(n.includes('TITULARISATION'))kind='titularisation';else if(n.includes('MUTATION D OFFICE'))kind='mutation';else if(n.includes('RECLASSEMENT'))kind='reclassement';else if(n.includes('AVANCEMENT A TITRE POSTHUME'))kind='posthume';else if(n.includes('MESURES SALARIALES'))kind='mesure';else if(/\bAVANCEMENTS? AU CHOIX\b/.test(n)&&!n.includes('LONGUE MALADIE'))kind='avancement';
   const report:CspPageReport={page:pg.page,section:kind||'Autre rubrique',count:0,status:'read',note:''};reports.push(report);
   if(documentType==='cr'&&n.includes('BORDEREAU DES CANDIDATS')){events.push(...extractCrCandidates(pg,report));continue;}
   if(!kind){report.status=n.includes('LONGUE MALADIE')?'empty':'unsupported';report.note=n.includes('LONGUE MALADIE')?'Information collective : aucun changement individuel importé.':'Mise en page ou rubrique non reconnue : à examiner.';continue;}
+  if(kind==='avancement'){const compact=extractBeneficiaryAdvancements(pg,report);if(compact!==undefined){events.push(...compact);continue;}}
   if(documentType==='cr'&&kind!=='nomination'){events.push(...extractCrPage(pg,kind,report));continue;}
   const head=cspNameHeader(pg.items)?.head;
   if(!head){if(kind==='avancement'){events.push(...unheadedAvancements(pg,report));continue;}report.status='unsupported';report.note='En-tête du tableau non reconnu.';continue;}

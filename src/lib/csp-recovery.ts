@@ -8,9 +8,10 @@ export function recoverCspPages(detail:any,status:string,incoming:CspEvent[],rep
  const targets=new Map(cspUnreadPages(detail.reports).map(r=>[r.page,r]));
  const old:CspEvent[]=(detail.events||[]).map((e:CspEvent)=>status==='validated'&&!detail.perEventValidation&&e.selected?{...e,approved:true}:e);
  const keys=new Set(old.map(cspKey)),ids=new Set(old.map(e=>e.id));
- const additions:CspEvent[]=[];
+ const additions:CspEvent[]=[];const conflicts=new Set<number>();
  for(const event of incoming){
   const target=targets.get(event.page);if(!target||!Object.hasOwn(cspKinds,target.section)||event.kind!==target.section||!validateCspEvent(event)||keys.has(cspKey(event)))continue;
+  if(old.some(e=>(!e.agentId||!event.agentId||e.agentId===event.agentId)&&cspKey({...e,agentId:undefined})===cspKey({...event,agentId:undefined})))continue;
   const prior=old.find(e=>e.page===event.page&&e.kind===event.kind&&e.effective===event.effective&&cspNameKey(e.name)===cspNameKey(event.name)&&(e.extractionIssue?.startsWith(UNHEADED_ADVANCEMENT)||event.extractionIssue?.startsWith(UNHEADED_ADVANCEMENT)));
   if(prior){
    if(!prior.approved&&prior.extractionIssue?.startsWith(UNHEADED_ADVANCEMENT)&&!event.extractionIssue){
@@ -22,6 +23,13 @@ export function recoverCspPages(detail:any,status:string,incoming:CspEvent[],rep
    }
    continue;
   }
+  const sameLine=(e:CspEvent)=>e.page===event.page&&e.kind===event.kind&&e.effective===event.effective&&cspNameKey(e.name)===cspNameKey(event.name)&&(!e.agentId||!event.agentId||e.agentId===event.agentId);
+  const recorded=old.find(sameLine);
+  if(recorded&&incoming.filter(sameLine).length===1){
+   conflicts.add(event.page);
+   if(!recorded.approved)old[old.indexOf(recorded)]={...recorded,extractionIssue:'La décision saisie diffère du bordereau relu. Vérifier le nombre de NR avant validation.'};
+   continue;
+  }
   let e=preserveApproved([event],[],false)[0],id=e.id;while(ids.has(id))id='recovered-'+event.page+'-'+id;
   e={...e,id};ids.add(id);keys.add(cspKey(e));additions.push(e);
  }
@@ -29,6 +37,7 @@ export function recoverCspPages(detail:any,status:string,incoming:CspEvent[],rep
   if(!targets.has(oldReport.page))return oldReport;
   const fresh=reports.find(r=>r.page===oldReport.page&&r.section===oldReport.section);
   const extracted=incoming.filter(e=>e.page===oldReport.page&&e.kind===oldReport.section&&validateCspEvent(e));
+  if(conflicts.has(oldReport.page))return {...oldReport,status:'unsupported',note:'Tableau reconnu, mais une décision déjà saisie diffère du bordereau relu. Corriger cette décision ; aucun avancement supplémentaire ajouté.'};
   if(!fresh||!extracted.length)return {...oldReport,count:Math.max(Number(oldReport.count)||0,[...old,...additions].filter(e=>e.page===oldReport.page).length)};
   if(fresh.status!=='read')return {...oldReport,count:extracted.length,note:String(fresh.note||oldReport.note||'Lecture encore incomplète.').slice(0,500)};
   return {...oldReport,status:'read',count:extracted.length,note:String(fresh.note||'Lecture reprise avec succès.').slice(0,500)};

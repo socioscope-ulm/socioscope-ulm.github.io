@@ -58,8 +58,12 @@ export async function PATCH(request:Request){try{
  if(b.action==='recover-pages'){
   if(!['review','validated'].includes(row.status))fail('Réactiver le document avant de reprendre sa lecture.',409);
   if(!Array.isArray(b.events)||b.events.length>3000||!b.events.every(validateCspEvent)||!Array.isArray(b.reports)||b.reports.length>250)fail('Résultat de relecture invalide.');
-  const detail=recoverCspPages(row.detail,row.status,b.events,b.reports);
+  let detail=recoverCspPages(row.detail,row.status,deduplicateCsp(b.events),b.reports);
   if(detail.events.length>3000)fail('Le document dépasse 3 000 décisions.');
+  const {data:baseData,cspImports}=await agentData(true,undefined,parisToday(),false);
+  const data=await cspIdentityData(baseData,detail.events);
+  const checked=prepareCspDocuments(data,detail.events,cspImports.filter(i=>i.id!==b.id),row.date,documents(await imports()),currentDocument(row));
+  detail={...detail,events:detail.events.map((e:CspEvent)=>e.approved?e:cspResolvedEvent(e,checked.find(p=>p.id===e.id)!))};
   const added=detail.events.length-(row.detail.events||[]).length;
   const changed=await db.prepare('UPDATE agent_imports SET detail=?,status=?,count=? WHERE id=? AND status=? AND detail=?').bind(JSON.stringify(detail),row.status,detail.events.filter((e:CspEvent)=>e.selected).length,b.id,row.status,JSON.stringify(row.rawDetail||row.detail)).run();
   if(changed.meta.changes!==1)fail('Le document a changé. Recharger avant de reprendre sa lecture.',409);

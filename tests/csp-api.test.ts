@@ -1,3 +1,4 @@
+import {extractCspPages} from '../src/lib/csp-extract.ts';
 import test from 'node:test';import assert from 'node:assert/strict';import {build} from 'esbuild';
 test('CSP API validates roles, previews without writes, saves one PDF, rejects incomplete decisions and protects concurrent changes',async()=>{
  const m={rows:[] as any[],puts:[] as string[],queries:[] as string[],identities:[] as any[]};(globalThis as any).__cspAPI=m;
@@ -389,6 +390,30 @@ test('CSP API validates roles, previews without writes, saves one PDF, rejects i
  const detail=JSON.parse(m.rows[0].detail);assert.deepEqual(detail.events[0],existing);assert.equal(detail.events[1].approved,undefined);assert.equal(m.rows[0].status,'validated');
  const opened=await (await route.GET(new Request('https://fixture.test/api/csp?id='+rdId,{headers}))).json();assert.equal(opened.meta.pending,1);assert.equal(opened.meta.unreadPages,0);
  assert.equal((await route.PATCH(request({id:rdId,action:'recover-pages',events:[recovered],reports:[report]},'PATCH','viewer'))).status,403);
+ }
+
+ {
+ // A beneficiary/count page recovered from an existing PDF uses the normal avancement validation path.
+ const item=(str:string,x:number,y:number,width=100)=>({str,x,y,width,height:10});
+ const extracted=extractCspPages([{page:6,width:842,height:595,items:[item('CSP du 01/04/2026',500,560),item('AVANCEMENT AU CHOIX AU 1ER FEVRIER 2026',35,480,700),item('BENEFICIAIRES',280,430,110),item('NOMBRE DE NR',685,430,110),item('TEST ALICE',45,390,180),item('2',730,390,8)]}]);
+ const earlier={id:'earlier',name:'TEST ALICE',agentId:'A12345',kind:'avancement',effective:'2026-01-01',nrSteps:1,page:5,pages:[5],selected:true,approved:true,recordedBefore:{gf:9,nr:200},recordedAfter:{gf:9,nr:205}};
+ m.rows=[{id:rdId,name:'RD fictif.pdf',date:'2026-04-01',status:'validated',count:1,detail:JSON.stringify({kind:'csp',documentType:'rd',perEventValidation:true,events:[earlier],reports:[{page:6,section:'avancement',status:'unsupported',count:0}]})}];
+ let result=await route.PATCH(request({id:rdId,action:'recover-pages',events:extracted.events,reports:extracted.reports},'PATCH'));assert.equal(result.status,200,JSON.stringify(await result.clone().json()));
+ const opened=await (await route.GET(new Request('https://fixture.test/api/csp?id='+rdId,{headers}))).json();assert.equal(opened.meta.unreadPages,0);assert.equal(opened.meta.pending,1);
+ const preparing=await route.POST(request({id:rdId,date:'2026-04-01',events:opened.events}));assert.equal(preparing.status,200,JSON.stringify(await preparing.clone().json()));const prepared=await preparing.json();const award=prepared.events.find(e=>e.page===6);assert.equal(award.state,'ready');assert.equal(award.effective,'2026-02-01');assert.equal(award.nrSteps,2);assert.equal(award.after.nr,215);
+ result=await route.PATCH(request({id:rdId,action:'validate-event',eventId:award.id,events:opened.events,checked:true},'PATCH'));assert.equal(result.status,200,JSON.stringify(await result.clone().json()));
+ const stored=JSON.parse(m.rows[0].detail).events.find(e=>e.page===6);assert.equal(stored.approved,true);assert.equal(stored.kind,'avancement');assert.equal(stored.recordedAfter.nr,215);
+ }
+
+ {
+ // Recovered names are resolved before storage so a validated companion is recognized immediately.
+ const decision={id:'approved-companion',name:'TEST ALICE',agentId:'A12345',kind:'avancement',effective:'2026-02-01',nrSteps:2,page:6,selected:true,approved:true,recordedBefore:{gf:9,nr:200},recordedAfter:{gf:9,nr:210}};
+ const {agentId,approved,recordedBefore,recordedAfter,...raw}=decision;
+ m.rows=[{id:crId,name:'ODJ fictif.pdf',date:'2026-04-01',status:'validated',count:1,detail:JSON.stringify({kind:'csp',documentType:'cr',perEventValidation:true,events:[decision]})},{id:rdId,name:'RD fictif.pdf',date:'2026-04-01',status:'review',count:0,detail:JSON.stringify({kind:'csp',documentType:'rd',events:[],reports:[{page:6,section:'avancement',status:'unsupported',count:0}]})}];
+ const result=await route.PATCH(request({id:rdId,action:'recover-pages',events:[{...raw,id:'recovered-name'}],reports:[{page:6,section:'avancement',status:'read',count:1}]},'PATCH'));assert.equal(result.status,200,JSON.stringify(await result.clone().json()));
+ const opened=await (await route.GET(new Request('https://fixture.test/api/csp?id='+rdId,{headers}))).json();assert.equal(opened.events[0].agentId,'A12345');assert.equal(opened.events[0].acknowledgedByDocument.id,crId);assert.equal(opened.meta.pending,0);assert.equal(opened.meta.automaticallyValidated,true);
+ const checked=await route.POST(request({id:rdId,date:'2026-04-01',events:opened.events}));assert.equal(checked.status,200,JSON.stringify(await checked.clone().json()));
+ const list=await (await route.GET(new Request('https://fixture.test/api/csp',{headers}))).json();assert.equal(list.total,1);
  }
 
 });
