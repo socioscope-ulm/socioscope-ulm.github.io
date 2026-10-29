@@ -107,3 +107,23 @@ test('transfer quoting a pre-award salary keeps the independently validated awar
  assert.equal(prepareCsp(base,[advance,{...transfer,nrAfter:205}])[1].after?.nr,205);
  const other=event({id:'nomination',kind:'nomination',gfDelta:0,nrAfter:210});assert.equal(prepareCsp(base,[other,transfer])[1].state,'blocked');
 });
+
+
+test('manual reclassement exception preserves the documented NR without changing the automatic rule',()=>{
+ const standard=event({gfBefore:9,gfAfter:10,nrBefore:200,nrAfter:200});
+ assert.equal(prepareCsp(base,[standard])[0].state,'blocked');
+ const confirmed={...standard,reclassementNRConfirmed:true};
+ assert.equal(validateCspEvent(confirmed),true);
+ const preview=prepareCsp(base,[confirmed])[0];
+ assert.equal(preview.state,'ready');assert.equal(preview.after?.gf,10);assert.equal(preview.after?.nr,200);
+ const projected=projectCsp(base,[imported([confirmed])],'2026-06-01');
+ assert.deepEqual(projected.issues,[]);assert.equal(current(projected.data).gf,10);assert.equal(current(projected.data).nr,200);
+ assert.equal(current(projected.data).nrDate,'2023-01-01');
+ const automatic=prepareCsp(base,[event()])[0];assert.equal(automatic.after?.nr,210);
+ assert.equal(prepareCsp(base,[{...confirmed,gfAfter:11}])[0].state,'blocked');
+ assert.equal(prepareCsp(base,[{...confirmed,nrBefore:195}])[0].state,'blocked');
+ assert.equal(prepareCsp(base,[{...confirmed,extractionIssue:'Pages à vérifier'}])[0].state,'blocked');
+ assert.equal(prepareCsp(base,[{...confirmed,nrSteps:2}])[0].state,'blocked');
+ for(const invalid of [{nrBefore:undefined},{nrAfter:undefined},{nrAfter:199},{nrAfter:202},{kind:'nomination'},{reclassementNRConfirmed:'yes'}])assert.equal(validateCspEvent({...confirmed,...invalid}),false);
+ assert.equal(prepareCsp(base,[{...confirmed,nrAfter:205}])[0].after?.nr,205);
+});

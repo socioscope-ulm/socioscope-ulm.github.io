@@ -299,5 +299,22 @@ test('CSP API validates roles, previews without writes, saves one PDF, rejects i
  assert.equal(JSON.parse(m.rows[1].detail).events[0].recordedAfter.nr,225);assert.deepEqual(m.rows[0],unchangedRD);
  }
 
+ {
+ // Explicit manual exception is checked, persisted and projected through the normal individual validation.
+ const manual={id:'manual-reclassement',name:'TEST ALICE',agentId:'A12345',kind:'reclassement',effective:'2026-04-01',gfDelta:1,gfBefore:9,gfAfter:10,nrBefore:200,nrAfter:200,page:1,selected:true};
+ m.rows=[{id:crId,name:'ODJ fictif.pdf',date:'2026-03-24',status:'review',count:1,detail:JSON.stringify({kind:'csp',documentType:'cr',perEventValidation:true,events:[manual]})}];
+ const validate=(event:any)=>route.PATCH(request({id:crId,action:'validate-event',eventId:event.id,events:[event],checked:true},'PATCH'));
+ assert.equal((await validate(manual)).status,400);
+ const confirmed={...manual,reclassementNRConfirmed:true};
+ const preview=await (await route.POST(request({id:crId,date:'2026-03-24',events:[confirmed]}))).json();
+ assert.equal(preview.events[0].state,'ready');assert.equal(preview.events[0].after.nr,200);
+ const saved=await validate(confirmed);assert.equal(saved.status,200,JSON.stringify(await saved.clone().json()));
+ const stored=JSON.parse(m.rows[0].detail).events[0];
+ assert.equal(stored.reclassementNRConfirmed,true);assert.equal(stored.approved,true);
+ assert.equal(stored.recordedAfter.gf,10);assert.equal(stored.recordedAfter.nr,200);
+ const reopened=await (await route.GET(new Request('https://fixture.test/api/csp?id='+crId,{headers}))).json();
+ assert.equal(reopened.events[0].reclassementNRConfirmed,true);
+ }
+
 });
 
