@@ -23,8 +23,21 @@ export function advancementTitleDate(text:string){
 function extractPotentialBeneficiaries(pg:CspPage,report:CspPageReport):CspEvent[]|undefined{
  const normalize=(s:string)=>normalName(s).replace(/\\s+/g,'');
  const headerRows=rows(pg.items);
- const head=pg.items.find(i=>/^BENEFICIAIRES? POTENTIELS?$/.test(normalName(i.str)))
-  ||headerRows.flatMap(r=>r.items).find(i=>normalize(i.str)==='BENEFICIAIRESPOTENTIELS');
+ const headingParts=pg.items.filter(i=>i.str.trim()&&i.x<pg.width*.23);
+ let head=headingParts.find(i=>/^BENEFICIAIRES? POTENTIELS?$/.test(normalName(i.str)));
+ if(!head)for(const row of rows(headingParts)){
+  const match=row.items.findIndex(i=>normalize(i.str).startsWith('BENEFICIAIRE'));
+  if(match<0)continue;
+  const cells=row.items.slice(match,match+3).sort((a,b)=>a.x-b.x);
+  let label='';
+  for(const cell of cells){
+   label+=normalize(cell.str);
+   if(label==='BENEFICIAIRESPOTENTIELS'||label==='BENEFICIAIREPOTENTIEL'){
+    const first=cells[0];head={...first,str:'BENEFICIAIRES POTENTIELS',width:cell.x+cell.width-first.x};break;
+   }
+  }
+  if(head)break;
+ }
  if(!head)return undefined;
  const center=(i:CspTextItem)=>i.x+i.width/2;
  const nearHeader=pg.items.filter(i=>Math.abs(i.y-head.y)<=25&&center(i)>center(head));
