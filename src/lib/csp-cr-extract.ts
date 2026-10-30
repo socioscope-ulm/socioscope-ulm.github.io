@@ -49,7 +49,15 @@ export function extractCrPage(pg:CspPage,kind:CspKind,report:CspPageReport):CspE
   if(kind==='reclassement'){
    readNumber(beforeGF,'gfBefore');readNumber(afterGF,'gfAfter');readNumber(beforeNR,'nrBefore');readNumber(afterNR,'nrAfter');
    if(e.gfBefore!==undefined&&e.gfAfter!==undefined&&e.gfAfter>e.gfBefore&&e.gfAfter-e.gfBefore<=10)e.gfDelta=e.gfAfter-e.gfBefore;else issues.push('progression GF à vérifier');
-   if(e.gfDelta!==undefined&&e.nrBefore!==undefined&&e.nrAfter!==e.nrBefore+10*e.gfDelta)issues.push('progression NR différente de la règle de reclassement');
+   if(e.gfDelta!==undefined&&e.nrBefore!==undefined&&e.nrAfter!==e.nrBefore+10*e.gfDelta){
+    // A documented "repositionnement en GF" can increase GF without NR.
+    // Only recognize the exception when all four absolute cells are present,
+    // the NR is explicitly unchanged and the printed motif confirms it.
+    const documentedGFOnly=/REPOSITIONNEMENT EN GF/.test(normalName(text(band)));
+    if(documentedGFOnly&&e.nrAfter===e.nrBefore&&e.gfAfter===e.gfBefore!+e.gfDelta){
+     e.reclassementNRConfirmed=true;e.nrSteps=0;
+    }else issues.push('progression NR différente de la règle de reclassement');
+   }
   }else if(['avancement','posthume','mesure'].includes(kind)){
    readNumber(beforeNR,'nrBefore');readNumber(afterNR,'nrAfter');
    const gf=num(constantGF);if(gf!==undefined&&gf>=1&&gf<=30)e.gfBefore=gf;else issues.push('GF absent ou illisible');
