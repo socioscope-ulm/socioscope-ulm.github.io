@@ -58,10 +58,11 @@ export function cspBridgeGFOnly(e:CspEvent,decisions:CspEvent[]):CspEvent {
 }
 export function cspSameDayOrder(a:CspEvent,b:CspEvent):number {
  if(a.effective!==b.effective||!a.agentId||a.agentId!==b.agentId)return 0;
- const complete=(e:CspEvent)=>[e.gfBefore,e.gfAfter,e.nrBefore,e.nrAfter].every(v=>v!==undefined);
+ const endGF=(e:CspEvent)=>e.gfAfter??(['avancement','mesure','posthume'].includes(e.kind)&&!e.gfDelta?e.gfBefore:undefined);
+ const complete=(e:CspEvent)=>[e.gfBefore,endGF(e),e.nrBefore,e.nrAfter].every(v=>v!==undefined);
  if(!complete(a)||!complete(b))return 0;
- const aThenB=a.gfAfter===b.gfBefore&&a.nrAfter===b.nrBefore;
- const bThenA=b.gfAfter===a.gfBefore&&b.nrAfter===a.nrBefore;
+ const aThenB=endGF(a)===b.gfBefore&&a.nrAfter===b.nrBefore;
+ const bThenA=endGF(b)===a.gfBefore&&b.nrAfter===a.nrBefore;
  if(aThenB&&!bThenA)return -1;
  if(bThenA&&!aThenB)return 1;
  return 0;
