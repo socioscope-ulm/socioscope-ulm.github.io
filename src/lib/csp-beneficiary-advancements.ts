@@ -20,24 +20,34 @@ export function advancementTitleDate(text:string){
 // Compact mandate/volunteer tables carry their common effective date in the title.
 // A count under « Nombre de NR » is an increment; it is never an absolute NR.
 export function extractBeneficiaryAdvancements(pg:CspPage,report:CspPageReport):CspEvent[]|undefined{
- let head=pg.items.find(i=>/^BENEFICIAIRES?$/.test(normalName(i.str)));
+ let head=pg.items.find(i=>/^BENEFICIAIRES?(?: POTENTIELS?)?$/.test(normalName(i.str)));
  if(!head)for(const row of rows(pg.items)){
   for(let i=0;i<row.items.length&&!head;i++){let joined='';for(let j=i;j<row.items.length;j++){
-   joined+=normalName(row.items[j].str).replace(/\s/g,'');if(!'BENEFICIAIRES'.startsWith(joined))break;
-   if(/^BENEFICIAIRES?$/.test(joined)){const first=row.items[i],last=row.items[j];head={...first,str:'BENEFICIAIRES',width:last.x+last.width-first.x};break;}
+   joined+=normalName(row.items[j].str).replace(/\s/g,'');if(!'BENEFICIAIRESPOTENTIELS'.startsWith(joined))break;
+   if(/^BENEFICIAIRES?(?:POTENTIELS?)?$/.test(joined)){const first=row.items[i],last=row.items[j];head={...first,str:'BENEFICIAIRES',width:last.x+last.width-first.x};break;}
   }}
  }
  if(!head)return undefined;
- const nrHead=pg.items.filter(i=>Math.abs(i.y-head.y)<=20&&i.x>head.x+head.width&&/^[A-Z ]+$/.test(normalName(i.str)));
- const heading=normalName(rows(nrHead).map(r=>r.text).join(' '));
- if(!/(?:NOMBRE|NB)(?:DE)?NR/.test(heading.replace(/\s/g,''))){report.status='unsupported';report.note='Rubrique Avancement reconnue : colonne « Nombre de NR » à identifier.';return [];}
+ const headerItems=pg.items.filter(i=>Math.abs(i.y-head.y)<=22&&i.x>head.x+head.width);
+ const nrTitle=headerItems.find(i=>normalName(i.str)==='NOMBRE');
+ const nrParts=nrTitle?headerItems.filter(i=>Math.abs((i.x+i.width/2)-(nrTitle.x+nrTitle.width/2))<35):[];
+ const heading=normalName(rows(nrParts).map(r=>r.text).join(' ')).replace(/\s/g,'');
+ if(!nrTitle||!/(?:NOMBRE|NB)(?:DE)?NR(?:ACCORDE)?/.test(heading)){report.status='unsupported';report.note='Rubrique Avancement reconnue : colonne « Nombre de NR accordé » à identifier.';return [];}
+ const gfTitle=headerItems.find(i=>normalName(i.str)==='GF');
+ const newNrTitle=headerItems.find(i=>normalName(i.str)==='NOUVEAU');
+ const oldNrTitle=headerItems.find(i=>normalName(i.str)==='NR'&&i.x<(nrTitle?.x||0));
+ if(!gfTitle||!newNrTitle||!oldNrTitle){report.status='unsupported';report.note='Colonnes GF, ancien NR ou nouveau NR non identifiées.';return [];}
+
  const effective=advancementTitleDate(rows(pg.items.filter(i=>i.y>head.y+5)).map(r=>r.text).join(' '));
  if(!effective){report.status='unsupported';report.note='Tableau Bénéficiaires / Nombre de NR reconnu : date d’effet commune absente ou contradictoire dans le titre. La date de CSP ne remplace pas la date d’effet.';return [];}
- const nrCenter=(Math.min(...nrHead.map(i=>i.x))+Math.max(...nrHead.map(i=>i.x+i.width)))/2;
- const cut=(head.x+head.width/2+nrCenter)/2;
- const bottomHeader=Math.min(head.y,...nrHead.map(i=>i.y));
+ const mid=(i:CspTextItem)=>i.x+i.width/2;
+ const cut=(mid(head)+mid(gfTitle))/2;
+ const nrLeft=(mid(nrTitle)+mid(headerItems.find(i=>normalName(i.str)==='CUMUL')||nrTitle))/2;
+ const nrRight=(mid(nrTitle)+mid(newNrTitle))/2;
+ const bottomHeader=Math.min(head.y,...nrParts.map(i=>i.y));
  const content=pg.items.filter(i=>i.y<bottomHeader-7&&i.y>pg.height*.07);
- const nrItems=content.filter(i=>i.x+i.width/2>=cut);
+ const nrItems=content.filter(i=>mid(i)>=nrLeft&&mid(i)<nrRight);
+
  const nameRows=rows(content.filter(i=>i.x+i.width/2<cut)).filter(r=>/^[\p{L}][\p{L} '\-’]+$/u.test(r.text.trim())&&!/^(?:PAGE|BENEFICIAIRE|NOMBRE|DATE)\b/.test(normalName(r.text)));
  const numericRows=rows(nrItems);
  const nearest=(y:number)=>numericRows.reduce((best,r,i)=>best<0||Math.abs(r.y-y)<Math.abs(numericRows[best].y-y)?i:best,-1);
@@ -56,7 +66,11 @@ export function extractBeneficiaryAdvancements(pg:CspPage,report:CspPageReport):
   const cell=rows(nrItems.filter(i=>i.y<hi&&i.y>lo)).map(r=>r.text).join(' ').trim();
   const parsed=cell.match(/^(\d{1,3})\s*(?:NR)?$/i),count=parsed?Number(parsed[1]):undefined;
   const valid=count!==undefined&&count>=1&&count<=20;
-  events.push({id:`p${pg.page}b${ix}`,name:r.text.trim(),kind:'avancement',effective,page:pg.page,selected:true,...(valid?{nrSteps:count}:{extractionIssue:'Avancement reconnu : nombre de NR absent, illisible ou hors limites. Vérifier cette ligne.'})});
+  const near=(title:CspTextItem)=>{const v=content.filter(i=>Math.abs(i.y-r.y)<12&&Math.abs(mid(i)-mid(title))<24&&/^\\d{1,3}$/.test(i.str.trim()));return v.length===1?Number(v[0].str):undefined;};
+  const gf=near(gfTitle),before=near(oldNrTitle),after=near(newNrTitle);
+  if(count===0&&before!==undefined&&after===before)continue; // No NR gained: information only.
+  const mismatch=valid&&before!==undefined&&after!==undefined&&after!==before+5*count;
+  events.push({id:`p${pg.page}b${ix}`,name:r.text.trim(),kind:'avancement',effective,page:pg.page,selected:true,...(gf!==undefined?{gfBefore:gf}:{}),...(before!==undefined?{nrBefore:before}:{}),...(after!==undefined?{nrAfter:after}:{}),...(valid?{nrSteps:count}:{}),...(!valid||mismatch?{extractionIssue:mismatch?'Nombre de NR accordé et différence avant/après contradictoires. Vérifier cette ligne.':'Avancement reconnu : nombre de NR absent, illisible ou hors limites. Vérifier cette ligne.'}:{})});
  }
  report.count=events.length;report.status=events.length?'read':'unsupported';report.note=events.length?'Tableau Bénéficiaires / Nombre de NR reconnu ; date d’effet commune '+effective+'.'+(events.some(e=>e.extractionIssue)?' Certains nombres de NR restent à vérifier.':''):'Tableau d’avancement reconnu, aucune ligne nominative lisible.';
  return events;
