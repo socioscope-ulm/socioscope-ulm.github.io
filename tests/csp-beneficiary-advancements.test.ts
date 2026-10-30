@@ -90,6 +90,7 @@ test('multi-page potential-beneficiary ODJ recovers awarded NR only and keeps th
     item(String(nr),238,y,17),item(String(gain),498,y,8),item(String(next),550,y,17)];
   })]});
  const r=extractCspPages([pg(6,entries.slice(0,10)),pg(7,entries.slice(10))],'cr');
+ console.log('MULTIPAGE DEBUG',JSON.stringify(r.reports),JSON.stringify(r.events.slice(0,2)));
  assert.equal(r.events.length,10);
  assert.deepEqual(r.reports.map(p=>p.status),['read','read']);
  assert.deepEqual(r.events.map(e=>e.name),entries.filter(x=>x[3]>0).map(x=>x[0]));
