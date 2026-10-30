@@ -41,6 +41,21 @@ export function cspKey(e:CspEvent){
 // On the same effective date, a documented salary result can be the exact
 // starting point of another decision (e.g. +1 NR, then GF-only repositioning).
 // Prefer that explicit chain to PDF page order or import creation time.
+// Legacy imported GF-only repositioning may still carry the old automatic
+// +2 NR warning. Clear only that single warning when a separate documented
+// advancement on the same date exactly bridges its NR starting position.
+export function cspBridgeGFOnly(e:CspEvent,decisions:CspEvent[]):CspEvent {
+ if(e.kind!=='reclassement'||e.reclassementNRConfirmed||!e.selected||!e.agentId||
+  e.gfBefore===undefined||e.gfAfter===undefined||e.nrBefore===undefined||e.nrAfter!==e.nrBefore||
+  e.gfAfter<=e.gfBefore||e.gfDelta!==e.gfAfter-e.gfBefore)return e;
+ const parts=(e.extractionIssue||'').split(' ; ').filter(Boolean);
+ if(parts.length!==1||!/^progression NR différente de la règle de reclassement/.test(parts[0]))return e;
+ const bridge=decisions.some(a=>a!==e&&a.selected&&a.agentId===e.agentId&&a.effective===e.effective&&
+  ['avancement','mesure'].includes(a.kind)&&a.gfBefore===e.gfBefore&&
+  a.nrBefore!==undefined&&a.nrAfter===e.nrBefore&&a.nrAfter>a.nrBefore&&
+  cspNRSteps(a)===(a.nrAfter-a.nrBefore)/5&&!cspExtractionIssue(a));
+ return bridge?{...e,reclassementNRConfirmed:true}:e;
+}
 export function cspSameDayOrder(a:CspEvent,b:CspEvent):number {
  if(a.effective!==b.effective||!a.agentId||a.agentId!==b.agentId)return 0;
  const complete=(e:CspEvent)=>[e.gfBefore,e.gfAfter,e.nrBefore,e.nrAfter].every(v=>v!==undefined);
@@ -162,6 +177,7 @@ export function prepareCsp(data:AgentData,events:CspEvent[],prior:CspImport[]=[]
  });
  const existing=[...prior].sort((a,b)=>(a.created||'').localeCompare(b.created||'')).filter(i=>i.status==='validated').flatMap(i=>i.events.filter(e=>e.selected&&!e.candidacy).map(reclassementEvent));const known=new Map(existing.map(e=>[cspKey(e),e]));
  const state=new Map(snapshot(data,base.id).map(r=>[r.agentId,r as AgentRecord]));
+ const linked=[...existing,...resolved];for(let i=0;i<resolved.length;i++)resolved[i]=cspBridgeGFOnly(resolved[i],linked);
  const retrospective=retrospectiveProofs([...prior,{id:'current-approved',name:'Décisions déjà validées de ce document',date:meetingDate,status:'validated',events:resolved.filter(e=>e.approved)}],base.date);
  const combined=[...existing.map(e=>({event:e,prior:true})),...resolved.map(e=>({event:e,prior:false}))].sort((a,b)=>a.event.effective.localeCompare(b.event.effective)||cspSameDayOrder(a.event,b.event)||Number(b.prior)-Number(a.prior));
  const results=new Map<string,CspPreview>();const seen=new Set<string>();const salaryHistory=new Map<string,AgentRecord[]>();
@@ -213,7 +229,7 @@ function cspHistoricalRecord(data:AgentData,agentId:string,asOf:string){
  const sources=data.sources.filter(s=>!s.kind?.startsWith('csp')&&s.status!=='review'&&!s.status?.startsWith('disabled')&&s.date<=asOf).sort((a,b)=>b.date.localeCompare(a.date)||Number(b.primary)-Number(a.primary));
  for(const source of sources){const rows=data.records.filter(r=>r.agentId===agentId&&r.source===source.id);if(rows.length)return snapshot({...data,records:rows},source.id)[0];}
 }
-export function cspResolvedEvent(e:CspEvent,p:CspPreview):CspEvent{return {...e,nonRetainedByRD:p.nonRetainedByRD,...(p.acknowledgedByDocument?{acknowledgedByDocument:p.acknowledgedByDocument,approved:true,approvedAt:p.approvedAt,recordedBefore:p.recordedBefore,recordedAfter:p.recordedAfter}:{}),...(!e.approved&&e.kind==='mutation'?{gfDelta:p.gfDelta,note:p.note,...(e.newAgent?{gfBefore:p.gfBefore,gfAfter:p.gfAfter,nrBefore:p.nrBefore,nrAfter:p.nrAfter}: {})}:{}),agentId:p.agentId,newAgent:p.newAgent,identityPending:p.identityPending,identityMethod:p.identityMethod,identitySource:p.identitySource,identityDate:p.identityDate,nominationReference:e.approved?e.nominationReference:p.nominationReference,reclassementReference:e.approved?e.reclassementReference:p.reclassementReference,salaryReference:e.approved?e.salaryReference:p.salaryReference};}
+export function cspResolvedEvent(e:CspEvent,p:CspPreview):CspEvent{return {...e,nonRetainedByRD:p.nonRetainedByRD,...(p.acknowledgedByDocument?{acknowledgedByDocument:p.acknowledgedByDocument,approved:true,approvedAt:p.approvedAt,recordedBefore:p.recordedBefore,recordedAfter:p.recordedAfter}:{}),...(!e.approved&&e.kind==='mutation'?{gfDelta:p.gfDelta,note:p.note,...(e.newAgent?{gfBefore:p.gfBefore,gfAfter:p.gfAfter,nrBefore:p.nrBefore,nrAfter:p.nrAfter}: {})}:{}),agentId:p.agentId,newAgent:p.newAgent,identityPending:p.identityPending,identityMethod:p.identityMethod,identitySource:p.identitySource,identityDate:p.identityDate,nominationReference:e.approved?e.nominationReference:p.nominationReference,reclassementReference:e.approved?e.reclassementReference:p.reclassementReference,salaryReference:e.approved?e.salaryReference:p.salaryReference,...(!e.approved&&p.reclassementNRConfirmed?{reclassementNRConfirmed:true}:{})};}
 
 
 // This is a reference for one validated salary decision, never a backdated
