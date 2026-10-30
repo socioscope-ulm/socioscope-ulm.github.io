@@ -48,3 +48,23 @@ test('a documentary salary reference cannot restore an obsolete assignment from 
  assert.deepEqual(projected.issues,[]);assert.equal(current(projected).nr,155);assert.equal(current(projected).gf,9);
  assert.equal(current(projected).agency,'AGENCE ACTUELLE');assert.equal(current(projected).job,'EMPLOI ACTUEL');assert.equal(current(projected).team,'EQUIPE ACTUELLE');
 });
+
+test('same-day advancement is applied before GF-only repositioning even if reclassement is listed first',()=>{
+ const base:AgentData={...data,records:[{...data.records[0],gf:12,nr:205}],sources:data.sources};
+ const gain:CspEvent={id:'gain',name:'EXEMPLE CAMILLE',agentId:'Z00008',kind:'avancement',effective:'2026-01-01',gfBefore:12,nrBefore:205,nrAfter:210,nrSteps:1,page:6,selected:true};
+ const gfOnly:CspEvent={id:'gf-only',name:'EXEMPLE CAMILLE',agentId:'Z00008',kind:'reclassement',effective:'2026-01-01',gfBefore:12,gfAfter:13,nrBefore:210,nrAfter:210,nrSteps:0,gfDelta:1,reclassementNRConfirmed:true,page:4,selected:true};
+ const preview=prepareCsp(base,[gfOnly,gain],'2026-09-11');
+ assert.deepEqual(preview.map(e=>e.state),['ready','ready']);
+ assert.equal(preview[0].before?.nr,210);assert.equal(preview[0].after?.gf,13);
+ assert.equal(preview[0].after?.nr,210);
+ const imports:CspImport[]=[
+  {id:'reclassement-first',name:'GF seul',date:'2026-09-11',created:'2026-09-11T08:00:00Z',status:'validated',events:[{...gfOnly,approved:true}]},
+  {id:'avancement-second',name:'Avancement',date:'2026-09-11',created:'2026-09-11T09:00:00Z',status:'validated',events:[{...gain,approved:true}]}
+ ];
+ const result=projectCsp(base,imports,'2026-10-30');
+ assert.deepEqual(result.issues,[]);
+ const row=result.data.records.find(r=>r.source===CSP_SOURCE);
+ assert.equal(row?.gf,13);assert.equal(row?.nr,210);
+ const reverse=projectCsp(base,imports.toReversed(),'2026-10-30');
+ assert.deepEqual(reverse.issues,[]);assert.equal(reverse.data.records.find(r=>r.source===CSP_SOURCE)?.nr,210);
+});
