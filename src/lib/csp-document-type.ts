@@ -13,7 +13,7 @@ export function detectCspDocumentType(pages:CspPage[],filename=''):CspTypeDetect
  // each heading. Linearized PDF text then reads "ANCIEN NOUVEAU NR NR",
  // which is not matched by the ordinary ANCIEN NR / NOUVEAU NR regex.
  const splitNrColumns=pages.some(p=>{
-  const label=(s:string)=>normalName(s).replace(/\\s+/g,'');
+  const label=(s:string)=>normalName(s).replace(/\s+/g,'');
   const words=p.items.filter(i=>i.str.trim());
   const previous=words.filter(i=>label(i.str)==='ANCIEN');
   const next=words.filter(i=>label(i.str)==='NOUVEAU');
@@ -24,7 +24,7 @@ export function detectCspDocumentType(pages:CspPage[],filename=''):CspTypeDetect
    return below(a)&&below(b)&&words.some(n=>/^(NOM PRENOM|NOM ET PRENOM)$/.test(normalName(n.str))&&Math.abs(n.y-a.y)<28);
   }));
  });
- const layoutCr=/\\bBORDEREAU DES CANDIDATS\\b|\\bANCIEN (?:GF|NR)\\b.*\\bNOUVEAU (?:GF|NR)\\b/.test(all)||splitNrColumns;
+ const layoutCr=/\bBORDEREAU DES CANDIDATS\b|\bANCIEN (?:GF|NR)\b.*\bNOUVEAU (?:GF|NR)\b/.test(all)||splitNrColumns;
  const layoutRd=/\bCANDIDATURE RETENUE\b/.test(all);
  const name=normalName(filename.replace(/[_\-.]/g,' '));
  const nameCr=/\bODJ\b|\bORDRES? DU JOUR\b|\bCR\b|\bCOMPTE RENDU\b/.test(name),nameRd=/\bRD\b|\bRELEVE (?:DE |DES )?DECISIONS\b/.test(name);
