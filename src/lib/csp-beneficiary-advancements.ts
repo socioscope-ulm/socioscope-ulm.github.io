@@ -21,7 +21,7 @@ export function advancementTitleDate(text:string){
 // The extended "Beneficiaires potentiels" layout has GF, original NR,
 // awarded NR and resulting NR columns. It may continue over several pages.
 function extractPotentialBeneficiaries(pg:CspPage,report:CspPageReport):CspEvent[]|undefined{
- const normalize=(s:string)=>normalName(s).replace(/\\s+/g,'');
+ const normalize=(s:string)=>normalName(s).replace(/\s+/g,'');
  const headerRows=rows(pg.items);
  const headingParts=pg.items.filter(i=>i.str.trim()&&i.x<pg.width*.23);
  let head=headingParts.find(i=>/^BENEFICIAIRES? POTENTIELS?$/.test(normalName(i.str)));
@@ -59,13 +59,13 @@ function extractPotentialBeneficiaries(pg:CspPage,report:CspPageReport):CspEvent
  const nameLimit=(center(head)+center(gf))/2;
  const countLeft=(center(cumul)+center(count))/2,countRight=(center(count)+center(newNr))/2;
  const content=pg.items.filter(i=>i.y<Math.min(head.y,...nrHeader.map(i=>i.y))-7&&i.y>pg.height*.07);
- const names=rows(content.filter(i=>center(i)<nameLimit)).filter(r=>/^[\\p{L}][\\p{L} '\\-’]+$/u.test(r.text)&&r.text.trim().split(/\\s+/).length>=2);
+ const names=rows(content.filter(i=>center(i)<nameLimit)).filter(r=>/^[\p{L}][\p{L} '\-’]+$/u.test(r.text)&&r.text.trim().split(/\s+/).length>=2);
  const events:CspEvent[]=[];
  for(let ix=0;ix<names.length;ix++){
   const row=names[ix],hi=ix?(names[ix-1].y+row.y)/2:head.y-7;
   const lo=ix+1<names.length?(row.y+names[ix+1].y)/2:pg.height*.07;
   const band=content.filter(i=>i.y<hi&&i.y>lo);
-  const value=(left:number,right:number)=>{const parts=band.filter(i=>center(i)>=left&&center(i)<right&&/^\\d{1,3}$/.test(i.str.trim()));return parts.length===1?Number(parts[0].str):undefined;};
+  const value=(left:number,right:number)=>{const parts=band.filter(i=>center(i)>=left&&center(i)<right&&/^\d{1,3}$/.test(i.str.trim()));return parts.length===1?Number(parts[0].str):undefined;};
   const awarded=value(countLeft,countRight);
   const firstGF=value((center(head)+center(gf))/2,(center(gf)+center(oldNr))/2);
   const before=value((center(gf)+center(oldNr))/2,(center(oldNr)+center(cumul))/2);
