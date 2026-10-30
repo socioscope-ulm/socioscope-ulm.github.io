@@ -1,7 +1,7 @@
 import {extractCspPages} from '../src/lib/csp-extract.ts';
 import test from 'node:test';import assert from 'node:assert/strict';import {build} from 'esbuild';
 test('CSP API validates roles, previews without writes, saves one PDF, rejects incomplete decisions and protects concurrent changes',async()=>{
- const m={rows:[] as any[],puts:[] as string[],queries:[] as string[],identities:[] as any[]};(globalThis as any).__cspAPI=m;
+ const m={rows:[] as any[],puts:[] as string[],queries:[] as string[],identities:[] as any[],beforeUpdate:undefined as undefined|(()=>void)};(globalThis as any).__cspAPI=m;
  const b=await build({entryPoints:[new URL('../src/app/api/csp/route.ts',import.meta.url).pathname],bundle:true,write:false,platform:'node',format:'esm',plugins:[{name:'csp-fixture',setup(build){
   build.onResolve({filter:/\/(store|agents-store)(\.ts)?$/},a=>({path:a.path.split('/').at(-1)!.replace('.ts',''),namespace:'csp-test'}));
   build.onLoad({filter:/.*/,namespace:'csp-test'},a=>({resolveDir:new URL('..',import.meta.url).pathname,contents:a.path==='agents-store'?`
@@ -13,7 +13,7 @@ test('CSP API validates roles, previews without writes, saves one PDF, rejects i
   `:`
    export function resources(){const m=globalThis.__cspAPI;return {bucket:{async put(key){m.puts.push(key);}},db:{prepare(query){let args=[];const stmt={bind(...a){args=a;return stmt;},async all(){m.queries.push(query);return {results:m.rows};},async first(){m.queries.push(query);return query.includes('hash=')?m.rows.find(r=>r.hash===args[0]):m.rows.find(r=>r.id===args[0]);},async run(){m.queries.push(query);
     if(query.startsWith('INSERT')){const [id,name,hash,date,created,status,count,complete,detail]=args;m.rows.push({id,name,hash,date,created,status,count,complete,detail});return {meta:{changes:1}};}
-    if(query.includes('SET detail=')){const [detail,status,count,id,oldStatus,oldDetail]=args;const r=m.rows.find(r=>r.id===id&&r.status===oldStatus&&r.detail===oldDetail);if(!r)return {meta:{changes:0}};Object.assign(r,{detail,status,count});return {meta:{changes:1}};}
+    if(query.includes('SET detail=')){m.beforeUpdate?.();const [detail,status,count,id,oldStatus,oldDetail]=args;const r=m.rows.find(r=>r.id===id&&r.status===oldStatus&&r.detail===oldDetail);if(!r)return {meta:{changes:0}};Object.assign(r,{detail,status,count});return {meta:{changes:1}};}
     if(query.includes("SET status='disabled:validated'")){const r=m.rows.find(r=>r.id===args[0]&&r.status==='validated'&&r.detail===args[1]);if(!r)return {meta:{changes:0}};r.status='disabled:validated';return {meta:{changes:1}};}
     if(query.includes("SET status='review'")){const r=m.rows.find(r=>r.id===args[0]&&r.status===args[1]&&r.detail===args[2]);if(!r)return {meta:{changes:0}};r.status='review';return {meta:{changes:1}};}
     throw Error('Unexpected mutation '+query);
@@ -444,6 +444,23 @@ test('CSP API validates roles, previews without writes, saves one PDF, rejects i
  const r=await route.PATCH(request({id:crId,action:'validate-event',eventId:measure.id,events:[measure],checked:true},'PATCH'));assert.equal(r.status,200,JSON.stringify(await r.clone().json()));
  const stored=JSON.parse(m.rows[0].detail).events[0];assert.equal(stored.approved,true);assert.equal(stored.recordedBefore.nr,155);assert.equal(stored.recordedAfter.nr,160);assert.equal(stored.salaryReference.rd,undefined);
  m.identities=[];
+ }
+
+ {
+ // The exact SQL snapshot may contain JSONB whitespace/order or escaped Unicode.
+ // Re-serializing the parsed object is not a concurrency token for a TEXT column.
+ const decision={id:'formatted-json',name:'TEST ALICE',agentId:'A12345',kind:'mesure',effective:'2026-06-01',page:1,selected:true,nrSteps:1,note:'Vérification conservée'};
+ const detail={kind:'csp',documentType:'cr',perEventValidation:true,events:[decision]};
+ for(const raw of [JSON.stringify(detail,null,2),JSON.stringify(detail).replaceAll('é','\\u00e9')]){
+  m.rows=[{id:crId,name:'ODJ fictif.pdf',date:'2026-05-20',status:'validated',count:1,detail:raw}];
+  const opened=await (await route.GET(new Request('https://fixture.test/api/csp?id='+crId,{headers}))).json();
+  const r=await route.PATCH(request({id:crId,action:'validate-state',state:'ready',events:opened.events,checked:true},'PATCH'));assert.equal(r.status,200,JSON.stringify(await r.clone().json()));
+  const saved=JSON.parse(m.rows[0].detail).events[0];assert.equal(saved.approved,true);assert.equal(saved.recordedAfter.nr,205);assert.equal(saved.note,decision.note);
+ }
+ // An actual intervening update must still return 409 and preserve that update.
+ m.rows=[{id:crId,name:'ODJ fictif.pdf',date:'2026-05-20',status:'validated',count:1,detail:JSON.stringify(detail,null,2)}];
+ m.beforeUpdate=()=>{m.beforeUpdate=undefined;m.rows[0].detail=JSON.stringify({...detail,concurrentNote:'Modification concurrente conservée'});};
+ const r=await route.PATCH(request({id:crId,action:'validate-state',state:'ready',events:[decision],checked:true},'PATCH'));assert.equal(r.status,409);assert.match((await r.json()).error,/autre fenêtre/);assert.equal(JSON.parse(m.rows[0].detail).concurrentNote,'Modification concurrente conservée');assert.equal(JSON.parse(m.rows[0].detail).events[0].approved,undefined);
  }
 
 });

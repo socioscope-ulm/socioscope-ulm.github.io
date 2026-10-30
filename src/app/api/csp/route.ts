@@ -13,7 +13,7 @@ import {resources} from '../../../lib/store';
 import {cspKinds,cspKey,cspNonRetained,cspResolvedEvent,validateCspEvent,deduplicateCsp,validDate,latestAnnual,parisToday} from '../../../lib/csp';
 import type {CspEvent} from '../../../lib/csp';
 function fail(message:string,status=400):never{throw Object.assign(Error(message),{status});}
-const parse=(row:any)=>{let detail:any={};try{detail=JSON.parse(row.detail||'{}');}catch{}return {...row,detail,rawDetail:detail};};
+const parse=(row:any)=>{let detail:any={};try{detail=JSON.parse(row.detail||'{}');}catch{}return {...row,detail,rawDetail:detail,rawDetailText:row.detail};};
 const metadata=(row:any)=>({id:row.id,name:row.name,date:row.date,status:row.status,automaticallyValidated:!!row.automaticallyValidated,count:row.count,documentType:row.detail.documentType==='cr'?'cr':'rd',created:row.created,duplicates:row.detail.duplicates||0,reports:row.detail.reports||[],unreadPages:cspUnreadPages(row.detail.reports).length,perEventValidation:!!row.detail.perEventValidation,candidateVersion:row.detail.candidateVersion||0,salaryCellsVersion:row.detail.salaryCellsVersion||0,corrections:(row.detail.corrections||[]).map((c:any)=>({eventId:c.eventId,reason:c.reason,at:c.at})),...cspProgress(row.status,row.detail)});
 async function imports(){const rows=acknowledgeCspDecisions((await resources().db.prepare('SELECT * FROM agent_imports WHERE id LIKE ? ORDER BY date,created,id').bind('csp-%').all<any>()).results.map(parse).filter(r=>r.detail.kind==='csp'));return rows.map(row=>({...row,automaticallyValidated:cspAutomaticCompletion(row,rows)}));}
 const currentDocument=(row:any)=>({id:row.id,name:row.name,status:row.status,documentType:row.detail.documentType==='cr'?'cr' as const:'rd' as const});
@@ -58,7 +58,7 @@ export async function PATCH(request:Request){try{
   const events=restoreExcludedCsp(row.detail.events||[],b.eventIds);
   const detail={...row.detail,events,perEventValidation:row.status==='validated'?true:row.detail.perEventValidation,
    restorations:[...(row.detail.restorations||[]),{ids:b.eventIds,at:new Date().toISOString(),reason:'Réintégration de décisions écartées pour contrôle et validation'}]};
-  const changed=await db.prepare('UPDATE agent_imports SET detail=?,count=? WHERE id=? AND status=? AND detail=?').bind(JSON.stringify(detail),events.filter((e:CspEvent)=>e.selected).length,b.id,row.status,JSON.stringify(row.rawDetail||row.detail)).run();
+  const changed=await db.prepare('UPDATE agent_imports SET detail=?,count=? WHERE id=? AND status=? AND detail=?').bind(JSON.stringify(detail),events.filter((e:CspEvent)=>e.selected).length,b.id,row.status,row.rawDetailText??JSON.stringify(row.rawDetail||row.detail)).run();
   if(changed.meta.changes!==1)fail('Le document a changé. Actualiser avant de réintégrer.',409);
   return Response.json({ok:true,restored:b.eventIds.length});
  }
@@ -66,13 +66,13 @@ export async function PATCH(request:Request){try{
   if(!['review','validated'].includes(row.status)||b.checked!==true||!Number.isInteger(b.page))fail('Confirmer la vérification complète de la page.');
   const confirmed=confirmCspPage(row.detail,b.page);
   const detail={...confirmed,pageReviews:[...(row.detail.pageReviews||[]),{page:b.page,at:new Date().toISOString(),actor:request.headers.get('oai-authenticated-user-email')}]};
-  const changed=await db.prepare('UPDATE agent_imports SET detail=?,status=?,count=? WHERE id=? AND status=? AND detail=?').bind(JSON.stringify(detail),row.status,row.count,b.id,row.status,JSON.stringify(row.rawDetail||row.detail)).run();
+  const changed=await db.prepare('UPDATE agent_imports SET detail=?,status=?,count=? WHERE id=? AND status=? AND detail=?').bind(JSON.stringify(detail),row.status,row.count,b.id,row.status,row.rawDetailText??JSON.stringify(row.rawDetail||row.detail)).run();
   if(changed.meta.changes!==1)fail('Le document a changé. Recharger.',409);return Response.json({ok:true});
  }
  if(b.action==='recover-salary-cells'){
   if(row.detail.documentType!=='cr'||!['review','validated'].includes(row.status)||!Array.isArray(b.events)||b.events.length>3000||!b.events.every(validateCspEvent))fail('Résultat de relecture des GF/NR invalide.');
   const detail=recoverTitularisationCells(row.detail,row.status,b.events);
-  const changed=await db.prepare('UPDATE agent_imports SET detail=?,status=?,count=? WHERE id=? AND status=? AND detail=?').bind(JSON.stringify(detail),row.status,row.count,b.id,row.status,JSON.stringify(row.rawDetail||row.detail)).run();
+  const changed=await db.prepare('UPDATE agent_imports SET detail=?,status=?,count=? WHERE id=? AND status=? AND detail=?').bind(JSON.stringify(detail),row.status,row.count,b.id,row.status,row.rawDetailText??JSON.stringify(row.rawDetail||row.detail)).run();
   if(changed.meta.changes!==1)fail('Le document a changé. Recharger avant de reprendre sa lecture.',409);
   return Response.json({ok:true});
  }
@@ -86,7 +86,7 @@ export async function PATCH(request:Request){try{
   const checked=prepareCspDocuments(data,detail.events,cspImports.filter(i=>i.id!==b.id),row.date,documents(await imports()),currentDocument(row));
   detail={...detail,events:detail.events.map((e:CspEvent)=>e.approved?e:cspResolvedEvent(e,checked.find(p=>p.id===e.id)!))};
   const added=detail.events.length-(row.detail.events||[]).length;
-  const changed=await db.prepare('UPDATE agent_imports SET detail=?,status=?,count=? WHERE id=? AND status=? AND detail=?').bind(JSON.stringify(detail),row.status,detail.events.filter((e:CspEvent)=>e.selected).length,b.id,row.status,JSON.stringify(row.rawDetail||row.detail)).run();
+  const changed=await db.prepare('UPDATE agent_imports SET detail=?,status=?,count=? WHERE id=? AND status=? AND detail=?').bind(JSON.stringify(detail),row.status,detail.events.filter((e:CspEvent)=>e.selected).length,b.id,row.status,row.rawDetailText??JSON.stringify(row.rawDetail||row.detail)).run();
   if(changed.meta.changes!==1)fail('Le document a changé. Recharger avant de reprendre sa lecture.',409);
   return Response.json({ok:true,added,unreadPages:cspUnreadPages(detail.reports).length});
  }
@@ -95,7 +95,7 @@ export async function PATCH(request:Request){try{
   const detail=addCrCandidates(row.detail,row.status,deduplicateCsp(b.events));
   if(detail.events.length>3000)fail('Le ODJ dépasse 3 000 situations après récupération des candidatures.');
   const count=detail.events.filter((e:CspEvent)=>e.selected).length;
-  const changed=await db.prepare('UPDATE agent_imports SET detail=?,status=?,count=? WHERE id=? AND status=? AND detail=?').bind(JSON.stringify(detail),row.status,count,b.id,row.status,JSON.stringify(row.rawDetail||row.detail)).run();
+  const changed=await db.prepare('UPDATE agent_imports SET detail=?,status=?,count=? WHERE id=? AND status=? AND detail=?').bind(JSON.stringify(detail),row.status,count,b.id,row.status,row.rawDetailText??JSON.stringify(row.rawDetail||row.detail)).run();
   if(changed.meta.changes!==1)fail('Le relevé a changé. Recharger.',409);return Response.json({ok:true});
  }
  if(['preview-correction','correct-event'].includes(b.action)){
@@ -112,12 +112,12 @@ export async function PATCH(request:Request){try{
   if(b.action==='preview-correction')return Response.json({decision:plan.decision,impact:plan.impact,token});
   if(b.token!==token)fail('La situation a changé ou la correction n’a pas été vérifiée. Vérifier de nouveau avant d’enregistrer.',409);
   const detail={...row.detail,events:plan.events,perEventValidation:true,corrections:[...(row.detail.corrections||[]),{eventId:b.eventId,reason:b.reason.trim(),at:new Date().toISOString(),actor:request.headers.get('oai-authenticated-user-email'),before:plan.original,after:plan.events.find(e=>e.id===b.eventId)}]};
-  const changed=await db.prepare('UPDATE agent_imports SET detail=?,status=?,count=? WHERE id=? AND status=? AND detail=?').bind(JSON.stringify(detail),'validated',plan.events.filter(e=>e.selected).length,b.id,row.status,JSON.stringify(row.rawDetail||row.detail)).run();
+  const changed=await db.prepare('UPDATE agent_imports SET detail=?,status=?,count=? WHERE id=? AND status=? AND detail=?').bind(JSON.stringify(detail),'validated',plan.events.filter(e=>e.selected).length,b.id,row.status,row.rawDetailText??JSON.stringify(row.rawDetail||row.detail)).run();
   if(changed.meta.changes!==1)fail('Le relevé a changé. Recharger avant de réessayer.',409);
   return Response.json({ok:true,...cspProgress('validated',detail)});
  }
  if(b.action==='disable'){
-  const changed=await db.prepare("UPDATE agent_imports SET status='disabled:validated' WHERE id=? AND status='validated' AND detail=?").bind(b.id,JSON.stringify(row.rawDetail||row.detail)).run();if(changed.meta.changes!==1)fail('Le relevé a changé. Recharger avant de réessayer.',409);return Response.json({ok:true});
+  const changed=await db.prepare("UPDATE agent_imports SET status='disabled:validated' WHERE id=? AND status='validated' AND detail=?").bind(b.id,row.rawDetailText??JSON.stringify(row.rawDetail||row.detail)).run();if(changed.meta.changes!==1)fail('Le relevé a changé. Recharger avant de réessayer.',409);return Response.json({ok:true});
  }
  const progress=cspProgress(row.status,row.detail);const partial=row.status==='validated'&&row.detail.perEventValidation===true&&(progress.pending>0||row.detail.events.some((e:CspEvent)=>e.candidacy&&!e.approved));
  if(['validate','validate-state','validate-event'].includes(b.action)&&row.status!=='review'&&!partial)fail('Ce relevé est déjà validé ou désactivé. Recharger.',409);
@@ -125,7 +125,7 @@ export async function PATCH(request:Request){try{
  if(b.action==='revise'){
   if(!['validated','disabled:validated'].includes(row.status))fail('Le relevé est déjà en cours de vérification.',409);
   const detail={...row.detail,perEventValidation:false,checked:false,events:preserveApproved(row.detail.events,[],false)};
-  const changed=await db.prepare('UPDATE agent_imports SET detail=?,status=?,count=? WHERE id=? AND status=? AND detail=?').bind(JSON.stringify(detail),'review',row.count,b.id,row.status,JSON.stringify(row.rawDetail||row.detail)).run();
+  const changed=await db.prepare('UPDATE agent_imports SET detail=?,status=?,count=? WHERE id=? AND status=? AND detail=?').bind(JSON.stringify(detail),'review',row.count,b.id,row.status,row.rawDetailText??JSON.stringify(row.rawDetail||row.detail)).run();
   if(changed.meta.changes!==1)fail('Le relevé a changé. Recharger.',409);return Response.json({ok:true});
  }
  if(!['save','validate','validate-state','validate-event','enable'].includes(b.action))fail('Action inconnue.');
@@ -160,7 +160,7 @@ export async function PATCH(request:Request){try{
  const now=new Date().toISOString();
  const stored=events.map((e:CspEvent)=>{if(e.approved)return e;const p=preview.find(p=>p.id===e.id)!;return {...cspResolvedEvent(e,p),...(chosen.has(e.id)?{approved:true,approvedAt:now,recordedBefore:p.before,recordedAfter:p.after}:{})};});
  const publishing=b.action!=='save';const detail={...row.detail,events:stored,perEventValidation:publishing||row.detail.perEventValidation===true,checked:b.checked===true,validatedAt:publishing?now:row.detail.validatedAt,actor:request.headers.get('oai-authenticated-user-email')};
- const status=publishing?'validated':row.status;const changed=await db.prepare('UPDATE agent_imports SET detail=?,status=?,count=? WHERE id=? AND status=? AND detail=?').bind(JSON.stringify(detail),status,stored.filter((e:CspEvent)=>e.selected).length,b.id,row.status,JSON.stringify(row.rawDetail||row.detail)).run();
+ const status=publishing?'validated':row.status;const changed=await db.prepare('UPDATE agent_imports SET detail=?,status=?,count=? WHERE id=? AND status=? AND detail=?').bind(JSON.stringify(detail),status,stored.filter((e:CspEvent)=>e.selected).length,b.id,row.status,row.rawDetailText??JSON.stringify(row.rawDetail||row.detail)).run();
  if(changed.meta.changes!==1)fail('Le relevé a changé dans une autre fenêtre. Recharger avant de réessayer.',409);
  return Response.json({ok:true,status,validated:chosen.size,...cspProgress(status,detail)});
 }catch(e){return agentError(e);}}
