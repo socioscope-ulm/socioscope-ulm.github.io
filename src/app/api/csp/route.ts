@@ -6,7 +6,7 @@ import {cspDocumentLabel} from '../../../lib/csp-document-label';
 import {correctionEvents,planCspCorrection} from '../../../lib/csp-correction';
 import {acknowledgeCspDecisions} from '../../../lib/csp-acknowledgement';
 import {prepareCspDocuments,addCrCandidates} from '../../../lib/csp-candidates';
-import {activeCspEvents,cspProgress,preserveApproved} from '../../../lib/csp-validation';
+import {activeCspEvents,cspProgress,preserveApproved,restoreExcludedCsp} from '../../../lib/csp-validation';
 import {agentAuth,agentData,cspIdentityData,agentError} from '../../../lib/agents-store';
 import {resources} from '../../../lib/store';
 import {cspKinds,cspKey,cspNonRetained,cspResolvedEvent,validateCspEvent,deduplicateCsp,validDate,latestAnnual,parisToday} from '../../../lib/csp';
@@ -52,6 +52,15 @@ export async function POST(request:Request){try{
 }catch(e){return agentError(e);}}
 export async function PATCH(request:Request){try{
  await agentAuth(request,true);const b=await request.json();if(typeof b.id!=='string'||!b.id.startsWith('csp-'))fail('Relevé invalide.');const {db}=resources();const row=(await imports()).find(r=>r.id===b.id);if(!row||row.detail.kind!=='csp')fail('Relevé introuvable.',404);
+ if(b.action==='restore-excluded'){
+  if(!['review','validated'].includes(row.status)||b.checked!==true||!Array.isArray(b.eventIds)||b.eventIds.length>250||!b.eventIds.every((x:any)=>typeof x==='string'))fail('Confirmer les mouvements écartés à réintégrer.');
+  const events=restoreExcludedCsp(row.detail.events||[],b.eventIds);
+  const detail={...row.detail,events,perEventValidation:row.status==='validated'?true:row.detail.perEventValidation,
+   restorations:[...(row.detail.restorations||[]),{ids:b.eventIds,at:new Date().toISOString(),reason:'Réintégration de décisions écartées pour contrôle et validation'}]};
+  const changed=await db.prepare('UPDATE agent_imports SET detail=?,count=? WHERE id=? AND status=? AND detail=?').bind(JSON.stringify(detail),events.filter((e:CspEvent)=>e.selected).length,b.id,row.status,JSON.stringify(row.rawDetail||row.detail)).run();
+  if(changed.meta.changes!==1)fail('Le document a changé. Actualiser avant de réintégrer.',409);
+  return Response.json({ok:true,restored:b.eventIds.length});
+ }
  if(b.action==='confirm-page'){
   if(!['review','validated'].includes(row.status)||b.checked!==true||!Number.isInteger(b.page))fail('Confirmer la vérification complète de la page.');
   const confirmed=confirmCspPage(row.detail,b.page);
