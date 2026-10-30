@@ -55,6 +55,7 @@ test('same-day advancement is applied before GF-only repositioning even if recla
  const gfOnly:CspEvent={id:'gf-only',name:'EXEMPLE CAMILLE',agentId:'Z00008',kind:'reclassement',effective:'2026-01-01',gfBefore:12,gfAfter:13,nrBefore:210,nrAfter:210,nrSteps:0,gfDelta:1,reclassementNRConfirmed:true,page:4,selected:true};
  const legacy={...gfOnly,reclassementNRConfirmed:undefined,nrSteps:undefined,extractionIssue:'progression NR différente de la règle de reclassement. Vérifier le document et corriger la ligne.'};
  const legacyPreview=prepareCsp(base,[legacy,gain],[],'2026-09-11');
+ console.log('PINEAU DEBUG',JSON.stringify(legacyPreview.map(e=>({state:e.state,problem:e.problem,confirmed:e.reclassementNRConfirmed,before:e.before,after:e.after}))));
  assert.deepEqual(legacyPreview.map(e=>e.state),['ready','ready']);
  assert.equal(legacyPreview[0].reclassementNRConfirmed,true);
  const withoutBridge=prepareCsp(base,[legacy],[],'2026-09-11');
