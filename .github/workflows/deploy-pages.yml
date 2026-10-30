@@ -31,7 +31,7 @@ jobs:
         with:
           node-version: '22'
       - run: npm install --no-audit --no-fund
-      - run: node --experimental-strip-types --test tests/csp-beneficiary-advancements.test.ts tests/csp-coverage-recovery.test.ts tests/csp-retrospective-reference.test.ts
+      - run: node --experimental-strip-types --test tests/csp-beneficiary-advancements.test.ts tests/csp-coverage-recovery.test.ts tests/csp-retrospective-reference.test.ts tests/csp-document-type.test.ts
       - run: npm run build
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
