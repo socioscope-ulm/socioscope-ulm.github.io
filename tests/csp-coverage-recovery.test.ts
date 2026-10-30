@@ -51,3 +51,17 @@ test('manual avancement entry on an unread page creates a pending row and preser
  assert.equal(result.events.length,2);assert.deepEqual(result.events[0],old);assert.equal(result.events[1].kind,'avancement');assert.equal(result.events[1].nrSteps,2);assert.equal(result.events[1].approved,undefined);assert.equal(result.reports[0].section,'avancement');assert.equal(result.reports[0].count,1);assert.equal(cspUnreadPages(result.reports).length,1);
  assert.equal(recoverCspPages(detail,'validated',[{...row,kind:'mutation'}],[]).events.length,1);
 });
+
+test('excluded dated ODJ movements can be restored without approving them or changing already approved decisions',async()=>{
+ const {restoreExcludedCsp,restorableCspEvents}=await import('../src/lib/csp-validation.ts');
+ const base={id:'excluded-1',name:'EXEMPLE ALICE',kind:'mesure' as const,effective:'2026-09-01',page:3,selected:false};
+ const approved={...base,id:'approved',selected:true,approved:true};
+ const retained={...base,id:'candidacy',kind:'nomination' as const,candidacy:true,nonRetained:true};
+ const entries=[base,approved,retained,{...base,id:'missing-date',effective:''}];
+ assert.deepEqual(restorableCspEvents(entries).map(e=>e.id),['excluded-1']);
+ const restored=restoreExcludedCsp(entries,['excluded-1']);
+ assert.equal(restored[0].selected,true);assert.equal(restored[0].approved,undefined);
+ assert.deepEqual(restored.slice(1),entries.slice(1));
+ assert.throws(()=>restoreExcludedCsp(entries,['approved']));
+ assert.throws(()=>restoreExcludedCsp(entries,['missing-date']));
+});
