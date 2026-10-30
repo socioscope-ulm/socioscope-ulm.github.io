@@ -66,6 +66,11 @@ export function extractCrPage(pg:CspPage,kind:CspKind,report:CspPageReport):CspE
    readNumber(afterGF,'gfAfter');readNumber(afterNR,'nrAfter');
    e.agency=cleanAgency(cell(find(/^UM DUM$/)));e.team=cell(find(/^SDUM FSDUM/)).split('/')[0].trim();e.job=cell(find(/^EMPLOI$/));
    if(!e.agency||!e.job)issues.push('agence ou emploi d’admission absent');
+  }else if(kind==='titularisation'){
+   // These are the observed, unchanged salary values, not an award.
+   // Keep them so a known identity with an incomplete photograph needs no re-entry.
+   readNumber(constantGF,'gfBefore');readNumber(find(/^NR$/),'nrBefore');
+   e.gfAfter=e.gfBefore;e.nrAfter=e.nrBefore;
   }else if(kind==='mutation'){
    readNumber(beforeGF,'gfBefore');readNumber(afterGF,'gfAfter');readNumber(beforeNR,'nrBefore');readNumber(afterNR,'nrAfter');
    e.gfDelta=0;e.job=cell(find(/^NOUVEL EMPLOI$/));e.location=cell(find(/^LOCALISATION$/,true));

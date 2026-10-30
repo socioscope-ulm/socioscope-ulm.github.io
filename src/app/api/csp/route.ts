@@ -1,4 +1,5 @@
 import {isPendingAdmission,resolvePendingAdmissions} from '../../../lib/csp-pending-admission';
+import {recoverTitularisationCells} from '../../../lib/csp-salary-cells';
 import {recoverCspPages,confirmCspPage} from '../../../lib/csp-recovery';
 import {cspUnreadPages} from '../../../lib/csp-coverage';
 import {cspAutomaticCompletion} from '../../../lib/csp-document-completion';
@@ -13,7 +14,7 @@ import {cspKinds,cspKey,cspNonRetained,cspResolvedEvent,validateCspEvent,dedupli
 import type {CspEvent} from '../../../lib/csp';
 function fail(message:string,status=400):never{throw Object.assign(Error(message),{status});}
 const parse=(row:any)=>{let detail:any={};try{detail=JSON.parse(row.detail||'{}');}catch{}return {...row,detail,rawDetail:detail};};
-const metadata=(row:any)=>({id:row.id,name:row.name,date:row.date,status:row.status,automaticallyValidated:!!row.automaticallyValidated,count:row.count,documentType:row.detail.documentType==='cr'?'cr':'rd',created:row.created,duplicates:row.detail.duplicates||0,reports:row.detail.reports||[],unreadPages:cspUnreadPages(row.detail.reports).length,perEventValidation:!!row.detail.perEventValidation,candidateVersion:row.detail.candidateVersion||0,corrections:(row.detail.corrections||[]).map((c:any)=>({eventId:c.eventId,reason:c.reason,at:c.at})),...cspProgress(row.status,row.detail)});
+const metadata=(row:any)=>({id:row.id,name:row.name,date:row.date,status:row.status,automaticallyValidated:!!row.automaticallyValidated,count:row.count,documentType:row.detail.documentType==='cr'?'cr':'rd',created:row.created,duplicates:row.detail.duplicates||0,reports:row.detail.reports||[],unreadPages:cspUnreadPages(row.detail.reports).length,perEventValidation:!!row.detail.perEventValidation,candidateVersion:row.detail.candidateVersion||0,salaryCellsVersion:row.detail.salaryCellsVersion||0,corrections:(row.detail.corrections||[]).map((c:any)=>({eventId:c.eventId,reason:c.reason,at:c.at})),...cspProgress(row.status,row.detail)});
 async function imports(){const rows=acknowledgeCspDecisions((await resources().db.prepare('SELECT * FROM agent_imports WHERE id LIKE ? ORDER BY date,created,id').bind('csp-%').all<any>()).results.map(parse).filter(r=>r.detail.kind==='csp'));return rows.map(row=>({...row,automaticallyValidated:cspAutomaticCompletion(row,rows)}));}
 const currentDocument=(row:any)=>({id:row.id,name:row.name,status:row.status,documentType:row.detail.documentType==='cr'?'cr' as const:'rd' as const});
 const documents=(rows:any[])=>rows.map(r=>({id:r.id,name:r.name,date:r.date,status:r.status,created:r.created,documentType:r.detail.documentType==='cr'?'cr' as const:'rd' as const,events:(r.detail.events||[]).map((e:CspEvent)=>r.status==='validated'&&!r.detail.perEventValidation&&e.selected?{...e,approved:true}:e)}));
@@ -45,7 +46,7 @@ export async function POST(request:Request){try{
  const {data:baseData,cspImports}=await agentData(true,undefined,parisToday(),false);const data=await cspIdentityData(baseData,[...events,...cspImports.flatMap(i=>i.events.filter(isPendingAdmission))]);const id='csp-'+crypto.randomUUID();const preview=prepareCspDocuments(data,events,cspImports,body.date,documents(await imports()),{id,name:file.name,documentType:body.documentType==='cr'?'cr':'rd'});
  const stored=events.map(e=>cspResolvedEvent(e,preview.find(p=>p.id===e.id)!));
  const reports=Array.isArray(body.reports)?body.reports.slice(0,250).map((r:any)=>({page:Number(r.page),section:String(r.section||'').slice(0,80),count:Number(r.count)||0,status:['read','empty','unsupported'].includes(r.status)?r.status:'unsupported',note:String(r.note||'').slice(0,200)})):[];
- const detail={kind:'csp',version:1,documentType:body.documentType==='cr'?'cr':'rd',candidateVersion:body.documentType==='cr'&&body.candidateVersion===1?1:0,events:stored,reports,duplicates:Math.max(0,Number(body.duplicates)||0),checked:false};
+ const detail={kind:'csp',version:1,salaryCellsVersion:1,documentType:body.documentType==='cr'?'cr':'rd',candidateVersion:body.documentType==='cr'&&body.candidateVersion===1?1:0,events:stored,reports,duplicates:Math.max(0,Number(body.duplicates)||0),checked:false};
  await bucket.put('agents/'+id+'/original',bytes,{httpMetadata:{contentType:'application/pdf'}});
  await db.prepare('INSERT INTO agent_imports (id,name,hash,date,created,status,count,complete,detail) VALUES (?,?,?,?,?,?,?,?,?)').bind(id,file.name.slice(0,240),hash,body.date,new Date().toISOString(),'review',stored.length,0,JSON.stringify(detail)).run();
  return Response.json({id,count:stored.length});
@@ -67,6 +68,13 @@ export async function PATCH(request:Request){try{
   const detail={...confirmed,pageReviews:[...(row.detail.pageReviews||[]),{page:b.page,at:new Date().toISOString(),actor:request.headers.get('oai-authenticated-user-email')}]};
   const changed=await db.prepare('UPDATE agent_imports SET detail=?,status=?,count=? WHERE id=? AND status=? AND detail=?').bind(JSON.stringify(detail),row.status,row.count,b.id,row.status,JSON.stringify(row.rawDetail||row.detail)).run();
   if(changed.meta.changes!==1)fail('Le document a changé. Recharger.',409);return Response.json({ok:true});
+ }
+ if(b.action==='recover-salary-cells'){
+  if(row.detail.documentType!=='cr'||!['review','validated'].includes(row.status)||!Array.isArray(b.events)||b.events.length>3000||!b.events.every(validateCspEvent))fail('Résultat de relecture des GF/NR invalide.');
+  const detail=recoverTitularisationCells(row.detail,row.status,b.events);
+  const changed=await db.prepare('UPDATE agent_imports SET detail=?,status=?,count=? WHERE id=? AND status=? AND detail=?').bind(JSON.stringify(detail),row.status,row.count,b.id,row.status,JSON.stringify(row.rawDetail||row.detail)).run();
+  if(changed.meta.changes!==1)fail('Le document a changé. Recharger avant de reprendre sa lecture.',409);
+  return Response.json({ok:true});
  }
  if(b.action==='recover-pages'){
   if(!['review','validated'].includes(row.status))fail('Réactiver le document avant de reprendre sa lecture.',409);

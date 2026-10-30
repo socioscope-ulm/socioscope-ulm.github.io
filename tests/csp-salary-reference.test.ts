@@ -71,3 +71,14 @@ test('client-supplied reference is discarded; partial validation rechecks curren
  const isolated=preview({...rd,events:[measure,{...measure,id:'unselected',name:'AUTRE NOM',selected:false}]});assert.equal(isolated.state,'ready');
  const saved={...measure,salaryReference:proof,approved:true};assert.equal(preserveApproved([saved],[saved],true)[0],saved);
 });
+
+test('complete standalone ODJ plus certain RUP identity prepares missing salary without waiting for a RD',()=>{
+ const p=preview(cr,data,[cr]);assert.equal(p.state,'ready',p.problem);assert.equal(p.before?.nr,120);assert.equal(p.after?.nr,125);assert.equal(p.salaryReference?.rd,undefined);assert.equal(p.approved,undefined);assert.equal(p.newAgent,undefined);
+ assert.match(p.problem,/ODJ.*RUP/);assert.doesNotMatch(p.problem,/confirmée par le RD/);
+ const stored={...cr,events:[{...cspResolvedEvent(crEvent,p),approved:true,recordedBefore:p.before,recordedAfter:p.after}],evidenceEvents:cr.events};
+ const result=projectCsp(data,[stored],'2026-10-01');assert.equal(result.issues.length,0);assert.equal(result.data.records.find(r=>r.source===CSP_SOURCE)?.nr,125);
+ assert.equal(projectCsp(data,[{...stored,evidenceEvents:[{...crEvent,nrAfter:130}]}],'2026-10-01').issues.length,1);
+ for(const event of [{...crEvent,nrBefore:undefined},{...crEvent,nrAfter:130},{...crEvent,gfBefore:undefined},{...crEvent,extractionIssue:'Incertain'}])assert.equal(preview({...cr,events:[event]},data,[{...cr,events:[event]}]).state,'blocked');
+ const conflicting={...data,records:[{id:'one',source:'annual',row:1,name:measure.name,agentId:measure.agentId!,nni:measure.agentId,gf:8,nr:115}]};assert.equal(preview(cr,conflicting,[cr]).state,'blocked');
+ const ambiguous={...data,cspIdentities:[...data.cspIdentities!,{...data.cspIdentities![0],nni:'B00002'}]};assert.equal(preview(cr,ambiguous,[cr]).state,'blocked');
+});

@@ -36,7 +36,7 @@ test('ODJ mutation joins wrapped names and reads destination while preserving th
  assert.equal(cspKey(e),cspKey({...e,gfBefore:undefined,gfAfter:undefined,nrBefore:undefined,nrAfter:undefined}));
 });
 test('ODJ titularisation selects titularisation date, not the admission date in the preceding column',()=>{
- const e=event(table('TITULARISATION',[['NOM PRENOM',80],['DATE ADMISSION STAGE',400],['DATE TITULARISATION',550],['GF',650],['NR',700]],[['EXEMPLE ALICE',80],['01/02/2025',400],['01/02/2026',550],['8',650],['100',700]]));assert.equal(e.effective,'2026-02-01');assert.equal(e.gfAfter,undefined);assert.equal(e.nrAfter,undefined);
+ const e=event(table('TITULARISATION',[['NOM PRENOM',80],['DATE ADMISSION STAGE',400],['DATE TITULARISATION',550],['GF',650],['NR',700]],[['EXEMPLE ALICE',80],['01/02/2025',400],['01/02/2026',550],['8',650],['100',700]]));assert.equal(e.effective,'2026-02-01');assert.equal(e.gfBefore,8);assert.equal(e.nrBefore,100);assert.equal(e.gfAfter,8);assert.equal(e.nrAfter,100);const ready=prepareCsp({...data,records:[{...data.records[0],nr:undefined}]},[e])[0];assert.equal(ready.state,'ready',ready.problem);assert.equal(ready.before?.nr,100);assert.equal(ready.after?.nr,100);assert.equal(prepareCsp({...data,records:[{...data.records[0],nr:105}]},[e])[0].state,'blocked');
 });
 test('unreadable candidate lists are reported and collective information remains informational',()=>{
  const r=extractCspPages([page("BORDEREAU DES CANDIDATS A L'EMPLOI",[item('EXEMPLE ALICE',80,380)]),page('SITUATION DES SALARIES EN LONGUE MALADIE AU REGARD DES AVANCEMENTS AU CHOIX',[])],'cr');assert.equal(r.events.length,0);assert.deepEqual(r.reports.map(r=>r.status),['unsupported','empty']);assert.match(r.reports[0].note,/non reconnu/);
@@ -60,4 +60,9 @@ test('ODJ candidate rows retain post reference and observed GF/NR while waiting 
   item('EXEMPLE ALICE',75,240,100),item('TECHNICIEN',280,240,80),item('AMT CENTRE',450,240,100),item('2',570,240,10),item('4',620,240,10),item('G',670,240,10),item('9',710,240,10),item('140',745,240,15)
  ]);
  const r=extractCspPages([p],'cr');assert.equal(r.events.length,1);const e=r.events[0];assert.equal(e.candidacy,true);assert.equal(e.selected,true);assert.equal(e.effective,'');assert.equal(e.reference,'26-00001.01');assert.equal(e.job,'TECHNICIEN CONFIRME');assert.equal(e.agency,'AMT EST');assert.equal(e.m3e,'0911');assert.equal(e.gfBefore,9);assert.equal(e.nrBefore,140);assert.equal(e.nrAfter,undefined);assert.equal(validateCspEvent(e),true);assert.equal(prepareCsp(data,[e])[0].state,'blocked');
+});
+
+test('ODJ titularisation flags unreadable salary cells rather than silently discarding them',()=>{
+ const e=event(table('TITULARISATION',[['NOM PRENOM',80],['DATE TITULARISATION',550],['GF',650],['NR',700]],[['EXEMPLE ALICE',80],['01/02/2026',550],['8',650],['illisible',700]]));
+ assert.match(e.extractionIssue!,/NR avant absent/);assert.equal(prepareCsp(data,[e])[0].state,'blocked');
 });

@@ -427,5 +427,24 @@ test('CSP API validates roles, previews without writes, saves one PDF, rejects i
  const list=await (await route.GET(new Request('https://fixture.test/api/csp',{headers}))).json();assert.equal(list.total,1);
  }
 
+ {
+ // Existing ODJ re-reading completes unapproved cells, never approvals or other rows.
+ const tit={id:'salary-cells',name:'TEST ALICE',kind:'titularisation',effective:'2026-05-01',page:2,selected:true};
+ m.rows=[{id:crId,name:'ODJ fictif.pdf',date:'2026-04-20',status:'validated',count:1,detail:JSON.stringify({kind:'csp',documentType:'cr',perEventValidation:true,events:[tit]})}];
+ const r=await route.PATCH(request({id:crId,action:'recover-salary-cells',events:[{...tit,gfBefore:9,gfAfter:9,nrBefore:200,nrAfter:200,approved:true}]},'PATCH'));assert.equal(r.status,200,JSON.stringify(await r.clone().json()));
+ const opened=await (await route.GET(new Request('https://fixture.test/api/csp?id='+crId,{headers}))).json();assert.equal(opened.meta.salaryCellsVersion,1);assert.equal(opened.events[0].nrAfter,200);assert.equal(opened.events[0].approved,undefined);
+ const p=await (await route.POST(request({id:crId,date:'2026-04-20',events:opened.events}))).json();assert.equal(p.events[0].state,'ready');assert.equal(p.events[0].after.nr,200);
+ }
+ {
+ // A complete ODJ with a certain RUP NNI can be validated without an absent RD.
+ const measure={id:'standalone-measure',name:'EXEMPLE ARRIVANTE',kind:'mesure',effective:'2026-08-01',page:3,selected:true,gfBefore:10,nrBefore:155,nrAfter:160,nrSteps:1};
+ m.identities=[{name:measure.name,nni:'Z00009',source:'rup-fiction',date:'2026-09-30'}];
+ m.rows=[{id:crId,name:'ODJ fictif.pdf',date:'2026-07-15',status:'validated',count:1,detail:JSON.stringify({kind:'csp',documentType:'cr',perEventValidation:true,events:[measure]})}];
+ const p=await (await route.POST(request({id:crId,date:'2026-07-15',events:[measure]}))).json();assert.equal(p.events[0].state,'ready',p.events[0].problem);assert.equal(p.events[0].after.nr,160);assert.equal(p.events[0].approved,undefined);
+ const r=await route.PATCH(request({id:crId,action:'validate-event',eventId:measure.id,events:[measure],checked:true},'PATCH'));assert.equal(r.status,200,JSON.stringify(await r.clone().json()));
+ const stored=JSON.parse(m.rows[0].detail).events[0];assert.equal(stored.approved,true);assert.equal(stored.recordedBefore.nr,155);assert.equal(stored.recordedAfter.nr,160);assert.equal(stored.salaryReference.rd,undefined);
+ m.identities=[];
+ }
+
 });
 
