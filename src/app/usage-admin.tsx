@@ -1,5 +1,6 @@
 'use client';
 import {useEffect,useState} from 'react';
+import {consumptionCycle} from '../lib/consumption-cycle';
 
 const gb=(bytes:number)=>{
  const [divisor,unit]=bytes>0&&bytes<1e6?[1e3,'ko']:bytes>0&&bytes<1e9?[1e6,'Mo']:[1e9,'Go'];
@@ -7,11 +8,12 @@ const gb=(bytes:number)=>{
 };
 const date=(value:string)=>new Intl.DateTimeFormat('fr-FR',{dateStyle:'short',timeStyle:'short'}).format(new Date(value));
 export default function UsageAdmin(){
- const [from,setFrom]=useState(''),[to,setTo]=useState(new Date().toISOString().slice(0,10));
+ const [cycle]=useState(()=>consumptionCycle());
+ const [from,setFrom]=useState(cycle.from),[to,setTo]=useState(cycle.to);
  const [data,setData]=useState<any>(null),[busy,setBusy]=useState(false),[notice,setNotice]=useState('');
  const load=async(signal?:AbortSignal)=>{
   const response=await fetch('/api/usage',{signal,cache:'no-store'});const result=await response.json();
-  if(!response.ok)throw Error(result.error||'Suivi indisponible.');setData(result);setFrom(value=>value||String(result.settings.trackingStarted).slice(0,10));
+  if(!response.ok)throw Error(result.error||'Suivi indisponible.');setData(result);
  };
  useEffect(()=>{const c=new AbortController();load(c.signal).catch(e=>{if(e.name!=='AbortError')setNotice(e.message);});return()=>c.abort();},[]);
  const refresh=async()=>{setBusy(true);setNotice('');try{await load();}catch(e){setNotice((e as Error).message);}finally{setBusy(false);}};
@@ -45,7 +47,7 @@ export default function UsageAdmin(){
    {alert&&<p className="notice" role="alert">{alert}. Consultez le relevé officiel avant de décider d’une suspension.</p>}
    <div className="notice"><div><b>{data.settings.suspended?'Consultations utilisateurs suspendues':'Consultations utilisateurs ouvertes'}</b><p>Blocage automatique désactivé. La suspension manuelle concerne les consultations, exports et téléchargements de Socioscope. Les administrateurs gardent leur accès. Elle ne modifie pas Pointage.</p><p>Les nouvelles requêtes sont bloquées immédiatement. Une page utilisateur déjà ouverte affiche la suspension au prochain appel ou lors du contrôle de session, au plus tard après environ une minute si la page reste active.</p></div></div>
    <div className="analysis-options"><button type="button" className={'btn '+(data.settings.suspended?'primary':'')} disabled={busy} onClick={()=>void toggle()}>{busy?'Mise à jour…':data.settings.suspended?'Rétablir les consultations utilisateurs':'Suspendre les consultations utilisateurs'}</button><a className="text-btn" href="https://supabase.com/dashboard/org/paizhlsoxfinykfqjifv/usage" target="_blank" rel="noreferrer">Ouvrir le relevé officiel Supabase</a></div>
-   <p>Aucune remise à zéro automatique n’est appliquée à cette première version du suivi. Les plafonds Supabase sont évalués sur leur cycle de facturation ; votre accès administrateur reste soumis aux éventuelles restrictions de Supabase.</p>
+   <p>La période affichée par défaut commence le 28 et se termine le 27 du mois suivant. L’historique des consommations est conservé. Les plafonds Supabase sont évalués sur leur cycle de facturation ; votre accès administrateur reste soumis aux éventuelles restrictions de Supabase.</p>
    {days.length>0&&<div className="table-scroll"><table><caption>Derniers jours de suivi local</caption><thead><tr><th>Jour UTC</th><th>Storage avec cache</th><th>Sans cache estimé</th><th>Storage non classé</th></tr></thead><tbody>{days.map(day=>{const total=(bucket:string)=>rows.filter((r:any)=>r.day===day&&r.bucket===bucket).reduce((n:number,r:any)=>n+r.bytes,0);return <tr key={day}><td>{day.split('-').reverse().join('/')}</td><td>{gb(total('storage_cached'))}</td><td>{gb(total('storage_uncached')+total('api'))}</td><td>{gb(total('storage_unknown'))}</td></tr>;})}</tbody></table></div>}
   </>:<p>Chargement du suivi…</p>}
   {notice&&<p role="status">{notice}</p>}
