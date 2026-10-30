@@ -48,7 +48,10 @@ function extractPotentialBeneficiaries(pg:CspPage,report:CspPageReport):CspEvent
  const cumul=nearHeader.find(i=>normalize(i.str)==='CUMUL');
  if(!gf||!count||!newNr||!oldNr||!cumul){report.status='unsupported';report.note='Tableau des bénéficiaires potentiels reconnu : colonnes GF/NR/nombre de NR à vérifier.';return [];}
  const nrHeader=nearHeader.filter(i=>Math.abs(center(i)-center(count))<35);
- if(!/NOMBRE(?:DE)?NR(?:ACCORDE)?/.test(normalize(rows(nrHeader).map(r=>r.text).join(' ')))){
+ // PDF text can place "NOMBRE", "DE NR" and "ACCORDE" on separate baselines.
+ // Require the three headings in one physical column instead of a fragile joined regex.
+ const countLabels=nrHeader.map(i=>normalize(i.str));
+ if(!countLabels.some(s=>s.includes('NR'))||!countLabels.some(s=>s.includes('ACCORDE'))){
   report.status='unsupported';report.note='Colonne Nombre de NR accordé non reconnue.';return [];
  }
  const effective=advancementTitleDate(headerRows.filter(r=>r.y>head.y+5).map(r=>r.text).join(' '));
