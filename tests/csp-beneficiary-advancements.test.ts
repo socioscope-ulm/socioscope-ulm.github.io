@@ -65,3 +65,38 @@ test('PDF text fragments in the beneficiary and NR-count headings are reconstruc
  p.items.push(item('BENE',280,430,30),item('FICIAIRES',310,430,75),item('NOM',685,430,27),item('BRE',712,430,25),item('DE',742,430,15),item('NR',762,430,20));
  const r=extractCspPages([p]);assert.equal(r.events.length,3);assert.deepEqual(r.events.map(e=>e.nrSteps),[1,2,3]);assert.ok(r.events.every(e=>e.effective==='2026-02-01'));
 });
+
+test('multi-page potential-beneficiary ODJ recovers awarded NR only and keeps the complete before/after situation',()=>{
+ const head=[
+  item('CSP du 11/09/2026',570,540,190),
+  item('AVANCEMENT AU CHOIX AU 1ER JANVIER 2026',25,485,320),
+  item('BENEFICIAIRES POTENTIELS',34,420,120),item('GF',185,420,14),item('NR',240,420,15),
+  item('CUMUL',430,420,32),item('NOMBRE',483,432,40),item('DE NR',488,420,27),
+  item('ACCORDE',482,408,39),item('NOUVEAU',536,426,44),item('NR',551,414,15),
+  item('REPORT',600,426,40)
+ ];
+ const entries=[
+  ['BOUSSER CHARLOTTE',15,240,1,245],['CARRIERE JEAN PHILIPPE',12,190,1,195],
+  ['CHABEUF EMMANUEL',17,325,1,330],['HENRI AMELIE',16,260,1,265],
+  ['LEQUIEN FREDERIC',18,320,1,325],['LOUVET STEPHANE',13,200,1,205],
+  ['MATHIEU MAUD',14,235,0,235],['PICHON CHARLENE',12,190,1,195],
+  ['PINEAU MATHIEU',12,205,1,210],['REDOLFI ISABELLE',15,255,0,255],
+  ['SERVAS LAURE',14,240,1,245],['TEXIER-PIERI OPHELIE',13,205,0,205],
+  ['ZUDAS DAVID',15,275,1,280]
+ ] as const;
+ const pg=(n:number,data:typeof entries[number][]):CspPage=>({page:n,width:842,height:595,
+  items:[...head,...data.flatMap(([name,gf,nr,gain,next],i)=>{
+   const y=380-i*32;return [item(name,21,y,130),item(String(gf),185,y,14),
+    item(String(nr),238,y,17),item(String(gain),498,y,8),item(String(next),550,y,17)];
+  })]});
+ const r=extractCspPages([pg(6,entries.slice(0,10)),pg(7,entries.slice(10))],'cr');
+ assert.equal(r.events.length,10);
+ assert.deepEqual(r.reports.map(p=>p.status),['read','read']);
+ assert.deepEqual(r.events.map(e=>e.name),entries.filter(x=>x[3]>0).map(x=>x[0]));
+ assert.ok(r.events.every(e=>e.nrSteps===1&&e.nrAfter===e.nrBefore!+5&&e.effective==='2026-01-01'&&!e.extractionIssue));
+ const entered={...r.events[0],id:'previously-validated',approved:true};
+ const recovered=recoverCspPages({events:[entered],reports:[{page:6,section:'avancement',status:'unsupported',count:0},{page:7,section:'avancement',status:'unsupported',count:0}],perEventValidation:true},'validated',r.events,r.reports);
+ assert.equal(recovered.events.length,10);assert.equal(recovered.events[0].approved,true);
+ assert.deepEqual(recovered.reports.map(p=>p.status),['read','read']);
+ assert.equal(recoverCspPages(recovered,'validated',r.events,r.reports).events.length,10);
+});
