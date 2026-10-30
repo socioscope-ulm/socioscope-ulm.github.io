@@ -53,7 +53,7 @@ test('same-day advancement is applied before GF-only repositioning even if recla
  const base:AgentData={...data,records:[{...data.records[0],gf:12,nr:205}],sources:data.sources};
  const gain:CspEvent={id:'gain',name:'EXEMPLE CAMILLE',agentId:'Z00008',kind:'avancement',effective:'2026-01-01',gfBefore:12,nrBefore:205,nrAfter:210,nrSteps:1,page:6,selected:true};
  const gfOnly:CspEvent={id:'gf-only',name:'EXEMPLE CAMILLE',agentId:'Z00008',kind:'reclassement',effective:'2026-01-01',gfBefore:12,gfAfter:13,nrBefore:210,nrAfter:210,nrSteps:0,gfDelta:1,reclassementNRConfirmed:true,page:4,selected:true};
- const preview=prepareCsp(base,[gfOnly,gain],'2026-09-11');
+ const preview=prepareCsp(base,[gfOnly,gain],[],'2026-09-11');
  assert.deepEqual(preview.map(e=>e.state),['ready','ready']);
  assert.equal(preview[0].before?.nr,210);assert.equal(preview[0].after?.gf,13);
  assert.equal(preview[0].after?.nr,210);
