@@ -44,3 +44,23 @@ test('ODJ titles and filenames reuse the historical parser while RD remains auth
  assert.equal(cspDocumentLabel('cr'),'ODJ');assert.equal(cspDocumentLabel('rd'),'RD');
  assert.equal(cspDocumentText('Candidature du CR : en attente du RD.'),'Candidature de l’ODJ : en attente du RD.');
 });
+
+test('9 October ODJ split ANCIEN/NOUVEAU NR headings identify an ODJ without relying on its filename',()=>{
+ const p:CspPage={page:3,width:842,height:595,items:[
+  item('CSP Cadres du 09/10/2026',506,525,300),
+  item('MESURES SALARIALES',40,482,180),
+  item('NOM PRENOM',66,390,63),item('GF',470,390,12),
+  item('ANCIEN',502,395,37),item('NR',513,385,13),
+  item('NOUVEAU',541,395,45),item('NR',556,385,13),
+  item('DATE',764,395,27),item('D’EFFET',758,385,38),
+  item('EXEMPLE ALICE',65,354,85),item('18',470,354,14),
+  item('355',511,354,15),item('360',555,354,15),item('01/09/2026',754,354,45)
+ ]};
+ const detected=detectCspDocumentType([p],'ODJ-CSP Cadres du 09_10_2026.pdf');
+ assert.equal(detected.documentType,'cr');
+ assert.equal(detected.needsConfirmation,false);
+ const parsed=extractCspPages([p],'cr');
+ assert.equal(parsed.events.length,1);
+ assert.equal(parsed.events[0].effective,'2026-09-01');
+ assert.equal(parsed.events[0].selected,true);
+});
