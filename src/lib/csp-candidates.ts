@@ -1,4 +1,5 @@
 import {reclassementReferenceChecks,reclassementReferenceSupported} from './csp-reclassement-reference.ts';
+import {scopeCspPreparation} from './csp-scope.ts';
 import {nominationReferenceChecks,nominationReferenceSupported} from './csp-nomination-reference.ts';
 import {mutationArrivalReferences} from './csp-mutation-arrival.ts';
 import {activeCspEvents} from './csp-validation.ts';
@@ -32,6 +33,7 @@ export function preparePendingCspArrivals(data:AgentData,events:CspEvent[],date:
 }
 
 export function prepareCspDocuments(data:AgentData,events:CspEvent[],prior:CspImport[],date:string,documents:CspImport[]=[],current?:{id:string;name:string;documentType:'rd'|'cr';status?:string}):CspPreview[]{
+ const scoped=scopeCspPreparation(data,events,prior);data=scoped.data;prior=scoped.prior;
  // Keep the saved status: approved ODJ decisions may be the original evidence
  // for acknowledged RD rows. Opening a preview must not turn that ODJ into a
  // draft and make an otherwise complete RD look partially validated.

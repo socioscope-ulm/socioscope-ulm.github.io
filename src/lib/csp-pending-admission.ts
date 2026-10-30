@@ -16,12 +16,18 @@ export function isPendingAdmission(e:CspEvent){return (e.kind==='admission'||e.k
 export function resolvePendingAdmissions(data:AgentData,imports:CspImport[]):CspImport[]{
  const pending=imports.filter(i=>i.status==='validated').flatMap(i=>i.events.filter(isPendingAdmission));
  if(!pending.length)return imports;
+ const keys=new Map<string,string>();const nameKey=(name:string)=>{let key=keys.get(name);if(key===undefined){key=cspNameKey(name);keys.set(name,key);}return key;};
  const names=new Map<string,Set<string>>();
- for(const e of pending){const key=cspNameKey(e.name),ids=names.get(key)||new Set<string>();ids.add(e.agentId||pendingAdmissionId(e));names.set(key,ids);}
- const identities=[...data.records.filter(r=>r.nni).map(r=>({name:r.name,nni:r.nni!,agency:r.agency})),...(data.cspIdentities||[])];
+ for(const e of pending){const key=nameKey(e.name),ids=names.get(key)||new Set<string>();ids.add(e.agentId||pendingAdmissionId(e));names.set(key,ids);}
+ // Resolve all pending arrivals in one pass, rather than normalizing the
+ // entire annual history again for each provisional admission.
+ const identities=new Map<string,{nni:string;agency?:string}[]>();
+ const add=(name:string,nni:string,agency?:string)=>{const key=nameKey(name);if(!names.has(key))return;const rows=identities.get(key)||[];rows.push({nni,agency});identities.set(key,rows);};
+ for(const row of data.records)if(row.nni)add(row.name,row.nni,row.agency);
+ for(const row of data.cspIdentities||[])add(row.name,row.nni,row.agency);
  const aliases=new Map<string,string>();
  for(const e of pending){
-  const key=cspNameKey(e.name),matches=identities.filter(i=>cspNameKey(i.name)===key),ids=new Set(matches.map(i=>i.nni));
+  const key=nameKey(e.name),matches=identities.get(key)||[],ids=new Set(matches.map(i=>i.nni));
   if(names.get(key)?.size!==1||ids.size!==1)continue;
   // A different documented agency can indicate a homonym; keep the provisional
   // record for review instead of merging on a name alone.
