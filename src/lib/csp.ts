@@ -28,6 +28,13 @@ export function cspExtractionIssue(e:CspEvent){
  });
  return remaining.join(' ; ')||undefined;
 }
+// Mutation salary warnings are resolved by the persistent salary confirmation.
+// Do not show a second generic checkbox that merely deletes the warning.
+export function cspManualExtractionIssue(e:CspEvent){
+ if(e.kind!=='mutation'||!e.extractionIssue)return cspExtractionIssue(e);
+ const remaining=e.extractionIssue.split(' ; ').filter(part=>!/^mutation d[’']office avec changement de GF ou de NR(?:\. Vérifier le document et corriger la ligne\.)?$/i.test(part.trim()));
+ return remaining.join(' ; ')||undefined;
+}
 export type CspImport={id:string;name:string;date:string;status:string;created?:string;events:CspEvent[];documentType?:'rd'|'cr';evidenceEvents?:CspEvent[]};
 export type CspPreview=CspEvent&{state:string;problem:string;matchedDocument?:CspAcknowledgement;matchedRD?:{id:string;eventId:string;name:string;page:number;approved:boolean};before?:Partial<AgentRecord>;after?:Partial<AgentRecord>;candidates?:{id:string;name:string;agency?:string}[]};
 export const cspNonRetained=(e:CspEvent)=>!!(e.nonRetained||e.nonRetainedByRD);

@@ -4,6 +4,8 @@ on:
     branches: [main]
     paths:
       - 'src/lib/csp.ts'
+      - '.github/scripts/package-autonomous-api.sh'
+      - 'scripts/build-server.mjs'
       - 'src/lib/csp-cr-extract.ts'
       - 'src/lib/csp-mutation-arrival.ts'
       - 'src/app/api/csp/route.ts'
@@ -33,7 +35,7 @@ jobs:
       - uses: denoland/setup-deno@v2
         with:
           deno-version: v2.x
-      - name: Check independently deployable Edge Function
+      - name: Check bundled independently deployable Edge Function
         working-directory: supabase/functions/socioscope-api
         run: deno check --config deno.json index.ts
       - name: Require an explicitly configured deployment token

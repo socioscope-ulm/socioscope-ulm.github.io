@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {CSP_SOURCE,deduplicateCsp,prepareCsp,projectCsp,latestAnnual,validDate,validateCspEvent} from '../src/lib/csp.ts';
+import {CSP_SOURCE,deduplicateCsp,prepareCsp,projectCsp,latestAnnual,validDate,validateCspEvent,cspManualExtractionIssue} from '../src/lib/csp.ts';
 import {snapshot,defaultMovementPhotographs} from '../src/lib/agents.ts';
 import {agentProgression} from '../src/lib/agent-progression.ts';
 import {agentPayroll} from '../src/lib/agent-payroll.ts';
@@ -161,4 +161,19 @@ test('mutation salary values from an explicitly checked ODJ retain salary histor
  const differentReference={...checked,gfBefore:8,nrBefore:180,gfAfter:9,nrAfter:185};
  assert.equal(prepareCsp(base,[differentReference])[0].state,'ready');
  assert.equal(prepareCsp(base,[{...differentReference,mutationSalaryConfirmed:false}])[0].state,'blocked');
+});
+
+test('mutation discrepancy uses only one persistent salary confirmation, unrelated errors remain visible',()=>{
+ const row=event({kind:'mutation',gfDelta:0,gfBefore:9,gfAfter:10,nrBefore:200,nrAfter:215,
+  extractionIssue:'mutation d’office avec changement de GF ou de NR. Vérifier le document et corriger la ligne.'});
+ assert.equal(cspManualExtractionIssue(row),undefined);
+ assert.equal(prepareCsp(base,[row])[0].state,'blocked');
+ const confirmed={...row,mutationSalaryConfirmed:true};
+ assert.equal(cspManualExtractionIssue(confirmed),undefined);
+ assert.equal(prepareCsp(base,[confirmed])[0].state,'ready');
+ const mixed={...confirmed,extractionIssue:row.extractionIssue+' ; destination de la mutation absente. Vérifier le document et corriger la ligne.'};
+ assert.match(cspManualExtractionIssue(mixed)||'',/destination de la mutation absente/);
+ assert.equal(prepareCsp(base,[mixed])[0].state,'blocked');
+ const constant=event({kind:'mutation',gfDelta:0,gfBefore:9,gfAfter:9,nrBefore:200,nrAfter:200});
+ assert.equal(prepareCsp(base,[constant])[0].state,'ready');
 });

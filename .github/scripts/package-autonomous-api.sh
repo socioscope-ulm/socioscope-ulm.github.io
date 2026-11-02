@@ -8,7 +8,11 @@ mkdir -p "$destination"
 rm -rf "$destination/server" "$destination/src"
 cp -R server "$destination/server"
 cp -R src "$destination/src"
-printf "import './server/index.ts';\n" > "$destination/index.ts"
+# Bundle the server entrypoint before Deno checks it. Directly checking every
+# imported TS/TSX file pulls browser-only code into the Edge type checker.
+# The bundle retains Deno native node: and npm:postgres imports.
+node scripts/build-server.mjs
+cp server-dist/index.ts "$destination/index.ts"
 cat > "$destination/deno.json" <<'JSON'
 {
   "nodeModulesDir": "auto",
