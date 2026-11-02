@@ -26,13 +26,14 @@ export function isPendingLinkedTitularisation(e:CspEvent){
 // admission, with exactly the same documented GF and NR. Same-day decisions
 // are allowed but never used to invent an entry date or a permanent NNI.
 export function findApprovedPendingAdmission(e:CspEvent,imports:CspImport[],current:CspEvent[]):CspEvent|undefined{
- if(e.kind!=='titularisation'||!e.selected||e.approved||e.candidacy||e.agentId||
+ if(e.kind!=='titularisation'||!e.selected||e.approved||e.candidacy||e.agentId&&!isPendingLinkedTitularisation(e)||
   e.gfBefore===undefined||e.nrBefore===undefined||
   e.gfAfter!==e.gfBefore||e.nrAfter!==e.nrBefore)return undefined;
  const eligible=[...imports.filter(i=>i.status==='validated').flatMap(i=>i.events),...current].filter(a=>
   a.kind==='admission'&&a.approved===true&&a.selected&&!a.candidacy&&!a.extractionIssue&&
   isPendingAdmission(a)&&a.agentId===pendingAdmissionId(a)&&
   cspNameKey(a.name)===cspNameKey(e.name)&&
+  (!e.agentId||a.agentId===e.agentId)&&
   a.effective<=e.effective&&a.gfAfter===e.gfBefore&&a.nrAfter===e.nrBefore);
  const distinct=new Set(eligible.map(a=>[a.agentId,a.effective,a.gfAfter,a.nrAfter].join('|')));
  return distinct.size===1?eligible[0]:undefined;
