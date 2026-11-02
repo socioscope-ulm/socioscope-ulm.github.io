@@ -11,6 +11,33 @@ export function pendingAdmissionId(e:Pick<CspEvent,'name'|'effective'|'agency'|'
 }
 export function isPendingAdmission(e:CspEvent){return (e.kind==='admission'||e.kind==='nomination')&&e.newAgent===true&&e.identityPending===true&&!normalizeNNI(e.agentId);}
 
+ // A titularisation can reuse an admission's temporary identity but may never
+ // create a second arrival. Keep this separate from isPendingAdmission().
+export function isPendingLinkedTitularisation(e:CspEvent){
+ const key=cspNameKey(e.name).replaceAll(' ','_').slice(0,50);
+ return e.kind==='titularisation'&&e.identityPending===true&&e.newAgent!==true&&
+  typeof e.agentId==='string'&&e.agentId.startsWith('pending-csp-'+key+'-')&&
+  /^pending-csp-[A-Z0-9_]+-[0-9a-f]{1,8}-\d{4}-\d{2}-\d{2}$/.test(e.agentId)&&
+  e.gfBefore!==undefined&&e.nrBefore!==undefined&&
+  e.gfAfter===e.gfBefore&&e.nrAfter===e.nrBefore;
+}
+
+// A dated titularisation may follow a UNIQUE, already approved provisional
+// admission, with exactly the same documented GF and NR. Same-day decisions
+// are allowed but never used to invent an entry date or a permanent NNI.
+export function findApprovedPendingAdmission(e:CspEvent,imports:CspImport[],current:CspEvent[]):CspEvent|undefined{
+ if(e.kind!=='titularisation'||!e.selected||e.approved||e.candidacy||e.agentId||
+  e.gfBefore===undefined||e.nrBefore===undefined||
+  e.gfAfter!==e.gfBefore||e.nrAfter!==e.nrBefore)return undefined;
+ const eligible=[...imports.filter(i=>i.status==='validated').flatMap(i=>i.events),...current].filter(a=>
+  a.kind==='admission'&&a.approved===true&&a.selected&&!a.candidacy&&!a.extractionIssue&&
+  isPendingAdmission(a)&&a.agentId===pendingAdmissionId(a)&&
+  cspNameKey(a.name)===cspNameKey(e.name)&&
+  a.effective<=e.effective&&a.gfAfter===e.gfBefore&&a.nrAfter===e.nrBefore);
+ const distinct=new Set(eligible.map(a=>[a.agentId,a.effective,a.gfAfter,a.nrAfter].join('|')));
+ return distinct.size===1?eligible[0]:undefined;
+}
+
 // Reconciliation is derived from active evidence. Stored approvals and their
 // original audit trail stay intact; disabling a RUP removes its identity proof.
 export function resolvePendingAdmissions(data:AgentData,imports:CspImport[]):CspImport[]{
@@ -34,5 +61,5 @@ export function resolvePendingAdmissions(data:AgentData,imports:CspImport[]):Csp
   if(e.agency&&matches.every(i=>i.agency&&normalName(i.agency)!==normalName(e.agency)))continue;
   aliases.set(e.agentId||pendingAdmissionId(e),[...ids][0]);
  }
- return imports.map(i=>({...i,events:i.events.map(e=>{const nni=aliases.get(e.agentId||pendingAdmissionId(e));return isPendingAdmission(e)&&nni?{...e,agentId:nni,identityPending:false}:e;})}));
+ return imports.map(i=>({...i,events:i.events.map(e=>{const nni=aliases.get(e.agentId||pendingAdmissionId(e));return (isPendingAdmission(e)||isPendingLinkedTitularisation(e))&&nni?{...e,agentId:nni,identityPending:false}:e;})}));
 }
