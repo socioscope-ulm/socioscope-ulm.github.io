@@ -241,7 +241,38 @@ export function projectCsp(data:AgentData,imports:CspImport[],asOf=parisToday(),
  // validated avancement quoting the SAME gain must not be added a second time.
  const absorbedNR=new Set<string>();
  const retrospective=retrospectiveProofs(active,base.date);
- const events=[...active].sort((a,b)=>(a.created||'').localeCompare(b.created||'')).flatMap((i,order)=>i.events.filter(e=>e.selected&&!e.candidacy).map((e,index)=>reclassementEvent({...e,importId:i.id,order,index}))).sort((a,b)=>a.effective.localeCompare(b.effective)||cspSameDayOrder(a,b)||a.order-b.order||a.index-b.index);
+ const candidates=[...active].sort((a,b)=>(a.created||'').localeCompare(b.created||'')).flatMap((i,order)=>i.events.filter(e=>e.selected&&!e.candidacy).map((e,index)=>reclassementEvent({...e,importId:i.id,order,index})));
+ const activeById=new Map(active.map(i=>[i.id,i]));
+ // A fully confirmed RD before/after chain takes precedence over an older
+ // version of the exact same ODJ decision. Never rewrite source decisions.
+ const provenRD=(e:typeof candidates[number])=>{
+  const before=e.recordedBefore,after=e.recordedAfter;
+  if(e.approved!==true||activeById.get(e.importId)?.documentType!=='rd'||
+   !Number.isInteger(before?.gf)||!Number.isInteger(before?.nr)||
+   !Number.isInteger(after?.gf)||!Number.isInteger(after?.nr))return false;
+  if(e.kind==='reclassement')return e.gfDelta===1&&after!.gf===before!.gf!+1&&after!.nr===before!.nr!+10;
+  const steps=cspNRSteps(e);
+  return e.kind==='avancement'&&steps!==undefined&&steps>0&&
+   after!.gf===before!.gf&&after!.nr===before!.nr!+steps*5;
+ };
+ const byKey=new Map<string,typeof candidates>();
+ for(const e of candidates)if(provenRD(e)){const key=cspKey(e),rows=byKey.get(key)||[];rows.push(e);byKey.set(key,rows);}
+ const preferredRD=new Map<string,typeof candidates[number]>();
+ for(const [key,rows] of byKey)if(rows.length===1)preferredRD.set(key,rows[0]);
+ // Give a proven RD reclassement priority over a separate approved +2 NR
+ // award describing exactly the NR gain already contained in that RD.
+ const overlaps=(rd:typeof candidates[number],award:typeof candidates[number])=>
+  provenRD(rd)&&rd.kind==='reclassement'&&award.kind==='avancement'&&award.approved===true&&
+  rd.agentId!==undefined&&rd.agentId===award.agentId&&rd.effective===award.effective&&
+  award.gfBefore===rd.recordedBefore?.gf&&award.nrBefore===rd.recordedBefore?.nr&&
+  award.nrAfter===rd.recordedAfter?.nr&&award.nrAfter===award.nrBefore!+10&&
+  cspNRSteps(award)===2&&(award.gfAfter===undefined||award.gfAfter===award.gfBefore)&&
+  award.recordedBefore?.gf===award.gfBefore&&award.recordedBefore?.nr===award.nrBefore&&
+  award.recordedAfter?.gf===award.gfBefore&&award.recordedAfter?.nr===award.nrAfter;
+ const events=candidates.filter(e=>!preferredRD.has(cspKey(e))||preferredRD.get(cspKey(e))===e)
+  .sort((a,b)=>a.effective.localeCompare(b.effective)||
+   (overlaps(a,b)?-1:overlaps(b,a)?1:0)||
+   cspSameDayOrder(a,b)||a.order-b.order||a.index-b.index);
  for(const e of events){if(e.effective<=base.date||e.effective>asOf)continue;const key=cspKey(e);if(seen.has(key))continue;seen.add(key);const present=state.has(e.agentId!);if(e.reclassementReference&&!reclassementReferenceSupported(e,imports)){issues.push({event:e,problem:'Référence ODJ/RD du reclassement désactivée ou modifiée : vérifier la décision.'});continue;}if(e.nominationReference&&!nominationReferenceSupported(e,imports)){issues.push({event:e,problem:'Référence ODJ/RD de la nomination désactivée ou modifiée : vérifier la décision.'});continue;}if(e.salaryReference&&!salaryReferenceSupported(e,imports)){issues.push({event:e,problem:'Référence ODJ/RD de la mesure salariale désactivée ou modifiée : vérifier la décision.'});continue;}const reference=retrospectiveReference(state.get(e.agentId!),e,retrospective,base.date);const current=reference.before;const historical=e.kind==='posthume'?cspHistoricalRecord(data,e.agentId!,e.effective):undefined;const posthume=posthumousReference(current,e,historical);const before=salaryReferenceRow(posthume.before,e);let result=applyEvent(before,e,salaryHistory.get(e.agentId!));let appliedEvent=e;
  // A validated RD can supply the confirmed salary chain for a conflicting ODJ
  // of the SAME decision. Use it only if the original replay fails and the
