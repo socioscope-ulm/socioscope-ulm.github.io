@@ -177,3 +177,23 @@ test('mutation discrepancy uses only one persistent salary confirmation, unrelat
  const constant=event({kind:'mutation',gfDelta:0,gfBefore:9,gfAfter:9,nrBefore:200,nrAfter:200});
  assert.equal(prepareCsp(base,[constant])[0].state,'ready');
 });
+
+test('verified RD + same-day overlapping ODJ + later distinct NR award replay once regardless of import order',()=>{
+ const annual={...base,records:base.records.map(r=>r.agentId==='A12345'?{...r,gf:9,nr:200}:r)};
+ const rdReclass=event({id:'rd-reclass',gfDelta:1,approved:true,recordedBefore:{gf:9,nr:200},recordedAfter:{gf:10,nr:210}});
+ const rdAward=event({id:'rd-award',kind:'avancement',gfDelta:undefined,nrSteps:1,approved:true,recordedBefore:{gf:10,nr:210},recordedAfter:{gf:10,nr:215}});
+ const oldReclass=event({id:'cr-reclass',gfBefore:9,gfAfter:10,nrBefore:215,gfDelta:1,approved:true,recordedBefore:{gf:10,nr:215}});
+ const oldAward=event({id:'cr-award',kind:'avancement',gfDelta:undefined,nrSteps:1,gfBefore:9,nrBefore:210,nrAfter:215,approved:true,recordedBefore:{gf:10,nr:215}});
+ const overlap=event({id:'cr-overlap',kind:'avancement',gfDelta:undefined,nrSteps:2,gfBefore:9,nrBefore:200,nrAfter:210,approved:true,recordedBefore:{gf:9,nr:200},recordedAfter:{gf:9,nr:210}});
+ const rows=[
+  imported([oldReclass,oldAward],{id:'old-cr',documentType:'cr',created:'2026-02-01'}),
+  imported([rdReclass,rdAward],{id:'confirmed-rd',documentType:'rd',created:'2026-02-02'}),
+  imported([overlap],{id:'late-cr',documentType:'cr',created:'2026-02-03'})
+ ];
+ for(const docs of [rows,[rows[2],rows[0],rows[1]]]){
+  const result=projectCsp(annual,docs,'2026-11-02');
+  assert.deepEqual(result.issues,[]);
+  assert.equal(current(result.data).gf,10);
+  assert.equal(current(result.data).nr,215);
+ }
+});
