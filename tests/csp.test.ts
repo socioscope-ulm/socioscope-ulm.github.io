@@ -141,3 +141,24 @@ test('confirming a reclassement exception resolves its parser warning, while oth
  for(const issue of ['GF avant absent ou illisible ; '+warning,'progression NR différente de la règle de reclassement ; GF après absent ou illisible. Vérifier le document et corriger la ligne.'])assert.equal(prepareCsp(base,[{...confirmed,extractionIssue:issue}])[0].state,'blocked');
  assert.equal(prepareCsp(base,[{...confirmed,reclassementNRConfirmed:false}])[0].state,'blocked');
 });
+
+test('mutation salary values from an explicitly checked ODJ retain salary history safeguards',()=>{
+ const mutation=event({id:'odj-mutation',kind:'mutation',gfDelta:0,nrSteps:0,effective:'2026-10-23',
+  gfBefore:9,nrBefore:200,gfAfter:10,nrAfter:215,agency:'AMTE',job:'Nouvel emploi',
+  extractionIssue:'mutation d’office avec changement de GF ou de NR. Vérifier le document et corriger la ligne.'});
+ assert.equal(prepareCsp(base,[mutation])[0].state,'blocked');
+ const checked={...mutation,mutationSalaryConfirmed:true};
+ assert.equal(validateCspEvent(checked),true);
+ const preview=prepareCsp(base,[checked])[0];
+ assert.equal(preview.state,'ready');assert.equal(preview.after?.gf,10);assert.equal(preview.after?.nr,215);
+ const projected=projectCsp(base,[imported([checked])],'2026-11-02');
+ assert.deepEqual(projected.issues,[]);
+ assert.equal(current(projected.data).gf,10);assert.equal(current(projected.data).nr,215);
+ assert.equal(prepareCsp(base,[{...checked,mutationSalaryConfirmed:false}])[0].state,'blocked');
+ assert.equal(validateCspEvent({...checked,nrAfter:undefined}),false);
+ assert.equal(prepareCsp(base,[{...checked,extractionIssue:'destination de la mutation absente. Vérifier le document et corriger la ligne.'}])[0].state,'blocked');
+ assert.equal(prepareCsp(base,[{...checked,nrSteps:1}])[0].state,'blocked');
+ const differentReference={...checked,gfBefore:8,nrBefore:180,gfAfter:9,nrAfter:185};
+ assert.equal(prepareCsp(base,[differentReference])[0].state,'ready');
+ assert.equal(prepareCsp(base,[{...differentReference,mutationSalaryConfirmed:false}])[0].state,'blocked');
+});

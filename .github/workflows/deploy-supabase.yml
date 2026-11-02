@@ -1,5 +1,13 @@
 name: Deploy autonomous Socioscope API (manual and gated)
 on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/lib/csp.ts'
+      - 'src/lib/csp-cr-extract.ts'
+      - 'src/lib/csp-mutation-arrival.ts'
+      - 'src/app/api/csp/route.ts'
+      - '.github/workflows/deploy-supabase.yml'
   workflow_dispatch:
 permissions:
   contents: read
@@ -16,6 +24,10 @@ jobs:
       - name: Verify no checkout from the historical repository
         run: |
           ! grep -R -n 'private-data/references/' server src
+      - name: Run CSP regression tests before any API deployment
+        run: |
+          npm install --no-audit --no-fund
+          node --experimental-strip-types --test tests/csp.test.ts tests/csp-cr-extract.test.ts tests/csp-mutation-arrival.test.ts
       - name: Assemble the complete API source and import map
         run: sh .github/scripts/package-autonomous-api.sh
       - uses: denoland/setup-deno@v2
