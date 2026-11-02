@@ -13,6 +13,10 @@ cp -R src "$destination/src"
 # The bundle retains Deno native node: and npm:postgres imports.
 node scripts/build-server.mjs
 cp server-dist/index.ts "$destination/index.ts"
+# esbuild has already transpiled and bundled all application TypeScript.
+# The generated minified JS is not a typed TS source; avoid type-checking it
+# as TS, while still letting Deno resolve its external runtime imports.
+sed -i '1i// @ts-nocheck' "$destination/index.ts"
 cat > "$destination/deno.json" <<'JSON'
 {
   "nodeModulesDir": "auto",
