@@ -74,6 +74,9 @@ export async function PATCH(request:Request){try{
   const entry=b.entry,created=new Date().toISOString(),actor=String(request.headers.get('oai-authenticated-user-email')||'administrateur').slice(0,200);
   if(entry.effective>parisToday())fail('Un avancement manuel futur doit attendre sa date d’effet.');
   const {data,cspImports}=await agentData(true,undefined,entry.effective,false);
+  const names=new Set([...data.records.filter(r=>r.agentId===entry.agentId).map(r=>r.name),...cspImports.flatMap(i=>i.events.filter(e=>e.agentId===entry.agentId).map(e=>e.name))].map(v=>v.normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().toUpperCase()));
+  const entered=entry.name.normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().toUpperCase();
+  if(names.size&&!names.has(entered))fail('Le nom indiqué ne correspond pas au NNI dans les sources de référence. Vérifier le rapprochement.');
   const duplicate=cspImports.some(i=>i.status==='validated'&&i.events.some(e=>e.agentId===entry.agentId&&e.effective===entry.effective&&
    e.kind==='avancement'&&e.nrBefore===entry.nrBefore&&e.nrAfter===entry.nrBefore+5));
   if(duplicate)fail('Cet avancement NR existe déjà pour cet agent et cette date.',409);
