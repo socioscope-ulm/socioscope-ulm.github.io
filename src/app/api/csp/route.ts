@@ -26,13 +26,14 @@ function input(body:any){
  return deduplicateCsp(body.events as CspEvent[]);
 }
 export async function GET(request:Request){try{
- await agentAuth(request);const p=new URL(request.url).searchParams,rows=await imports(),id=p.get('id');
+ await agentAuth(request);const p=new URL(request.url).searchParams,id=p.get('id');
  if(p.get('manual')==='1'){
   await agentAuth(request,true);
   const entries=(await resources().db.prepare("SELECT id,agent,created,note FROM agent_decisions WHERE kind='manual_nr' ORDER BY created DESC LIMIT 200").all<any>()).results;
   return Response.json({reasons:manualNRReasons,entries:entries.flatMap(row=>{try{const entry=JSON.parse(row.note||'{}');return validateManualNR(entry)?[{...entry,id:row.id,created:row.created}]:[];}catch{return [];}})});
  }
- if(id){await agentAuth(request,true);const row=rows.find(r=>r.id===id);if(!row)fail('Relevé introuvable.',404);return Response.json({meta:metadata(row),events:row.detail.events||[]});}
+ if(id){await agentAuth(request,true);const rows=await imports();const row=rows.find(r=>r.id===id);if(!row)fail('Relevé introuvable.',404);return Response.json({meta:metadata(row),events:row.detail.events||[]});}
+ const rows=await imports();
  const q=(p.get('q')||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase(),kind=p.get('kind')||'',meeting=p.get('meeting')||'',agent=p.get('agent')||'';
  const offset=Math.max(0,Math.floor(Number(p.get('offset'))||0)),pageSize=60;
  const pending=rows.filter(r=>r.status==='validated').flatMap(r=>activeCspEvents(r.detail).filter(isPendingAdmission));
