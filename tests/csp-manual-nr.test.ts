@@ -41,3 +41,16 @@ test('reject incomplete or abusive manual advancements',()=>{
  assert.equal(validateManualNR({...entry,reason:'unknown'}),false);
  assert.equal(validateManualNR({...entry,agentId:'wrong'}),false);
 });
+
+test('a confirmed same-day arrival precedes its manual advancement even when the annual snapshot lacks the agent',()=>{
+ const arrival:CspEvent={id:'arrival',agentId:entry.agentId,name:entry.name,kind:'mutation',
+  effective:entry.effective,page:1,selected:true,approved:true,newAgent:true,
+  gfDelta:0,gfBefore:18,gfAfter:18,nrBefore:350,nrAfter:350,agency:'AGENCE EXEMPLE'};
+ const arrivals:CspImport={id:'arrival-doc',name:'ODJ fictif d’arrivée',date:'2026-07-10',documentType:'cr',
+  status:'validated',events:[arrival]};
+ const output=projectCsp({...base,records:[]},[manual,arrivals],'2026-11-03');
+ assert.deepEqual(output.issues,[]);
+ const current=output.data.records.find(r=>r.source===CSP_SOURCE&&r.agentId===entry.agentId);
+ assert.equal(current?.nr,355);
+ assert.equal(current?.entryUnit,entry.effective);
+});
