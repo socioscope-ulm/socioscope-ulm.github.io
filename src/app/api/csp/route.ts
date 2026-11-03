@@ -10,7 +10,9 @@ import {prepareCspDocuments,addCrCandidates} from '../../../lib/csp-candidates';
 import {activeCspEvents,cspProgress,preserveApproved,restoreExcludedCsp} from '../../../lib/csp-validation';
 import {agentAuth,agentData,cspIdentityData,agentError} from '../../../lib/agents-store';
 import {resources} from '../../../lib/store';
-import {cspKinds,cspKey,cspNonRetained,cspResolvedEvent,validateCspEvent,deduplicateCsp,validDate,latestAnnual,parisToday} from '../../../lib/csp';
+import {cspKinds,cspKey,cspNonRetained,cspResolvedEvent,validateCspEvent,deduplicateCsp,validDate,latestAnnual,parisToday,projectCsp,CSP_SOURCE} from '../../../lib/csp';
+import {manualNRImport,validateManualNR,manualNRReasons} from '../../../lib/csp-manual-nr';
+import {snapshot} from '../../../lib/agents';
 import type {CspEvent} from '../../../lib/csp';
 function fail(message:string,status=400):never{throw Object.assign(Error(message),{status});}
 const parse=(row:any)=>{let detail:any={};try{detail=JSON.parse(row.detail||'{}');}catch{}return {...row,detail,rawDetail:detail,rawDetailText:row.detail};};
@@ -25,6 +27,11 @@ function input(body:any){
 }
 export async function GET(request:Request){try{
  await agentAuth(request);const p=new URL(request.url).searchParams,rows=await imports(),id=p.get('id');
+ if(p.get('manual')==='1'){
+  await agentAuth(request,true);
+  const entries=(await resources().db.prepare("SELECT id,agent,created,note FROM agent_decisions WHERE kind='manual_nr' ORDER BY created DESC LIMIT 200").all<any>()).results;
+  return Response.json({reasons:manualNRReasons,entries:entries.flatMap(row=>{try{const entry=JSON.parse(row.note||'{}');return validateManualNR(entry)?[{...entry,id:row.id,created:row.created}]:[];}catch{return [];}})});
+ }
  if(id){await agentAuth(request,true);const row=rows.find(r=>r.id===id);if(!row)fail('Relevé introuvable.',404);return Response.json({meta:metadata(row),events:row.detail.events||[]});}
  const q=(p.get('q')||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase(),kind=p.get('kind')||'',meeting=p.get('meeting')||'',agent=p.get('agent')||'';
  const offset=Math.max(0,Math.floor(Number(p.get('offset'))||0)),pageSize=60;
@@ -52,7 +59,33 @@ export async function POST(request:Request){try{
  return Response.json({id,count:stored.length});
 }catch(e){return agentError(e);}}
 export async function PATCH(request:Request){try{
- await agentAuth(request,true);const b=await request.json();if(typeof b.id!=='string'||!b.id.startsWith('csp-'))fail('Relevé invalide.');const {db}=resources();const row=(await imports()).find(r=>r.id===b.id);if(!row||row.detail.kind!=='csp')fail('Relevé introuvable.',404);
+ await agentAuth(request,true);const b=await request.json();
+ if(b.action==='manual-nr'){
+  if(!validateManualNR(b.entry))fail('Renseigner un NNI, un GF, le NR avant, la date d’effet, un motif et une observation de 20 caractères minimum.');
+  if(b.confirmed!==true)fail('Confirmer explicitement cet avancement manuel.');
+  const entry=b.entry,created=new Date().toISOString(),actor=String(request.headers.get('oai-authenticated-user-email')||'administrateur').slice(0,200);
+  if(entry.effective>parisToday())fail('Un avancement manuel futur doit attendre sa date d’effet.');
+  const {data,cspImports}=await agentData(true,undefined,entry.effective,false);
+  const duplicate=cspImports.some(i=>i.status==='validated'&&i.events.some(e=>e.agentId===entry.agentId&&e.effective===entry.effective&&
+   e.kind==='avancement'&&e.nrBefore===entry.nrBefore&&e.nrAfter===entry.nrBefore+5));
+  if(duplicate)fail('Cet avancement NR existe déjà pour cet agent et cette date.',409);
+  const manual=manualNRImport({...entry,id:crypto.randomUUID(),created,actor});
+  const trial=projectCsp(data,[...cspImports,manual],entry.effective);
+  const trouble=trial.issues.find(i=>i.event.id===manual.events[0].id);
+  if(trouble)fail('Avancement non applicable : '+trouble.problem+' Vérifier la situation de départ et les mutations précédentes.',409);
+  const projected=snapshot(trial.data,CSP_SOURCE).find(row=>row.agentId===entry.agentId);
+  if(!projected||projected.gf!==entry.gf||projected.nr<entry.nrBefore+5)
+   fail('Impossible de confirmer la chaîne GF/NR. Vérifier les mouvements précédents, notamment une arrivée dans l’unité.',409);
+  const note=JSON.stringify({...entry,actor,manual:true});
+  const {db}=resources();
+  const previous=await db.prepare("SELECT id,note FROM agent_decisions WHERE kind='manual_nr' AND agent=?").bind(entry.agentId).all<any>();
+  if(previous.results.some(v=>{try{const old=JSON.parse(v.note||'{}');return old.effective===entry.effective&&old.nrBefore===entry.nrBefore&&old.gf===entry.gf;}catch{return false;}}))
+   fail('Cet avancement manuel est déjà enregistré.',409);
+  await db.prepare('INSERT INTO agent_decisions (id,agent,kind,target,source,note,created) VALUES (?,?,?,?,?,?,?)')
+   .bind(manual.events[0].id,entry.agentId,'manual_nr',null,'admin-manual-nr',note,created).run();
+  return Response.json({ok:true,id:manual.events[0].id,from:entry.nrBefore,to:entry.nrBefore+5,reason:manualNRReasons[entry.reason]});
+ }
+ if(typeof b.id!=='string'||!b.id.startsWith('csp-'))fail('Relevé invalide.');const {db}=resources();const row=(await imports()).find(r=>r.id===b.id);if(!row||row.detail.kind!=='csp')fail('Relevé introuvable.',404);
  if(b.action==='confirm-nr-gap'){
   if(row.status!=='validated'||row.detail.perEventValidation!==true||b.checked!==true||typeof b.eventId!=='string')fail('Une décision en attente dans un relevé partiellement validé est requise.');
   if(typeof b.reason!=='string'||b.reason.trim().length<20||b.reason.length>500)fail('Préciser le motif de confirmation exceptionnelle (20 à 500 caractères).');
