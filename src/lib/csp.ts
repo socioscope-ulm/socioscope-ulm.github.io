@@ -14,7 +14,8 @@ export type CspReclassementReference={nni:string;effective:string;meetingDate:st
 export type CspSalaryChecks={references:Map<string,CspSalaryReference>;problems:Map<string,string>;nominationReferences?:Map<string,CspNominationReference>;reclassementReferences?:Map<string,CspReclassementReference>};
 export type CspAcknowledgement={id:string;eventId:string;name:string;page:number;documentType:'cr'|'rd';cumulative?:boolean};
 export type CspNonRetentionProof=Omit<CspAcknowledgement,'eventId'|'page'>&{eventId?:string;page?:number;reason?:'unfilled-post'};
-export type CspEvent={reclassementReference?:CspReclassementReference;nominationReference?:CspNominationReference;acknowledgedByDocument?:CspAcknowledgement;acknowledgedByRD?:{id:string;eventId:string;name:string;page:number};salaryReference?:CspSalaryReference;id:string;name:string;agentId?:string;kind:CspKind;effective:string;page:number;pages?:number[];agency?:string;job?:string;team?:string;m3e?:string;location?:string;reference?:string;gfDelta?:number;nrSteps?:number;gfBefore?:number;gfAfter?:number;nrBefore?:number;nrAfter?:number;identityMethod?:'rup'|'annual'|'manual';identitySource?:string;identityDate?:string;selected:boolean;candidacy?:boolean;nonRetained?:boolean;nonRetainedByRD?:CspNonRetentionProof;approved?:boolean;approvedAt?:string;note?:string;nrConfirmed?:boolean;reclassementNRConfirmed?:boolean;mutationSalaryConfirmed?:boolean;extractionIssue?:string;newAgent?:boolean;identityPending?:boolean;recordedBefore?:Partial<AgentRecord>;recordedAfter?:Partial<AgentRecord>};
+export type CspNRGapAcknowledgement={from:number;to:number;reason:string;at:string;actor:string};
+export type CspEvent={nrGapAcknowledgement?:CspNRGapAcknowledgement;reclassementReference?:CspReclassementReference;nominationReference?:CspNominationReference;acknowledgedByDocument?:CspAcknowledgement;acknowledgedByRD?:{id:string;eventId:string;name:string;page:number};salaryReference?:CspSalaryReference;id:string;name:string;agentId?:string;kind:CspKind;effective:string;page:number;pages?:number[];agency?:string;job?:string;team?:string;m3e?:string;location?:string;reference?:string;gfDelta?:number;nrSteps?:number;gfBefore?:number;gfAfter?:number;nrBefore?:number;nrAfter?:number;identityMethod?:'rup'|'annual'|'manual';identitySource?:string;identityDate?:string;selected:boolean;candidacy?:boolean;nonRetained?:boolean;nonRetainedByRD?:CspNonRetentionProof;approved?:boolean;approvedAt?:string;note?:string;nrConfirmed?:boolean;reclassementNRConfirmed?:boolean;mutationSalaryConfirmed?:boolean;extractionIssue?:string;newAgent?:boolean;identityPending?:boolean;recordedBefore?:Partial<AgentRecord>;recordedAfter?:Partial<AgentRecord>};
 // A confirmed NR exception resolves only this business-rule warning, not extraction errors.
 export function cspExtractionIssue(e:CspEvent){
  if(!e.extractionIssue)return undefined;
@@ -24,6 +25,7 @@ export function cspExtractionIssue(e:CspEvent){
   const p=part.trim();
   if(e.kind==='reclassement'&&e.reclassementNRConfirmed&&/^progression NR différente de la règle de reclassement(?:\. Vérifier le document et corriger la ligne\.)?$/i.test(p))return false;
   if(e.kind==='mutation'&&e.mutationSalaryConfirmed&&/^mutation d[’']office avec changement de GF ou de NR(?:\. Vérifier le document et corriger la ligne\.)?$/i.test(p))return false;
+  if(e.kind==='mesure'&&e.nrGapAcknowledgement){const m=p.match(/^Décision antérieure manquante : justificatif du passage NR (\d+) à (\d+) non intégré\./);const a=e.nrGapAcknowledgement;if(m&&a.from===Number(m[1])&&a.to===Number(m[2])&&e.nrBefore===a.to&&e.salaryReference?.nr===a.to&&e.salaryReference?.nni===e.agentId)return false;}
   return true;
  });
  return remaining.join(' ; ')||undefined;
@@ -348,7 +350,7 @@ function salaryReferenceRow(row:AgentRecord|undefined,e:CspEvent):AgentRecord|un
  const reclassification=e.reclassementReference;if(e.kind==='reclassement'&&reclassification&&reclassification.nni===e.agentId&&reclassification.effective===e.effective)return row?{...row,gf:row.gf??reclassification.gfBefore,nr:row.nr??reclassification.nrBefore}:undefined;
  const nomination=e.nominationReference;if(e.kind==='nomination'&&nomination&&nomination.nni===e.agentId&&nomination.effective===e.effective)return row?{...row,gf:row.gf??nomination.gf,nr:row.nr??nomination.nr}:undefined;
  const ref=e.salaryReference;if(e.kind!=='mesure'||!ref||ref.nni!==e.agentId||ref.effective!==e.effective)return row;
- if(row)return {...row,gf:row.gf??ref.gf,nr:row.nr??ref.nr};
+ if(row){const ack=e.nrGapAcknowledgement;if(ack&&ack.from===row.nr&&ack.to===ref.nr&&e.gfBefore===row.gf&&ref.gf===row.gf)return {...row,nr:ref.nr};return {...row,gf:row.gf??ref.gf,nr:row.nr??ref.nr};}
  return {id:'csp-reference:'+e.id,agentId:ref.nni,nni:ref.nni,name:e.name,source:CSP_SOURCE,row:e.page,gf:ref.gf,nr:ref.nr,agency:ref.agency};
 }
 export function salaryReferenceSupported(e:CspEvent,documents:CspImport[]):boolean{
@@ -356,7 +358,7 @@ export function salaryReferenceSupported(e:CspEvent,documents:CspImport[]):boole
  if(e.kind!=='mesure'||r.nni!==e.agentId||r.effective!==e.effective||r.nrAfter!==r.nr+r.steps*5)return false;
  const get=(proof:CspSalaryReference['cr'],type:'cr'|'rd')=>{
   const d=documents.find(d=>d.id===proof.id&&!d.status.startsWith('disabled')&&(d.documentType==='cr'?'cr':'rd')===type);
-  return d&&(d.evidenceEvents||d.events).find(v=>v.id===proof.eventId&&v.selected&&!v.candidacy&&!v.extractionIssue&&v.kind==='mesure'&&nameKey(v.name)===nameKey(e.name)&&(!v.agentId||v.agentId===e.agentId)&&v.effective===r.effective);
+  return d&&(d.evidenceEvents||d.events).find(v=>v.id===proof.eventId&&v.selected&&!v.candidacy&&!cspExtractionIssue(v)&&v.kind==='mesure'&&nameKey(v.name)===nameKey(e.name)&&(!v.agentId||v.agentId===e.agentId)&&v.effective===r.effective);
  };
  const cr=get(r.cr,'cr'),rd=r.rd?get(r.rd,'rd'):undefined;
  return !!cr&&(!r.rd||!!rd)&&cr.gfBefore===r.gf&&cr.nrBefore===r.nr&&cr.nrAfter===r.nrAfter&&[cr,...(rd?[rd]:[])].every(v=>cspNRSteps(v)===r.steps&&(v.gfDelta??0)===0&&(v.gfBefore===undefined||v.gfBefore===r.gf)&&(v.gfAfter===undefined||v.gfAfter===r.gf)&&(v.nrBefore===undefined||v.nrBefore===r.nr)&&(v.nrAfter===undefined||v.nrAfter===r.nrAfter));
