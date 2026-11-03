@@ -51,7 +51,7 @@ export default function CspManualNR({onSaved}:{onSaved:()=>void}){
   {notice&&<p role="status" className="notice">{notice}</p>}
   <details><summary>Historique des avancements manuels ({rows.length})</summary>
    {rows.length?<div className="table-scroll"><table><thead><tr><th>Agent</th><th>Effet</th><th>GF / NR</th><th>Motif</th><th>Enregistrement</th></tr></thead><tbody>
-    {rows.map(row=><tr key={row.id}><td>{row.name}</td><td>{day(row.effective)}</td><td>GF {row.gf} · NR {row.nrBefore} → {row.nrBefore+5}</td><td>{manualNRReasons[row.reason]}<small>{row.comment}</small></td><td>{day(row.created.slice(0,10))}</td></tr>)}
+    {rows.map(row=><tr key={row.id}><td>{row.name}</td><td>{day(row.effective)}</td><td>GF {row.gf} · NR {row.nrBefore} → {row.nrBefore+5}</td><td>{manualNRReasons[row.reason]}<small>{row.comment}</small></td><td>{day(row.created.slice(0,10))}<small>{row.actor}</small></td></tr>)}
    </tbody></table></div>:<p>Aucun avancement manuel enregistré.</p>}
   </details>
  </section>;
