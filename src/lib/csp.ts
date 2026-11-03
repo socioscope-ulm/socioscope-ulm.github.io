@@ -77,7 +77,7 @@ export function cspSameDayOrder(a:CspEvent,b:CspEvent):number {
  if(!complete(a)||!complete(b))return 0;
  // An administrative transfer may quote the salary before a same-day award.
  // Apply the award first so the transfer preserves the updated salary.
- const transferBeforeAward=(t:CspEvent,s:CspEvent)=>t.kind==='mutation'&&!t.gfDelta&&!cspNRSteps(t)&&
+ const transferBeforeAward=(t:CspEvent,s:CspEvent)=>t.kind==='mutation'&&!t.newAgent&&!t.gfDelta&&!cspNRSteps(t)&&
   ['avancement','mesure','posthume'].includes(s.kind)&&t.gfBefore===t.gfAfter&&t.nrBefore===t.nrAfter&&
   t.gfBefore===s.gfBefore&&t.nrBefore===s.nrBefore&&endGF(s)===s.gfBefore&&s.nrAfter!>s.nrBefore!;
  if(transferBeforeAward(a,b))return 1;
