@@ -12,6 +12,7 @@ import RupImport from './rup-import';
 import PayrollImport from './payroll-import';
 import PaySimulator from './pay-simulator';
 import CspImport from './csp';
+import CspAlerts from './csp-alerts';
 import PrimeSettingsAdmin from './prime-settings-admin';
 import Agents,{AgentImport,ImportReview} from './agents';
 import {useScreen,navigate,back} from '../lib/use-screen';
