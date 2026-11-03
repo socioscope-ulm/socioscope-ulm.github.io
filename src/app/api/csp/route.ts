@@ -38,7 +38,14 @@ export async function GET(request:Request){try{
  const pending=rows.filter(r=>r.status==='validated').flatMap(r=>activeCspEvents(r.detail).filter(isPendingAdmission));
  let history=rows;
  if(pending.length){const {data:baseData}=await agentData(true,undefined,parisToday(),false);const data=await cspIdentityData(baseData,pending);const resolved=resolvePendingAdmissions(data,rows.map(r=>({...r,events:activeCspEvents(r.detail)})));history=rows.map((r,index)=>({...r,detail:{...r.detail,events:resolved[index].events,perEventValidation:false}}));}
- const decisions=history.filter(r=>r.status==='validated'&&(!meeting||r.id===meeting)).flatMap(r=>activeCspEvents(r.detail).filter(e=>(!kind||e.kind===kind)&&(!agent||e.agentId===agent)&&(!q||(e.name+' '+e.agentId+' '+e.agency).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().includes(q))).map(e=>({...e,importId:r.id,meetingDate:r.date,document:r.name}))).sort((a,b)=>b.effective.localeCompare(a.effective)||a.name.localeCompare(b.name,'fr'));
+ const rawManual=!meeting?(await resources().db.prepare("SELECT id,agent,note,created FROM agent_decisions WHERE kind='manual_nr' ORDER BY created DESC LIMIT 500").all<any>()).results:[];
+ const manual=rawManual.flatMap(row=>{try{
+  const data=JSON.parse(row.note||'{}');if(!validateManualNR(data)||row.agent!==data.agentId)return [];
+  const imp=manualNRImport({...data,id:row.id,created:row.created,actor:String(data.actor||'administrateur')});
+  const event=imp.events[0];return [{...event,manual:true,importId:imp.id,meetingDate:imp.date,document:'Avancement administratif manuel · '+manualNRReasons[data.reason]}];
+ }catch{return [];}});
+ const official=history.filter(r=>r.status==='validated'&&(!meeting||r.id===meeting)).flatMap(r=>activeCspEvents(r.detail).map(e=>({...e,importId:r.id,meetingDate:r.date,document:r.name})));
+ const decisions=[...official,...manual].filter(e=>(!kind||e.kind===kind)&&(!agent||e.agentId===agent)&&(!q||(e.name+' '+e.agentId+' '+e.agency).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().includes(q))).sort((a,b)=>b.effective.localeCompare(a.effective)||a.name.localeCompare(b.name,'fr'));
  const unique=new Map<string,typeof decisions[number]>();for(const e of decisions)if(!unique.has(cspKey(e)))unique.set(cspKey(e),e);const list=[...unique.values()];
  return Response.json({imports:rows.map(metadata),total:list.length,records:list.slice(offset,offset+pageSize),kinds:cspKinds,pageSize});
 }catch(e){return agentError(e);}}
