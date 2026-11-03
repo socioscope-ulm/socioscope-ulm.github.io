@@ -53,6 +53,48 @@ export async function POST(request:Request){try{
 }catch(e){return agentError(e);}}
 export async function PATCH(request:Request){try{
  await agentAuth(request,true);const b=await request.json();if(typeof b.id!=='string'||!b.id.startsWith('csp-'))fail('Relevé invalide.');const {db}=resources();const row=(await imports()).find(r=>r.id===b.id);if(!row||row.detail.kind!=='csp')fail('Relevé introuvable.',404);
+ if(b.action==='confirm-nr-gap'){
+  if(row.status!=='validated'||row.detail.perEventValidation!==true||b.checked!==true||typeof b.eventId!=='string')fail('Une décision en attente dans un relevé partiellement validé est requise.');
+  if(typeof b.reason!=='string'||b.reason.trim().length<20||b.reason.length>500)fail('Préciser le motif de confirmation exceptionnelle (20 à 500 caractères).');
+  const original=(row.detail.events||[]).find((e:CspEvent)=>e.id===b.eventId) as CspEvent|undefined;
+  if(!original||original.approved||!original.selected||original.kind!=='mesure'||!original.agentId||!original.salaryReference)fail('La mesure doit être en attente et disposer de sa référence documentaire.');
+  const match=original.extractionIssue?.match(/^Décision antérieure manquante : justificatif du passage NR (\\d+) à (\\d+) non intégré\\./);
+  const from=match?Number(match[1]):NaN,to=match?Number(match[2]):NaN;
+  const ref=original.salaryReference;
+  if(!Number.isInteger(from)||!Number.isInteger(to)||to!==from+5||
+   original.nrBefore!==to||original.nrAfter!==to+5||original.nrSteps!==1||
+   original.gfBefore!==ref.gf||original.agentId!==ref.nni||ref.nr!==to||ref.nrAfter!==original.nrAfter||
+   ref.cr.id!==row.id||ref.cr.eventId!==original.id||ref.cr.page!==original.page||
+   ref.effective!==original.effective||!ref.rup.source||!ref.rup.date)
+   fail('La progression exceptionnelle doit correspondre exactement au bordereau et à la référence existante.');
+  const actor=String(request.headers.get('oai-authenticated-user-email')||request.headers.get('oai-authenticated-user-id')||'administrateur').slice(0,200);
+  const at=new Date().toISOString();
+  const acknowledgment={from,to,reason:b.reason.trim(),at,actor};
+  const updated:CspEvent={...original,nrGapAcknowledgement:acknowledgment};
+  if(!validateCspEvent(updated))fail('Confirmation exceptionnelle invalide.');
+  const rows=await imports();
+  const evidence=documents(rows);
+  const {data:baseData,cspImports}=await agentData(true,undefined,parisToday(),false);
+  const candidates=row.detail.events.map((e:CspEvent)=>e.id===updated.id?updated:e);
+  const data=await cspIdentityData(baseData,[updated,...cspImports.flatMap(i=>i.events.filter(isPendingAdmission))]);
+  const otherImports=cspImports.filter(i=>i.id!==row.id);
+  const checked=prepareCspDocuments(data,candidates,otherImports,row.date,evidence,currentDocument(row));
+  const decision=checked.find(e=>e.id===updated.id);
+  if(!decision||!['ready','scheduled','covered'].includes(decision.state)||!decision.before||!decision.after)
+   fail('La décision reste à vérifier : '+(decision?.problem||'référence de départ non confirmée')+'. Conserver la décision en attente.',409);
+  const isolated=candidates.map(e=>({...e,selected:e.selected&&(e.approved===true||e.id===updated.id)}));
+  const alone=prepareCspDocuments(data,isolated,otherImports,row.date,evidence,currentDocument(row)).find(e=>e.id===updated.id);
+  if(!alone||!['ready','scheduled','covered'].includes(alone.state)||JSON.stringify([alone.before,alone.after])!==JSON.stringify([decision.before,decision.after]))
+   fail('Cette mesure dépend encore d’une autre décision non validée.',409);
+  const stored=candidates.map(e=>e.id===updated.id?
+   {...cspResolvedEvent(updated,decision),approved:true,approvedAt:at,recordedBefore:decision.before,recordedAfter:decision.after}:e);
+  const detail={...row.detail,events:stored,perEventValidation:true,
+   corrections:[...(row.detail.corrections||[]),{eventId:updated.id,reason:'Validation exceptionnelle : '+acknowledgment.reason,at,actor,before:original,after:stored.find(e=>e.id===updated.id)}]};
+  const changed=await db.prepare('UPDATE agent_imports SET detail=?,count=? WHERE id=? AND status=? AND detail=?')
+   .bind(JSON.stringify(detail),stored.filter(e=>e.selected).length,row.id,row.status,row.rawDetailText??JSON.stringify(row.rawDetail||row.detail)).run();
+  if(changed.meta.changes!==1)fail('Le document a changé. Recharger avant de confirmer.',409);
+  return Response.json({ok:true,validated:1,status:row.status,...cspProgress(row.status,detail)});
+ }
  if(b.action==='restore-excluded'){
   if(!['review','validated'].includes(row.status)||b.checked!==true||!Array.isArray(b.eventIds)||b.eventIds.length>250||!b.eventIds.every((x:any)=>typeof x==='string'))fail('Confirmer les mouvements écartés à réintégrer.');
   const events=restoreExcludedCsp(row.detail.events||[],b.eventIds);
