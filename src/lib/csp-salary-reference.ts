@@ -1,4 +1,4 @@
-import {cspNRSteps,validDate,cspExtractionIssue} from './csp.ts';
+import {cspNRSteps,validDate} from './csp.ts';
 import {cspNameKey} from './csp-rup.ts';
 import type {CspEvent,CspImport,CspSalaryChecks,CspSalaryReference} from './csp.ts';
 import type {AgentData} from './agents.ts';
@@ -17,7 +17,7 @@ export function salaryReferenceChecks(data:AgentData,events:CspEvent[],date:stri
  }
  const active=documents.filter(d=>d.date===date&&!d.status.startsWith('disabled'));
  for(const e of events){
-  if(e.kind!=='mesure'||e.candidacy||!e.selected||e.approved||cspExtractionIssue(e)||!validDate(e.effective))continue;
+  if(e.kind!=='mesure'||e.candidacy||!e.selected||e.approved||e.extractionIssue||!validDate(e.effective))continue;
   const name=cspNameKey(e.name),ids=names.get(name),rup=identities.get(name)||[];
   if(ids?.size!==1||!rup.length||new Set(rup.map(r=>r.nni)).size!==1)continue;
   const nni=rup[0].nni;if(!ids.has(nni)||e.agentId&&e.agentId!==nni)continue;
@@ -29,7 +29,7 @@ export function salaryReferenceChecks(data:AgentData,events:CspEvent[],date:stri
   const complete=cr.filter(({e:v})=>v.gfBefore!==undefined&&v.nrBefore!==undefined&&v.nrAfter!==undefined);
   if(!complete.length)continue;
   const first=complete[0],gf=first.e.gfBefore!,nr=first.e.nrBefore!,nrAfter=first.e.nrAfter!,steps=cspNRSteps(first.e);
-  const conflict=[...matching.map(v=>v.e),e].some(v=>cspExtractionIssue(v)||v.agentId&&v.agentId!==nni||cspNRSteps(v)!==steps||(v.gfDelta??0)!==0||v.gfBefore!==undefined&&v.gfBefore!==gf||v.gfAfter!==undefined&&v.gfAfter!==gf||v.nrBefore!==undefined&&v.nrBefore!==nr||v.nrAfter!==undefined&&v.nrAfter!==nrAfter);
+  const conflict=[...matching.map(v=>v.e),e].some(v=>v.extractionIssue||v.agentId&&v.agentId!==nni||cspNRSteps(v)!==steps||(v.gfDelta??0)!==0||v.gfBefore!==undefined&&v.gfBefore!==gf||v.gfAfter!==undefined&&v.gfAfter!==gf||v.nrBefore!==undefined&&v.nrBefore!==nr||v.nrAfter!==undefined&&v.nrAfter!==nrAfter);
   if(!steps||nrAfter!==nr+steps*5||conflict){problems.set(e.id,'Mesure salariale : valeurs ODJ/RD contradictoires ou progression NR incohérente. Vérifier les documents.');continue;}
   const proof=(v:typeof first)=>({id:v.d.id,name:v.d.name,eventId:v.e.id,page:v.e.page});
   references.set(e.id,{nni,gf,nr,nrAfter,steps,effective:e.effective,agency:rup[0].agency,rup:{source:rup[0].source,date:rup[0].date},cr:proof(first),...(rd.length?{rd:proof(rd[0])}:{})});
