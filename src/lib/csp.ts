@@ -47,7 +47,7 @@ export function cspKey(e:CspEvent){
  if(e.candidacy)return JSON.stringify(['candidacy',nameKey(e.name),e.reference||'',e.agency||'']);
  const identity=[e.agentId||nameKey(e.name),e.kind,e.effective],nrSteps=cspNRSteps(e);
  if(e.kind==='reclassement')return JSON.stringify([...identity,e.gfDelta??null]);
- if(['avancement','mesure','posthume'].includes(e.kind))return JSON.stringify([...identity,nrSteps??(e.nrBefore!==undefined&&e.nrAfter!==undefined?(e.nrAfter-e.nrBefore)/5:null),nrSteps===undefined&&e.nrBefore===undefined?e.nrAfter??null:null]);
+ if(['avancement','mesure','posthume'].includes(e.kind))return JSON.stringify([...identity,nrSteps??(e.nrBefore!==undefined&&e.nrAfter!==undefined?(e.nrAfter-e.nrBefore)/5:null),nrSteps===undefined&&e.nrBefore===undefined?e.nrAfter??null:null,...(e.kind==='avancement'&&e.note?.startsWith('Saisie administrative manuelle · ')?['manuel',e.id]:[])]);
  if(e.kind==='titularisation')return JSON.stringify(identity);
  if(e.kind==='nomination'&&e.reference)return JSON.stringify([...identity,e.reference]);
  return JSON.stringify([...identity,e.gfDelta??(e.kind==='mutation'?0:null),e.nrSteps??null,(['admission','mutation'].includes(e.kind)?null:e.gfAfter??null),(['admission','mutation'].includes(e.kind)?null:e.nrAfter??null),normalName(e.agency),normalName(e.job),normalName(e.team),e.m3e||'',e.reference||'']);
