@@ -24,6 +24,8 @@ export function createCachedRead(store:ResultStore,namespace:string,options:{sle
  const report=options.report||(()=>{});
  const mark=(r:Response,status:string)=>{report(status);const h=new Headers(r.headers);h.set('X-Socioscope-Cache',status);h.set('Cache-Control','no-store');return new Response(r.body,{status:r.status,headers:h});};
  return async(request:Request,path:string,scope:string,compute:()=>Promise<Response>):Promise<Response>=>{
+  // Administrator diagnostics must reflect the current CSP validations on every refresh.
+  if(path==='/api/agents'&&new URL(request.url).searchParams.get('view')==='csp-alerts')return compute();
   if(!cacheableAgentRead(request.method,path))return compute();
   const key=await resultCacheKey(namespace,path,new URL(request.url).search,scope);
   const owner=crypto.randomUUID();let snapshot:CacheSnapshot;let owns=false;
