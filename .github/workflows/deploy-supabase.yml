@@ -4,6 +4,10 @@ on:
     branches: [main]
     paths:
       - 'src/lib/csp.ts'
+      - 'src/lib/csp-alerts.ts'
+      - 'src/app/api/agents/route.ts'
+      - 'src/lib/agents-store.ts'
+      - 'server/result-cache.ts'
       - '.github/scripts/package-autonomous-api.sh'
       - 'scripts/build-server.mjs'
       - 'src/lib/csp-cr-extract.ts'
