@@ -74,3 +74,37 @@ test('validated manual NR movement makes exact previous-gap warning actionable w
  assert.equal(withManual[0].extractionIssue,undefined);
  assert.match(withManual[0].note||'',/avancement administratif manuel/);
 });
+
+test('January choice advancement is preserved while ULM arrival begins in September',()=>{
+ const january={...entry,effective:'2026-01-01',arrivalConfirmed:true,arrivalEffective:'2026-09-01',arrivalAgency:'AGENCE EXEMPLE'};
+ assert.equal(validateManualNR(january),true);
+ const manualJanuary=manualNRImport({...january,id:'january-award',actor:'admin',created:'2026-11-04T07:00:00Z'});
+ assert.equal(manualJanuary.events.find(e=>e.kind==='avancement')?.effective,'2026-01-01');
+ assert.equal(manualJanuary.events.find(e=>e.kind==='mutation')?.effective,'2026-09-01');
+ const absent={...base,records:[]};
+ const before=projectCsp(absent,[manualJanuary],'2026-08-31');
+ assert.deepEqual(before.issues,[]);
+ assert.equal(before.data.records.some(r=>r.agentId===entry.agentId),false);
+ const after=projectCsp(absent,[manualJanuary],'2026-09-01');
+ assert.deepEqual(after.issues,[]);
+ const current=after.data.records.find(r=>r.source===CSP_SOURCE&&r.agentId===entry.agentId);
+ assert.equal(current?.gf,18);
+ assert.equal(current?.nr,355);
+ assert.equal(current?.entryUnit,'2026-09-01');
+ assert.equal(current?.nrDate,'2026-01-01');
+});
+
+test('later official constant mutation remains independently represented after provisional arrival',()=>{
+ const january={...entry,effective:'2026-01-01',arrivalConfirmed:true,arrivalEffective:'2026-09-01',arrivalAgency:'AGENCE EXEMPLE'};
+ const manualJanuary=manualNRImport({...january,id:'january-award-2',actor:'admin',created:'2026-11-04T07:00:00Z'});
+ const official:CspEvent={id:'official-mutation',name:entry.name,agentId:entry.agentId,kind:'mutation',effective:'2026-09-01',page:1,selected:true,approved:true,agency:'AGENCE EXEMPLE',gfDelta:0,gfBefore:18,gfAfter:18,nrBefore:350,nrAfter:350};
+ const doc:CspImport={id:'official-doc',name:'Official reference',date:'2026-07-10',status:'validated',documentType:'cr',events:[official]};
+ const projected=projectCsp({...base,records:[]},[manualJanuary,doc],'2026-09-01');
+ assert.deepEqual(projected.issues,[]);
+ assert.equal(projected.data.records.find(r=>r.source===CSP_SOURCE&&r.agentId===entry.agentId)?.nr,355);
+});
+
+test('reject an arrival declared before its historical award or without agency',()=>{
+ assert.equal(validateManualNR({...entry,effective:'2026-01-01',arrivalConfirmed:true,arrivalEffective:'2025-12-01',arrivalAgency:'AGENCE EXEMPLE'}),false);
+ assert.equal(validateManualNR({...entry,effective:'2026-01-01',arrivalConfirmed:true,arrivalEffective:'2026-09-01'}),false);
+});
