@@ -20,7 +20,7 @@ export default function CspManualNR({onSaved}:{onSaved:()=>void}){
   return()=>{alive=false;};
  },[refresh]);
  const change=(patch:Partial<ManualNRPayload>)=>{setEntry(v=>({...v,...patch}));setConfirmed(false);setNotice('');};
- const valid=entry.agentId.length===6&&entry.name.trim().length>=3&&/^\d{4}-\d{2}-\d{2}$/.test(entry.effective)&&entry.gf>=1&&entry.gf<=30&&entry.nrBefore>=5&&entry.nrBefore<=990&&entry.nrBefore%5===0&&entry.comment.trim().length>=20&&confirmed;
+ const valid=entry.agentId.length===6&&entry.name.trim().length>=3&&/^\d{4}-\d{2}-\d{2}$/.test(entry.effective)&&entry.gf>=1&&entry.gf<=30&&entry.nrBefore>=5&&entry.nrBefore<=990&&entry.nrBefore%5===0&&entry.comment.trim().length>=20&&(!entry.arrivalConfirmed||!!entry.arrivalAgency?.trim()&&!!entry.arrivalEffective&&entry.arrivalEffective>=entry.effective)&&confirmed;
  const save=async()=>{
   if(!valid)return;setLoading(true);setError('');setNotice('');
   try{
@@ -45,7 +45,8 @@ export default function CspManualNR({onSaved}:{onSaved:()=>void}){
    <label>Motif de l’avancement<select value={entry.reason} onChange={e=>change({reason:e.target.value as ManualNRReason})}>{Object.entries(manualNRReasons).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label>
    <label>Observation obligatoire (20 caractères minimum)<textarea value={entry.comment} maxLength={500} rows={3} onChange={e=>change({comment:e.target.value})} placeholder="Expliquer la situation vérifiée et l'absence éventuelle de bordereau."/></label>
   </div>
-  <label className="check-label"><input type="checkbox" checked={confirmed} onChange={e=>setConfirmed(e.target.checked)}/>Je confirme le NNI, le GF, le NR de départ, la date et le motif. Cet avancement sera conservé comme décision administrative manuelle, et non comme une décision issue d’un bordereau.</label>
+  <div className="notice"><p><b>Dates indépendantes :</b> l’avancement au choix conserve sa date d’effet du 1er janvier. Si l’agent arrive ensuite dans l’ULM, l’avancement antérieur est repris lors de son arrivée, sans prétendre qu’il était présent dans l’unité dès janvier.</p><label className="check-label"><input type="checkbox" checked={!!entry.arrivalConfirmed} onChange={e=>change({arrivalConfirmed:e.target.checked,arrivalEffective:e.target.checked?(entry.arrivalEffective||''):undefined,arrivalAgency:e.target.checked?(entry.arrivalAgency||''):undefined})}/>Confirmer provisoirement l’arrivée de cet agent dans l’ULM à une autre date (en attente de confirmation du bordereau officiel).</label>{entry.arrivalConfirmed&&<div className="csp-editor"><label>Date réelle d’arrivée dans l’ULM<input type="date" value={entry.arrivalEffective||''} min={entry.effective} onChange={e=>change({arrivalEffective:e.target.value})}/></label><label>Agence d’arrivée<input value={entry.arrivalAgency||''} maxLength={180} onChange={e=>change({arrivalAgency:e.target.value})} placeholder="Agence de destination"/></label></div>}</div>
+  <label className="check-label"><input type="checkbox" checked={confirmed} onChange={e=>setConfirmed(e.target.checked)}/>Je confirme le NNI, le GF, le NR de départ, le motif et la date d’effet de l’avancement. Si une arrivée provisoire est indiquée, je confirme sa date distincte, sans valider le bordereau officiel.</label>
   <button type="button" className="btn primary" disabled={loading||!valid} onClick={()=>void save()}>{loading?'Vérification…':'Vérifier la chaîne et enregistrer +1 NR'}</button>
   {error&&<p role="alert" className="notice">{error}</p>}
   {notice&&<p role="status" className="notice">{notice}</p>}
