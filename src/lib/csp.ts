@@ -274,11 +274,21 @@ export function projectCsp(data:AgentData,imports:CspImport[],asOf=parisToday(),
   cspNRSteps(award)===2&&(award.gfAfter===undefined||award.gfAfter===award.gfBefore)&&
   award.recordedBefore?.gf===award.gfBefore&&award.recordedBefore?.nr===award.nrBefore&&
   award.recordedAfter?.gf===award.gfBefore&&award.recordedAfter?.nr===award.nrAfter;
+ // A backdated manual award is effective on January 1 but becomes
+ // applicable to the ULM snapshot only at the declared arrival date.
+ // Give all decisions for that agent on the arrival date a consistent
+ // ranking: provisional arrival -> salary-constant transfer -> manual
+ // backdated award -> subsequent documented salary measure. The old
+ // pairwise comparisons could form a non-transitive cycle and replay the
+ // September measure while the agent still had NR 350.
+ const projectionDate=(e:typeof candidates[number])=>e.projectionFrom||e.effective;
+ const bridgedDates=new Set(candidates.filter(e=>!!e.projectionFrom).map(e=>JSON.stringify([e.agentId,projectionDate(e)])));
+ const bridgeRank=(e:typeof candidates[number])=>
+  e.provisionalArrival?0:e.kind==='mutation'&&!e.gfDelta&&!cspNRSteps(e)?1:e.projectionFrom?2:e.kind==='mesure'?3:4;
  const events=candidates.filter(e=>!preferredRD.has(cspKey(e))||preferredRD.get(cspKey(e))===e)
-  .sort((a,b)=>(a.projectionFrom||a.effective).localeCompare(b.projectionFrom||b.effective)||
-   (a.provisionalArrival?-1:b.provisionalArrival?1:0)||
-   (a.agentId===b.agentId&&a.projectionFrom&&b.kind==='mutation' ? 1 : a.agentId===b.agentId&&b.projectionFrom&&a.kind==='mutation' ? -1 : 0)||
-   (a.agentId===b.agentId&&a.projectionFrom&&b.kind==='mesure' ? -1 : a.agentId===b.agentId&&b.projectionFrom&&a.kind==='mesure' ? 1 : 0)||
+  .sort((a,b)=>projectionDate(a).localeCompare(projectionDate(b))||
+   (a.agentId===b.agentId&&bridgedDates.has(JSON.stringify([a.agentId,projectionDate(a)]))?
+    bridgeRank(a)-bridgeRank(b):0)||
    (overlaps(a,b)?-1:overlaps(b,a)?1:0)||
    cspSameDayOrder(a,b)||a.order-b.order||a.index-b.index);
  for(const e of events){if((e.projectionFrom||e.effective)<=base.date||(e.projectionFrom||e.effective)>asOf)continue;const key=cspKey(e);if(seen.has(key))continue;seen.add(key);const present=state.has(e.agentId!);if(e.reclassementReference&&!reclassementReferenceSupported(e,imports)){issues.push({event:e,problem:'Référence ODJ/RD du reclassement désactivée ou modifiée : vérifier la décision.'});continue;}if(e.nominationReference&&!nominationReferenceSupported(e,imports)){issues.push({event:e,problem:'Référence ODJ/RD de la nomination désactivée ou modifiée : vérifier la décision.'});continue;}if(e.salaryReference&&!salaryReferenceSupported(e,imports)){issues.push({event:e,problem:'Référence ODJ/RD de la mesure salariale désactivée ou modifiée : vérifier la décision.'});continue;}const reference=retrospectiveReference(state.get(e.agentId!),e,retrospective,base.date);const current=reference.before;const historical=e.kind==='posthume'?cspHistoricalRecord(data,e.agentId!,e.effective):undefined;const posthume=posthumousReference(current,e,historical);const before=salaryReferenceRow(posthume.before,e);let result=applyEvent(before,e,salaryHistory.get(e.agentId!));let appliedEvent=e;
