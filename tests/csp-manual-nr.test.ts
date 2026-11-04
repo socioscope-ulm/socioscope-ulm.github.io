@@ -149,3 +149,30 @@ test('approved September salary measure follows confirmed January manual advance
   assert.equal(projected.data.records.find(r=>r.source===CSP_SOURCE&&r.agentId===entry.agentId)?.nr,360);
  }
 });
+
+test('interleaved same-day agents never displace the provisional arrival from the Brice-like salary chain',()=>{
+ const january={...entry,effective:'2026-01-01',arrivalConfirmed:true,arrivalEffective:'2026-09-01',arrivalAgency:'AGENCE EXEMPLE'};
+ const bridge=manualNRImport({...january,id:'crowded-bridge',created:'2026-11-04T08:25:00Z',actor:'admin'});
+ const officialMutation:CspEvent={id:'crowded-july-mutation',name:entry.name,agentId:entry.agentId,kind:'mutation',
+  effective:'2026-09-01',page:1,selected:true,approved:true,
+  agency:'AGENCE EXEMPLE',job:'CHEF DE MISSION',gfDelta:0,gfBefore:18,gfAfter:18,nrBefore:350,nrAfter:350,
+  recordedBefore:{gf:18,nr:350},recordedAfter:{gf:18,nr:350}};
+ const shortRD:CspEvent={id:'crowded-july-rd',name:entry.name,agentId:entry.agentId,kind:'mutation',
+  effective:'2026-09-01',page:1,selected:true,approved:true,agency:'AGENCE EXEMPLE',
+  recordedBefore:{gf:18,nr:360},recordedAfter:{gf:18,nr:360}};
+ const others=Array.from({length:140},(_,i):CspEvent=>({
+  id:'other-'+i,agentId:'P'+String(i).padStart(5,'0'),name:'TEST '+i,kind:'mutation',effective:'2026-09-01',
+  page:1,selected:true,approved:true,newAgent:true,gfDelta:0,
+  gfBefore:12,gfAfter:12,nrBefore:200,nrAfter:200,agency:'AGENCE TEST'
+ }));
+ const odj:CspImport={id:'crowded-odj',name:'July ODJ',date:'2026-07-10',created:'2026-07-10T08:00:00Z',
+  status:'validated',documentType:'cr',events:[...others.filter((_,i)=>i%2===0),officialMutation,...others.filter((_,i)=>i%2!==0)]};
+ const rd:CspImport={id:'crowded-rd',name:'July RD',date:'2026-07-10',created:'2026-07-11T08:00:00Z',
+  status:'validated',documentType:'rd',events:[shortRD]};
+ const salary:CspImport={...laterDocument,created:'2026-10-09T08:00:00Z'};
+ const projected=projectCsp({...base,records:[]},[odj,salary,bridge,rd],'2026-11-04');
+ assert.deepEqual(projected.issues.filter(i=>i.event.agentId===entry.agentId),[]);
+ const current=projected.data.records.find(r=>r.source===CSP_SOURCE&&r.agentId===entry.agentId);
+ assert.equal(current?.nr,360);
+ assert.equal(current?.entryUnit,'2026-09-01');
+});
