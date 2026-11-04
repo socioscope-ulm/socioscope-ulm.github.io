@@ -37,6 +37,27 @@ export function prepareCspDocuments(data:AgentData,events:CspEvent[],prior:CspIm
  // Keep the saved status: approved ODJ decisions may be the original evidence
  // for acknowledged RD rows. Opening a preview must not turn that ODJ into a
  // draft and make an otherwise complete RD look partially validated.
+ // An approved administrative +1 NR entry is an explicitly identified,
+ // auditable bridge for a later official salary measure. It is never an ODJ.
+ // Only clear the exact "missing earlier NR" warning; keep other warnings.
+ const bridged=events.map(e=>{
+  if(e.approved||e.kind!=='mesure'||!e.salaryReference||!e.agentId||!e.extractionIssue)return e;
+  const warning=e.extractionIssue.match(/^Décision antérieure manquante : justificatif du passage NR (\\d+) à (\\d+) non intégré\\./);
+  if(!warning)return e;
+  const from=Number(warning[1]),to=Number(warning[2]),reference=e.salaryReference;
+  if(from+5!==to||e.nrBefore!==to||e.nrAfter!==to+5||
+   reference.nni!==e.agentId||reference.nr!==to||reference.nrAfter!==e.nrAfter||reference.gf!==e.gfBefore)return e;
+  const proof=prior.filter(d=>d.id.startsWith('manual-nr-')&&d.status==='validated').flatMap(d=>d.events)
+   .find(p=>p.kind==='avancement'&&p.approved===true&&p.agentId===e.agentId&&
+    p.gfBefore===e.gfBefore&&p.gfAfter===e.gfBefore&&p.nrBefore===from&&p.nrAfter===to&&
+    p.effective<=e.effective&&p.note?.startsWith('Saisie administrative manuelle · '));
+  if(!proof)return e;
+  const other=e.extractionIssue.slice(warning[0].length).replace(/^\\s*;\\s*/,'').trim();
+  const evidence='Justificatif antérieur remplacé par un avancement administratif manuel '+proof.id+
+   ' (NR '+from+' à '+to+'), enregistrement tracé séparément.';
+  return {...e,extractionIssue:other||undefined,note:[e.note,evidence].filter(Boolean).join(' · ').slice(0,500)};
+ });
+ events=bridged;
  const arrivals=mutationArrivalReferences(events,date,documents,current?.id);events=preparePendingCspArrivals(data,arrivals.events,date,documents,current);
  const evidence=current?[...documents.filter(d=>d.id!==current.id),{...current,date,status:current.status??'review',events}]:documents;
  if(current){const acknowledged=acknowledgeCspDecisions(evidence.map(d=>({...d,detail:{documentType:d.documentType,perEventValidation:true,events:d.events}})));events=acknowledged.find(d=>d.id===current.id)!.detail.events;}
