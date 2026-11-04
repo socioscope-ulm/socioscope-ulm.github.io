@@ -286,8 +286,12 @@ export function projectCsp(data:AgentData,imports:CspImport[],asOf=parisToday(),
  const bridgeRank=(e:typeof candidates[number])=>
   e.provisionalArrival?0:e.kind==='mutation'&&!e.gfDelta&&!cspNRSteps(e)?1:e.projectionFrom?2:e.kind==='mesure'?3:4;
  const events=candidates.filter(e=>!preferredRD.has(cspKey(e))||preferredRD.get(cspKey(e))===e)
+  // Different agents never depend on each other's salary chain. Grouping
+  // equal-date events by identity before applying per-agent rules makes this
+  // comparator transitive even in large imports with interleaved agents.
   .sort((a,b)=>projectionDate(a).localeCompare(projectionDate(b))||
-   (a.agentId===b.agentId&&bridgedDates.has(JSON.stringify([a.agentId,projectionDate(a)]))?
+   (a.agentId||a.name).localeCompare(b.agentId||b.name)||
+   (bridgedDates.has(JSON.stringify([a.agentId,projectionDate(a)]))?
     bridgeRank(a)-bridgeRank(b):0)||
    (overlaps(a,b)?-1:overlaps(b,a)?1:0)||
    cspSameDayOrder(a,b)||a.order-b.order||a.index-b.index);
