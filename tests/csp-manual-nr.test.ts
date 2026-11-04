@@ -54,3 +54,23 @@ test('a confirmed same-day arrival precedes its manual advancement even when the
  assert.equal(current?.nr,355);
  assert.equal(current?.entryUnit,entry.effective);
 });
+
+test('validated manual NR movement makes exact previous-gap warning actionable without inventing an ODJ',async()=>{
+ const {prepareCspDocuments}=await import('../src/lib/csp-candidates.ts');
+ const documented:CspEvent={...later,
+  approved:false,
+  extractionIssue:'Décision antérieure manquante : justificatif du passage NR 350 à 355 non intégré. Ajouter et valider cette décision avant de confirmer la mesure NR 355 à 360.',
+  salaryReference:{nni:entry.agentId,gf:18,nr:355,nrAfter:360,steps:1,effective:entry.effective,
+   rup:{source:'rup-fictif',date:'2026-09-30'},
+   cr:{id:'csp-later',name:'ODJ fictif',eventId:'salary-later',page:3}}
+ };
+ const evidence={...laterDocument,events:[documented]};
+ const without=prepareCspDocuments(base,[documented],[],laterDocument.date,[evidence],{id:evidence.id,name:evidence.name,documentType:'cr'});
+ assert.equal(without[0].state,'blocked');
+ assert.match(without[0].problem,/Décision antérieure manquante/);
+ const withManual=prepareCspDocuments(base,[documented],[manual],laterDocument.date,[evidence],{id:evidence.id,name:evidence.name,documentType:'cr'});
+ assert.equal(withManual[0].state,'ready',withManual[0].problem);
+ assert.equal(withManual[0].after?.nr,360);
+ assert.equal(withManual[0].extractionIssue,undefined);
+ assert.match(withManual[0].note||'',/avancement administratif manuel/);
+});
