@@ -38,7 +38,7 @@ export function manualNRImport(row:ManualNRRecord):CspImport{
    note:'Arrivée ULM provisoire déclarée administrativement · bordereau officiel à confirmer · '+row.comment,
    approvedAt:row.created
  }:undefined;
- const events=provisional?[provisional,e]:[e];
+ const events=provisional?[e,provisional]:[e];
  return {id:'manual-nr-'+row.id,name:'Avancement manuel (sans bordereau CSP)',
   date:row.effective,created:row.created,status:'validated',documentType:'rd',events,evidenceEvents:events};
 }
