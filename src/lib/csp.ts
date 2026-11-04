@@ -212,7 +212,12 @@ export function prepareCsp(data:AgentData,events:CspEvent[],prior:CspImport[]=[]
  const state=new Map(snapshot(data,base.id).map(r=>[r.agentId,r as AgentRecord]));
  const linked=[...existing,...resolved];for(let i=0;i<resolved.length;i++)resolved[i]=cspBridgeGFOnly(resolved[i],linked);
  const retrospective=retrospectiveProofs([...prior,{id:'current-approved',name:'Décisions déjà validées de ce document',date:meetingDate,status:'validated',events:resolved.filter(e=>e.approved)}],base.date);
- const combined=[...existing.map(e=>({event:e,prior:true})),...resolved.map(e=>({event:e,prior:false}))].sort((a,b)=>a.event.effective.localeCompare(b.event.effective)||cspSameDayOrder(a.event,b.event)||Number(b.prior)-Number(a.prior));
+ const combined=[...existing.map(e=>({event:e,prior:true})),...resolved.map(e=>({event:e,prior:false}))].sort((a,b)=>
+  (a.event.projectionFrom||a.event.effective).localeCompare(b.event.projectionFrom||b.event.effective)||
+  (a.event.provisionalArrival?-1:b.event.provisionalArrival?1:0)||
+  (a.event.agentId===b.event.agentId&&a.event.projectionFrom&&b.event.kind==='mutation'?1:a.event.agentId===b.event.agentId&&b.event.projectionFrom&&a.event.kind==='mutation'?-1:0)||
+  (a.event.agentId===b.event.agentId&&a.event.projectionFrom&&b.event.kind==='mesure'?-1:a.event.agentId===b.event.agentId&&b.event.projectionFrom&&a.event.kind==='mesure'?1:0)||
+  cspSameDayOrder(a.event,b.event)||Number(b.prior)-Number(a.prior));
  const results=new Map<string,CspPreview>();const seen=new Set<string>();const salaryHistory=new Map<string,AgentRecord[]>();
  for(const {event:e,prior:isPrior} of combined){
   const key=cspKey(e);if(isPrior){if(e.effective>base.date&&!seen.has(key)){seen.add(key);const reference=retrospectiveReference(state.get(e.agentId!),e,retrospective,base.date);const current=reference.before;const historical=e.kind==='posthume'?cspHistoricalRecord(data,e.agentId!,e.effective):undefined;const posthume=posthumousReference(current,e,historical);const before=salaryReferenceRow(posthume.before,e);const a=applyEvent(before,e,salaryHistory.get(e.agentId!));if(!posthume.historicalOnly)rememberSalary(salaryHistory,before,a.row,e);if(a.row&&!posthume.historicalOnly)state.set(e.agentId!,a.row);}continue;}
