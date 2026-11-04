@@ -72,7 +72,7 @@ export async function PATCH(request:Request){try{
   if(!validateManualNR(b.entry))fail('Renseigner un NNI, un GF, le NR avant, la date d’effet, un motif et une observation de 20 caractères minimum.');
   if(b.confirmed!==true)fail('Confirmer explicitement cet avancement manuel.');
   const entry=b.entry,created=new Date().toISOString(),actor=String(request.headers.get('oai-authenticated-user-email')||'administrateur').slice(0,200);
-  if(entry.effective>parisToday())fail('Un avancement manuel futur doit attendre sa date d’effet.');
+  if(entry.effective>parisToday()||entry.arrivalConfirmed&&entry.arrivalEffective>parisToday())fail('La date d’effet de l’avancement et la date d’arrivée doivent être passées.');
   const {data,cspImports}=await agentData(true,undefined,entry.effective,false);
   const names=new Set([...data.records.filter(r=>r.agentId===entry.agentId).map(r=>r.name),...cspImports.flatMap(i=>i.events.filter(e=>e.agentId===entry.agentId).map(e=>e.name))].map(v=>v.normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().toUpperCase()));
   const entered=entry.name.normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().toUpperCase();
@@ -81,8 +81,9 @@ export async function PATCH(request:Request){try{
    e.kind==='avancement'&&e.nrBefore===entry.nrBefore&&e.nrAfter===entry.nrBefore+5));
   if(duplicate)fail('Cet avancement NR existe déjà pour cet agent et cette date.',409);
   const manual=manualNRImport({...entry,id:crypto.randomUUID(),created,actor});
-  const trial=projectCsp(data,[...cspImports,manual],entry.effective);
-  const trouble=trial.issues.find(i=>i.event.id===manual.events[0].id);
+  const projectionDate=entry.arrivalConfirmed?entry.arrivalEffective:entry.effective;
+  const trial=projectCsp(data,[...cspImports,manual],projectionDate);
+  const trouble=trial.issues.find(i=>manual.events.some(e=>e.id===i.event.id));
   if(trouble)fail('Avancement non applicable : '+trouble.problem+' Vérifier la situation de départ et les mutations précédentes.',409);
   const projected=snapshot(trial.data,CSP_SOURCE).find(row=>row.agentId===entry.agentId);
   if(!projected||projected.gf!==entry.gf||projected.nr<entry.nrBefore+5)
