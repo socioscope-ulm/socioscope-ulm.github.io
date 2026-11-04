@@ -42,7 +42,7 @@ export function prepareCspDocuments(data:AgentData,events:CspEvent[],prior:CspIm
  // Only clear the exact "missing earlier NR" warning; keep other warnings.
  const bridged=events.map(e=>{
   if(e.approved||e.kind!=='mesure'||!e.salaryReference||!e.agentId||!e.extractionIssue)return e;
-  const warning=e.extractionIssue.match(/^Décision antérieure manquante : justificatif du passage NR (\d+) à (\d+) non intégré\./);
+  const warning=e.extractionIssue.match(/^Décision antérieure manquante : justificatif du passage NR (\d+) à (\d+) non intégré\.[^;]*/);
   if(!warning)return e;
   const from=Number(warning[1]),to=Number(warning[2]),reference=e.salaryReference;
   if(from+5!==to||e.nrBefore!==to||e.nrAfter!==to+5||
