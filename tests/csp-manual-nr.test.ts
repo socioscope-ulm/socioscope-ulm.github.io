@@ -108,3 +108,22 @@ test('reject an arrival declared before its historical award or without agency',
  assert.equal(validateManualNR({...entry,effective:'2026-01-01',arrivalConfirmed:true,arrivalEffective:'2025-12-01',arrivalAgency:'AGENCE EXEMPLE'}),false);
  assert.equal(validateManualNR({...entry,effective:'2026-01-01',arrivalConfirmed:true,arrivalEffective:'2026-09-01'}),false);
 });
+
+test('documented September 355 to 360 measure becomes ready after January manual award and September arrival',async()=>{
+ const {prepareCspDocuments}=await import('../src/lib/csp-candidates.ts');
+ const january={...entry,effective:'2026-01-01',arrivalConfirmed:true,arrivalEffective:'2026-09-01',arrivalAgency:'AGENCE EXEMPLE'};
+ const manualJanuary=manualNRImport({...january,id:'january-award-3',actor:'admin',created:'2026-11-04T07:00:00Z'});
+ const official:CspEvent={id:'mutation-350',name:entry.name,agentId:entry.agentId,kind:'mutation',
+  effective:'2026-09-01',page:1,selected:true,approved:true,agency:'AGENCE EXEMPLE',gfDelta:0,gfBefore:18,gfAfter:18,nrBefore:350,nrAfter:350};
+ const mutationDoc:CspImport={id:'mutation-doc',name:'Official mutation',date:'2026-07-10',status:'validated',documentType:'cr',events:[official]};
+ const documented:CspEvent={...later,approved:false,
+  extractionIssue:'Décision antérieure manquante : justificatif du passage NR 350 à 355 non intégré. Ajouter et valider cette décision avant de confirmer la mesure NR 355 à 360.',
+  salaryReference:{nni:entry.agentId,gf:18,nr:355,nrAfter:360,steps:1,effective:'2026-09-01',
+   rup:{source:'rup-fictif',date:'2026-09-30'},cr:{id:'csp-later',name:'ODJ fictif',eventId:'salary-later',page:3}}
+ };
+ const evidence={...laterDocument,events:[documented]};
+ const preview=prepareCspDocuments({...base,records:[]},[documented],[manualJanuary,mutationDoc],evidence.date,[evidence,mutationDoc],{id:evidence.id,name:evidence.name,documentType:'cr'});
+ assert.equal(preview[0].state,'ready',preview[0].problem);
+ assert.equal(preview[0].before?.nr,355);
+ assert.equal(preview[0].after?.nr,360);
+});
