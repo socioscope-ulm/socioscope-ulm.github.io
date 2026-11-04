@@ -27,7 +27,7 @@ export default function CspManualNR({onSaved}:{onSaved:()=>void}){
    const r=await fetch('/api/csp',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'manual-nr',entry,confirmed:true})});
    const b=await r.json().catch(()=>null);
    if(!r.ok)throw Error(b?.error||'Avancement non enregistré.');
-   setNotice('Avancement manuel enregistré : NR '+b.from+' → '+b.to+'. La décision est distincte des bordereaux CSP officiels. Reprendre ensuite la validation du mouvement documenté suivant.');
+   setNotice('Avancement au choix enregistré au '+day(entry.effective)+' : NR '+b.from+' → '+b.to+'. '+(entry.arrivalConfirmed?'Arrivée provisoire ULM au '+day(entry.arrivalEffective!)+' ; le bordereau officiel reste à confirmer. ':'')+'Cette décision est distincte des bordereaux CSP officiels.');
    setEntry({...initial});setConfirmed(false);setRefresh(x=>x+1);onSaved();
   }catch(e){setError((e as Error).message);}finally{setLoading(false);}
  };
@@ -52,7 +52,7 @@ export default function CspManualNR({onSaved}:{onSaved:()=>void}){
   {notice&&<p role="status" className="notice">{notice}</p>}
   <details><summary>Historique des avancements manuels ({rows.length})</summary>
    {rows.length?<div className="table-scroll"><table><thead><tr><th>Agent</th><th>Effet</th><th>GF / NR</th><th>Motif</th><th>Enregistrement</th></tr></thead><tbody>
-    {rows.map(row=><tr key={row.id}><td>{row.name}</td><td>{day(row.effective)}</td><td>GF {row.gf} · NR {row.nrBefore} → {row.nrBefore+5}</td><td>{manualNRReasons[row.reason]}<small>{row.comment}</small></td><td>{day(row.created.slice(0,10))}<small>{row.actor}</small></td></tr>)}
+    {rows.map(row=><tr key={row.id}><td>{row.name}</td><td>{day(row.effective)}{row.arrivalConfirmed&&<small>Arrivée provisoire ULM : {day(row.arrivalEffective||'')}</small>}</td><td>GF {row.gf} · NR {row.nrBefore} → {row.nrBefore+5}</td><td>{manualNRReasons[row.reason]}<small>{row.comment}</small></td><td>{day(row.created.slice(0,10))}<small>{row.actor}</small></td></tr>)}
    </tbody></table></div>:<p>Aucun avancement manuel enregistré.</p>}
   </details>
  </section>;
