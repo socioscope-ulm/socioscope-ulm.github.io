@@ -127,3 +127,25 @@ test('documented September 355 to 360 measure becomes ready after January manual
  assert.equal(preview[0].before?.nr,355);
  assert.equal(preview[0].after?.nr,360);
 });
+
+test('approved September salary measure follows confirmed January manual advancement, preserving exactly NR 360',()=>{
+ const january={...entry,effective:'2026-01-01',arrivalConfirmed:true,arrivalEffective:'2026-09-01',arrivalAgency:'AGENCE EXEMPLE'};
+ const bridge=manualNRImport({...january,id:'real-sequence',created:'2026-11-04T08:25:00Z',actor:'admin'});
+ const officialMutation:CspEvent={id:'july-mutation',name:entry.name,agentId:entry.agentId,kind:'mutation',
+  effective:'2026-09-01',page:1,selected:true,approved:true,
+  agency:'AGENCE EXEMPLE',job:'CHEF DE MISSION',gfDelta:0,gfBefore:18,gfAfter:18,nrBefore:350,nrAfter:350,
+  recordedBefore:{gf:18,nr:350},recordedAfter:{gf:18,nr:350}};
+ const shortRD:CspEvent={id:'july-rd',name:entry.name,agentId:entry.agentId,kind:'mutation',
+  effective:'2026-09-01',page:1,selected:true,approved:true,agency:'AGENCE EXEMPLE',
+  recordedBefore:{gf:18,nr:360},recordedAfter:{gf:18,nr:360}};
+ const mutationODJ:CspImport={id:'july-odj',name:'July ODJ',date:'2026-07-10',created:'2026-07-10T08:00:00Z',
+  status:'validated',documentType:'cr',events:[officialMutation]};
+ const mutationRD:CspImport={id:'july-rd-doc',name:'July RD',date:'2026-07-10',created:'2026-07-11T08:00:00Z',
+  status:'validated',documentType:'rd',events:[shortRD]};
+ const salaryDoc:CspImport={...laterDocument,created:'2026-10-09T08:00:00Z'};
+ for(const ordering of [[salaryDoc,mutationRD,bridge,mutationODJ],[bridge,mutationODJ,salaryDoc,mutationRD]]){
+  const projected=projectCsp({...base,records:[]},ordering,'2026-11-04');
+  assert.deepEqual(projected.issues,[]);
+  assert.equal(projected.data.records.find(r=>r.source===CSP_SOURCE&&r.agentId===entry.agentId)?.nr,360);
+ }
+});
