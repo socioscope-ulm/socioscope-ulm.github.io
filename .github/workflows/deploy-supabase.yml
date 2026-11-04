@@ -4,6 +4,9 @@ on:
     branches: [main]
     paths:
       - 'src/lib/csp.ts'
+      - 'src/lib/csp-candidates.ts'
+      - 'src/lib/csp-manual-nr.ts'
+      - 'src/lib/csp-salary-reference.ts'
       - 'src/lib/csp-alerts.ts'
       - 'src/app/api/agents/route.ts'
       - 'src/lib/agents-store.ts'
