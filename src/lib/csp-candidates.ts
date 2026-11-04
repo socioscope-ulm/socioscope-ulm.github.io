@@ -42,7 +42,7 @@ export function prepareCspDocuments(data:AgentData,events:CspEvent[],prior:CspIm
  // Only clear the exact "missing earlier NR" warning; keep other warnings.
  const bridged=events.map(e=>{
   if(e.approved||e.kind!=='mesure'||!e.salaryReference||!e.agentId||!e.extractionIssue)return e;
-  const warning=e.extractionIssue.match(/^Décision antérieure manquante : justificatif du passage NR (\\d+) à (\\d+) non intégré\\./);
+  const warning=e.extractionIssue.match(/^Décision antérieure manquante : justificatif du passage NR (\d+) à (\d+) non intégré\./);
   if(!warning)return e;
   const from=Number(warning[1]),to=Number(warning[2]),reference=e.salaryReference;
   if(from+5!==to||e.nrBefore!==to||e.nrAfter!==to+5||
@@ -52,7 +52,7 @@ export function prepareCspDocuments(data:AgentData,events:CspEvent[],prior:CspIm
     p.gfBefore===e.gfBefore&&p.gfAfter===e.gfBefore&&p.nrBefore===from&&p.nrAfter===to&&
     p.effective<=e.effective&&p.note?.startsWith('Saisie administrative manuelle · '));
   if(!proof)return e;
-  const other=e.extractionIssue.slice(warning[0].length).replace(/^\\s*;\\s*/,'').trim();
+  const other=e.extractionIssue.slice(warning[0].length).replace(/^\s*;\s*/,'').trim();
   const evidence='Justificatif antérieur remplacé par un avancement administratif manuel '+proof.id+
    ' (NR '+from+' à '+to+'), enregistrement tracé séparément.';
   return {...e,extractionIssue:other||undefined,note:[e.note,evidence].filter(Boolean).join(' · ').slice(0,500)};
