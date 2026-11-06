@@ -1,3 +1,4 @@
+import {reclassementAdvancement} from './csp-reclassement-advancement.ts';
 import {reclassementEvent} from './csp-reclassement-reference.ts';
 import {cumulativeNomination} from './csp-cumulative.ts';
 import {resolveNominationOutcomes} from './csp-nomination-outcomes.ts';
@@ -121,11 +122,11 @@ export function acknowledgeCspDecisions<T extends Document>(rows:T[]):T[]{
   if(linked)return linked;
   if(!['review','validated'].includes(row.status)||row.status==='validated'&&!row.detail.perEventValidation||e.approved||!eligible(e))return e;
   const candidates=(confirmed.get(key(row.date,e))||[]).filter(m=>m.row.id!==row.id&&type(m.row)!==type(row));
-  const cumulative=candidates.map(m=>identical(e,m.event)?undefined:cumulativeNomination(e,row.detail.events||[],{status:m.row.status,documentType:type(m.row),events:m.row.detail.events||[]}));
+  const cumulative=candidates.map(m=>identical(e,m.event)?undefined:cumulativeNomination(e,row.detail.events||[],{status:m.row.status,documentType:type(m.row),events:m.row.detail.events||[]})||reclassementAdvancement(e,m.event,row.date,rows));
   if(!candidates.length||e.kind==='titularisation'&&dates.get(identity(row.date,e))?.size!==1||candidates.some((m,i)=>!identical(e,m.event)&&!(cumulative[i]?.advance.id===m.event.id)))return e;
   const signatures=new Set(candidates.map(m=>JSON.stringify(facts(m.event))));if(signatures.size!==1)return e;
   const match=candidates[0];
-  const proof:CspAcknowledgement={id:match.row.id,eventId:match.event.id,name:match.row.name,page:match.event.page,documentType:type(match.row),...(cumulative[0]?{cumulative:true}:{})};
+  const proof:CspAcknowledgement={id:match.row.id,eventId:match.event.id,name:match.row.name,page:match.event.page,documentType:type(match.row),...(cumulative[0]?{cumulative:true,...('kind' in cumulative[0]?{cumulativeKind:cumulative[0].kind}:{})}:{})};
   return {...e,approved:true,approvedAt:match.event.approvedAt,recordedBefore:cumulative[0]?.advanceState.before||match.event.recordedBefore,recordedAfter:cumulative[0]?.advanceState.after||match.event.recordedAfter,acknowledgedByDocument:proof};
  })}})));
 }

@@ -560,5 +560,22 @@ test('CSP API validates roles, previews without writes, saves one PDF, rejects i
   stored=JSON.parse(m.rows[0].detail);assert.equal(stored.events[1].nonRetained,false);assert.deepEqual(stored.events[0],keep);
  }
 
+ // An ODJ award printed before a same-day reclassement is the same award
+ // already approved in the RD after the reclassement, not an extra NR gain.
+ {
+  m.identities=[];
+  const common={name:'TEST ALICE',agentId:'A12345',page:1,pages:[1],selected:true,effective:'2026-01-01'};
+  const classification={...common,id:'classification-award',kind:'reclassement',gfBefore:9,nrBefore:200,gfAfter:10,nrAfter:210,gfDelta:1,approved:true,recordedBefore:{gf:9,nr:200},recordedAfter:{gf:10,nr:210}};
+  const target={...common,id:'award-before-classification',kind:'avancement',gfBefore:9,nrBefore:200,nrAfter:205,nrSteps:1};
+  const award={...common,id:'award-after-classification',kind:'avancement',nrSteps:1,approved:true,recordedBefore:{gf:10,nr:210},recordedAfter:{gf:10,nr:215}};
+  m.rows=[{id:'csp-classification-odj',name:'ODJ fictif.pdf',date:'2026-09-15',status:'validated',count:2,detail:JSON.stringify({kind:'csp',documentType:'cr',perEventValidation:true,events:[classification,target]})},
+   {id:'csp-classification-rd',name:'RD fictif.pdf',date:'2026-09-15',status:'validated',count:1,detail:JSON.stringify({kind:'csp',documentType:'rd',perEventValidation:true,events:[award]})}];
+  const original=m.rows[1].detail;
+  const read=await (await route.GET(new Request('https://fixture.test/api/csp?id=csp-classification-odj',{headers}))).json();assert.equal(read.meta.pending,0);assert.equal(read.events[1].acknowledgedByDocument.cumulativeKind,'reclassement');
+  const result=await route.PATCH(request({id:'csp-classification-odj',action:'validate-event',eventId:target.id,checked:true,events:[classification,target]},'PATCH'));assert.equal(result.status,200,JSON.stringify(await result.clone().json()));
+  const report=await result.json();assert.equal(report.validated,0);assert.equal(report.recognized,1);assert.equal(report.pending,0);assert.equal(m.rows[1].detail,original);
+  const stored=JSON.parse(m.rows[0].detail).events;assert.deepEqual(stored[0],classification);assert.equal(stored[1].gfBefore,9);assert.equal(stored[1].nrAfter,205);assert.equal(stored[1].acknowledgedByDocument.id,'csp-classification-rd');
+ }
+
 });
 

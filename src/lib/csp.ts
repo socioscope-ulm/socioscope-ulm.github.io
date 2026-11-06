@@ -12,7 +12,7 @@ export type CspSalaryReference={nni:string;gf:number;nr:number;nrAfter:number;st
 export type CspNominationReference={nni:string;gf:number;nr:number;effective:string;meetingDate:string;reference:string;gfDelta:number;arrivalConfirmed:boolean;rup?:{source:string;date:string};cr:{id:string;name:string;eventId:string;page:number};rd:{id:string;name:string;eventId:string;page:number}};
 export type CspReclassementReference={nni:string;effective:string;meetingDate:string;gfBefore:number;gfAfter:number;nrBefore:number;nrAfter:number;gfDelta:number;cr:{id:string;name:string;eventId:string;page:number};rd:{id:string;name:string;eventId:string;page:number}};
 export type CspSalaryChecks={references:Map<string,CspSalaryReference>;problems:Map<string,string>;nominationReferences?:Map<string,CspNominationReference>;reclassementReferences?:Map<string,CspReclassementReference>};
-export type CspAcknowledgement={id:string;eventId:string;name:string;page:number;documentType:'cr'|'rd';cumulative?:boolean};
+export type CspAcknowledgement={id:string;eventId:string;name:string;page:number;documentType:'cr'|'rd';cumulative?:boolean;cumulativeKind?:'reclassement'};
 export type CspNonRetentionProof=Omit<CspAcknowledgement,'eventId'|'page'>&{eventId?:string;page?:number;reason?:'unfilled-post'};
 export type CspEvent={reclassementReference?:CspReclassementReference;nominationReference?:CspNominationReference;acknowledgedByDocument?:CspAcknowledgement;acknowledgedByRD?:{id:string;eventId:string;name:string;page:number};salaryReference?:CspSalaryReference;id:string;name:string;agentId?:string;kind:CspKind;effective:string;page:number;pages?:number[];agency?:string;job?:string;team?:string;m3e?:string;location?:string;reference?:string;gfDelta?:number;nrSteps?:number;gfBefore?:number;gfAfter?:number;nrBefore?:number;nrAfter?:number;identityMethod?:'rup'|'annual'|'manual';identitySource?:string;identityDate?:string;selected:boolean;candidacy?:boolean;nonRetained?:boolean;nonRetainedByRD?:CspNonRetentionProof;approved?:boolean;approvedAt?:string;note?:string;nrConfirmed?:boolean;reclassementNRConfirmed?:boolean;mutationSalaryConfirmed?:boolean;extractionIssue?:string;newAgent?:boolean;provisionalArrival?:boolean;projectionFrom?:string;identityPending?:boolean;recordedBefore?:Partial<AgentRecord>;recordedAfter?:Partial<AgentRecord>};
 // A confirmed NR exception resolves only this business-rule warning, not extraction errors.
@@ -72,6 +72,19 @@ export function cspBridgeGFOnly(e:CspEvent,decisions:CspEvent[]):CspEvent {
 }
 export function cspSameDayOrder(a:CspEvent,b:CspEvent):number {
  if(a.effective!==b.effective||!a.agentId||a.agentId!==b.agentId)return 0;
+ // An approved relative NR award may have no printed absolute cells. Its
+ // verified before/after record can still establish its place after a
+ // same-day reclassement, independently of document import order.
+ const recordedAward=(e:CspEvent):CspEvent=>{
+  const before=e.recordedBefore,after=e.recordedAfter,steps=cspNRSteps(e);
+  if(!e.approved||!['avancement','mesure','posthume'].includes(e.kind)||e.gfDelta||cspExtractionIssue(e)||!steps||
+   !Number.isInteger(before?.gf)||!Number.isInteger(before?.nr)||!Number.isInteger(after?.gf)||!Number.isInteger(after?.nr)||
+   after!.gf!==before!.gf||after!.nr!==before!.nr!+steps*5||
+   ['gfBefore','gfAfter','nrBefore','nrAfter'].some(k=>(e as any)[k]!==undefined&&(e as any)[k]!== (k==='gfBefore'?before!.gf:k==='gfAfter'?after!.gf:k==='nrBefore'?before!.nr:after!.nr)))return e;
+  return {...e,gfBefore:e.gfBefore??before!.gf,gfAfter:e.gfAfter??after!.gf,nrBefore:e.nrBefore??before!.nr,nrAfter:e.nrAfter??after!.nr};
+ };
+ a=recordedAward(a);b=recordedAward(b);
+
  const endGF=(e:CspEvent)=>e.gfAfter??(['avancement','mesure','posthume'].includes(e.kind)&&!e.gfDelta?e.gfBefore:undefined);
  const complete=(e:CspEvent)=>[e.gfBefore,endGF(e),e.nrBefore,e.nrAfter].every(v=>v!==undefined);
  if(!complete(a)||!complete(b))return 0;
