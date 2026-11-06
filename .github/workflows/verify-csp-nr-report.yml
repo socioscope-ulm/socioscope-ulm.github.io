@@ -1,0 +1,32 @@
+name: Verify annual NR report in isolation
+on:
+  push:
+    branches: [feature/bilan-annuel-nr-csp-20261106]
+  pull_request:
+    paths:
+      - 'src/app/csp-nr-report.tsx'
+      - 'src/lib/csp-nr-report.ts'
+      - 'src/app/dashboard.tsx'
+      - 'src/app/api/csp/route.ts'
+      - 'tests/csp-nr-report.test.ts'
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Check NR accounting regression cases
+        run: node --experimental-strip-types --test tests/csp-nr-report.test.ts
+      - name: Verify existing CSP integration
+        run: node --experimental-strip-types --test tests/csp.test.ts tests/csp-api.test.ts tests/csp-manual-nr.test.ts
+      - name: Build front-end
+        run: npm run build
+      - name: Verify server bundle without deployment
+        run: node scripts/build-server.mjs
