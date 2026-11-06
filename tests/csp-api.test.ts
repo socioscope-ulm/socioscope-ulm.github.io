@@ -1,3 +1,4 @@
+import {cspResolvedEvent} from '../src/lib/csp.ts';
 import {extractCspPages} from '../src/lib/csp-extract.ts';
 import test from 'node:test';import assert from 'node:assert/strict';import {build} from 'esbuild';
 test('CSP API validates roles, previews without writes, saves one PDF, rejects incomplete decisions and protects concurrent changes',async()=>{
@@ -513,6 +514,34 @@ test('CSP API validates roles, previews without writes, saves one PDF, rejects i
   const result=await route.PATCH(request({id:'csp-constant-odj',action:'validate-event',eventId:candidate.id,checked:true,events:[award,candidate]},'PATCH'));
   assert.equal(result.status,200,JSON.stringify(await result.clone().json()));
   const stored=JSON.parse(m.rows[0].detail).events;assert.deepEqual(stored[0],award);assert.equal(stored[1].approved,true);assert.equal(stored[1].recordedAfter.nr,205);
+ }
+
+ // Recovered RD admissions acquire their NNIs in the preview. On the next
+ // validation request they may already match approved ODJ admissions.
+ // Persist that recognition instead of treating an empty batch as an error.
+ {
+  const first={id:'arrival-a',name:'TEST ALICE',agentId:'A12345',kind:'admission',page:1,pages:[1],selected:true,effective:'2026-06-01',agency:'AGENCE FICTIVE',job:'EMPLOI FICTIF',gfAfter:7,nrAfter:145,newAgent:true,approved:true,recordedAfter:{gf:7,nr:145,agency:'AGENCE FICTIVE',job:'EMPLOI FICTIF'}};
+  const second={...first,id:'arrival-b',name:'FICTIF SAMUEL',agentId:'Z90123',effective:'2026-05-01',gfAfter:8,nrAfter:175,recordedAfter:{...first.recordedAfter,gf:8,nr:175}};
+  for(const mode of ['duplicate','ready','individual']){
+   m.identities=[first,second].map(e=>({name:e.name,nni:e.agentId,source:'rup-fiction',date:'2026-09-30'}));
+   const recovered=[first,second].map(({agentId,approved,recordedAfter,newAgent,nrAfter,...e})=>({...e,id:'recovered-'+e.id}));
+   m.rows=[{id:'csp-recognized-odj',name:'ODJ fictif.pdf',date:'2026-06-01',status:'validated',count:2,detail:JSON.stringify({kind:'csp',documentType:'cr',perEventValidation:true,events:[first,second]})},
+    {id:'csp-recovered-rd',name:'RD fictif.pdf',date:'2026-06-01',status:'validated',count:2,detail:JSON.stringify({kind:'csp',documentType:'rd',perEventValidation:true,events:recovered})}];
+   const original=m.rows[0].detail;
+   const checked=await route.POST(request({id:'csp-recovered-rd',date:'2026-06-01',events:recovered}));assert.equal(checked.status,200);
+   const preview=(await checked.json()).events;assert.ok(preview.every(e=>e.state==='duplicate'&&!e.approved&&e.agentId));
+   const resolved=recovered.map(e=>cspResolvedEvent(e as any,preview.find(p=>p.id===e.id)));
+   if(mode==='duplicate'){
+    const originalRows=structuredClone(m.rows);m.rows[0].status='disabled:validated';
+    const withdrawn=await route.PATCH(request({id:'csp-recovered-rd',action:'validate-state',state:'duplicate',checked:true,events:resolved},'PATCH'));
+    assert.equal(withdrawn.status,409);assert.equal(m.rows[1].detail,originalRows[1].detail);m.rows=originalRows;
+   }
+   const result=await route.PATCH(request({id:'csp-recovered-rd',action:mode==='individual'?'validate-event':'validate-state',eventId:resolved[0].id,state:mode,checked:true,events:resolved},'PATCH'));
+   assert.equal(result.status,200,JSON.stringify(await result.clone().json()));
+   const response=await result.json();assert.equal(response.validated,0);assert.equal(response.recognized,2);assert.equal(response.pending,0);
+   const stored=JSON.parse(m.rows[1].detail).events;assert.ok(stored.every(e=>e.approved&&e.acknowledgedByDocument?.id==='csp-recognized-odj'));assert.equal(m.rows[0].detail,original);
+   const listing=await (await route.GET(new Request('https://fixture.test/api/csp',{headers}))).json();assert.equal(listing.records.filter(e=>e.kind==='admission').length,2);
+  }
  }
 
 });

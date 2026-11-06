@@ -178,19 +178,24 @@ export async function PATCH(request:Request){try{
  const events=b.action==='enable'?row.detail.events:preserveApproved(input({date:row.date,events:b.events}),row.detail.events||[],partial||row.status==='review');
  const {data:baseData,cspImports}=await agentData(true,undefined,parisToday(),false);const data=await cspIdentityData(baseData,[...events,...cspImports.flatMap(i=>i.events.filter(isPendingAdmission))]);const others=cspImports.filter(i=>i.id!==b.id);const evidence=documents(await imports());
  const preview=prepareCspDocuments(data,b.action==='enable'&&row.detail.perEventValidation?events.map((e:CspEvent)=>({...e,selected:e.selected&&e.approved===true})):events,others,row.date,evidence,currentDocument(row));
+ // Identity resolution in the browser preview can make a recovered row
+ // recognizable by its already approved counterpart on this request.
+ // That is a successful documentary acknowledgement, not a second approval.
+ const alreadyApproved=new Set(events.filter((e:CspEvent)=>e.approved).map((e:CspEvent)=>e.id));
+ const recognizedNow=new Set(preview.filter(e=>e.selected&&e.approved&&e.acknowledgedByDocument&&!alreadyApproved.has(e.id)).map(e=>e.id));
  let chosen=new Set<string>();
  if(['validate','validate-state','validate-event','enable'].includes(b.action)){
   if(b.checked!==true)fail('Confirmer la vérification des pages et des situations avant/après.');
   if(b.action==='validate-event'){
    if(typeof b.eventId!=='string')fail('Choisir la décision à valider.');
    const event=preview.find(e=>e.id===b.eventId);
-   if(!event||!event.selected||cspNonRetained(event)||event.approved)fail('Cette décision est absente, écartée ou déjà validée. Actualiser le relevé.',409);
-   if(!['ready','scheduled','covered','duplicate'].includes(event.state))fail('Cette décision reste à vérifier : '+event.problem);
-   chosen=new Set([event.id]);
+   if(!event||!event.selected||cspNonRetained(event)||event.approved&&!recognizedNow.has(event.id))fail('Cette décision est absente, écartée ou déjà validée. Actualiser le relevé.',409);
+   if(!event.approved&&!['ready','scheduled','covered','duplicate'].includes(event.state))fail('Cette décision reste à vérifier : '+event.problem);
+   if(!event.approved)chosen=new Set([event.id]);
   }else if(b.action==='validate-state'){
    if(!['ready','scheduled','covered','duplicate'].includes(b.state))fail('Les décisions « À vérifier » doivent être corrigées avant validation.');
    chosen=new Set(preview.filter(e=>e.selected&&!e.approved&&e.state===b.state).map(e=>e.id));
-   if(!chosen.size)fail('Aucune décision restante dans cet état. Actualiser la vérification.',409);
+   if(!chosen.size&&!recognizedNow.size)fail('Aucune décision restante dans cet état. Actualiser la vérification.',409);
   }else chosen=new Set(preview.filter(e=>e.selected&&!cspNonRetained(e)&&(b.action==='enable'?(!row.detail.perEventValidation||e.approved):!e.approved)).map(e=>e.id));
   // Recompute with ONLY approved decisions and this batch. A draft in another
   // state must never supply a prerequisite to a decision being published.
@@ -207,6 +212,6 @@ export async function PATCH(request:Request){try{
  const publishing=b.action!=='save';const detail={...row.detail,events:stored,perEventValidation:publishing||row.detail.perEventValidation===true,checked:b.checked===true,validatedAt:publishing?now:row.detail.validatedAt,actor:request.headers.get('oai-authenticated-user-email')};
  const status=publishing?'validated':row.status;const changed=await db.prepare('UPDATE agent_imports SET detail=?,status=?,count=? WHERE id=? AND status=? AND detail=?').bind(JSON.stringify(detail),status,stored.filter((e:CspEvent)=>e.selected).length,b.id,row.status,row.rawDetailText??JSON.stringify(row.rawDetail||row.detail)).run();
  if(changed.meta.changes!==1)fail('Le relevé a changé dans une autre fenêtre. Recharger avant de réessayer.',409);
- return Response.json({ok:true,status,validated:chosen.size,...cspProgress(status,detail)});
+ return Response.json({ok:true,status,validated:chosen.size,recognized:recognizedNow.size,...cspProgress(status,detail)});
 }catch(e){return agentError(e);}}
 
