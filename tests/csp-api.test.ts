@@ -470,5 +470,22 @@ test('CSP API validates roles, previews without writes, saves one PDF, rejects i
  const r=await route.PATCH(request({id:crId,action:'validate-state',state:'ready',events:[decision],checked:true},'PATCH'));assert.equal(r.status,409);assert.match((await r.json()).error,/autre fenêtre/);assert.equal(JSON.parse(m.rows[0].detail).concurrentNote,'Modification concurrente conservée');assert.equal(JSON.parse(m.rows[0].detail).events[0].approved,undefined);
  }
 
+ // Retained nominees without a RUP can be validated with a provisional identity
+ // even with +1/+2 GF; the authoritative ODJ supplies the starting GF/NR.
+ {
+  m.identities=[];
+  const candidate={id:'gain-candidate',name:'FICTIF NOEMIE',kind:'nomination',candidacy:true,selected:true,page:1,effective:'',reference:'POSTE-FICTIF-01',agency:'AGENCE FICTIVE',job:'EMPLOI FICTIF',gfBefore:8,nrBefore:125};
+  for(const gfDelta of [1,2]){
+   const retained={...candidate,id:'gain-retained',candidacy:undefined,effective:'2026-04-01',gfDelta,gfBefore:undefined,nrBefore:undefined};
+   m.rows=[{id:'csp-gain-odj',name:'ODJ fictif.pdf',date:'2026-03-10',status:'review',count:1,detail:JSON.stringify({kind:'csp',documentType:'cr',candidateVersion:1,events:[candidate]})},
+    {id:'csp-gain-rd',name:'RD fictif.pdf',date:'2026-03-10',status:'review',count:1,detail:JSON.stringify({kind:'csp',documentType:'rd',events:[retained]})}];
+   const check=await route.POST(request({id:'csp-gain-rd',date:'2026-03-10',events:[retained]}));
+   assert.equal(check.status,200);const p=(await check.json()).events[0];assert.equal(p.state,'ready',p.problem);assert.match(p.agentId,/^pending-csp-/);
+   const result=await route.PATCH(request({id:'csp-gain-rd',action:'validate-event',eventId:retained.id,checked:true,events:[retained]},'PATCH'));
+   assert.equal(result.status,200,JSON.stringify(await result.clone().json()));
+   const stored=JSON.parse(m.rows[1].detail).events[0];assert.equal(stored.approved,true);assert.equal(stored.gfBefore,8);assert.equal(stored.nrBefore,125);assert.equal(stored.nrSteps,2);assert.equal(stored.recordedAfter.gf,8+gfDelta);assert.equal(stored.recordedAfter.nr,135);
+  }
+ }
+
 });
 

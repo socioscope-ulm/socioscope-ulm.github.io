@@ -23,12 +23,15 @@ export function preparePendingCspArrivals(data:AgentData,events:CspEvent[],date:
  return events.map(event=>{
   if(event.approved||!event.selected||event.candidacy||event.agentId&&!event.agentId.startsWith('pending-csp-')||known.has(cspNameKey(event.name)))return event;
   if(event.kind==='admission')return event.newAgent===true&&event.gfAfter!==undefined&&!!event.agency&&!!event.job&&validDate(event.effective)?{...event,identityPending:true}:event;
-  if(event.kind!=='nomination'||event.gfDelta!==0||!event.reference||!event.agency||!event.job||!validDate(event.effective))return event;
+  if(event.kind!=='nomination'||![0,1,2].includes(event.gfDelta??-1)||!event.reference||!event.agency||!event.job||!validDate(event.effective))return event;
   const matches=odjs.flatMap(d=>d.events.filter(c=>c.candidacy&&c.selected&&!c.nonRetained&&!c.nonRetainedByRD&&!c.extractionIssue&&c.kind==='nomination'&&c.reference===event.reference&&cspNameKey(c.name)===cspNameKey(event.name)&&c.gfBefore!==undefined&&c.nrBefore!==undefined&&(!c.agency||normalName(c.agency)===normalName(event.agency))&&(!c.job||normalName(c.job)===normalName(event.job))));
   if(matches.length!==1)return event;
   const c=matches[0];
   if(event.gfBefore!==undefined&&event.gfBefore!==c.gfBefore||event.nrBefore!==undefined&&event.nrBefore!==c.nrBefore)return event;
-  return {...event,agentId:undefined,newAgent:true,identityPending:true,gfBefore:c.gfBefore,nrBefore:c.nrBefore};
+  // A documented +1/+2 GF nomination follows the same +2 NR rule as an
+  // identified appointment. Explicit NR instructions always take precedence.
+  const defaultNR=(event.gfDelta??0)>0&&event.nrAfter===undefined&&event.nrSteps===undefined&&!event.nrConfirmed;
+  return {...event,agentId:undefined,newAgent:true,identityPending:true,gfBefore:c.gfBefore,nrBefore:c.nrBefore,...(defaultNR?{nrSteps:2}:{})};
  });
 }
 
