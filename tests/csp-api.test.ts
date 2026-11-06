@@ -500,5 +500,20 @@ test('CSP API validates roles, previews without writes, saves one PDF, rejects i
   const stored=JSON.parse(m.rows[1].detail).events[0];assert.equal(stored.approved,true);assert.equal(stored.agency,candidate.agency);assert.equal(stored.recordedAfter.gf,8);assert.equal(stored.recordedAfter.nr,125);
  }
 
+ // A salary-constant appointment must allow its old ODJ candidature NR when
+ // a separately approved January award explains the exact salary difference.
+ {
+  m.identities=[];
+  const common={name:'TEST ALICE',agentId:'A12345',page:1,pages:[1],selected:true};
+  const award={...common,id:'constant-award',kind:'avancement',effective:'2026-01-01',nrSteps:1,gfBefore:9,nrBefore:200,nrAfter:205,approved:true,recordedBefore:{gf:9,nr:200},recordedAfter:{gf:9,nr:205}};
+  const candidate={...common,id:'constant-candidate',kind:'nomination',candidacy:true,effective:'',reference:'POSTE-CONSTANT-FICTIF',agency:'AGENCE DESTINATION',job:'EMPLOI FICTIF',gfBefore:9,nrBefore:200};
+  const nomination={...common,id:'constant-nomination',kind:'nomination',effective:'2026-09-01',reference:candidate.reference,agency:candidate.agency,job:candidate.job,gfDelta:0,approved:true,recordedBefore:{gf:9,nr:205},recordedAfter:{gf:9,nr:205,agency:candidate.agency,job:candidate.job}};
+  m.rows=[{id:'csp-constant-odj',name:'ODJ fictif.pdf',date:'2026-06-01',status:'validated',count:2,detail:JSON.stringify({kind:'csp',documentType:'cr',perEventValidation:true,candidateVersion:1,events:[award,candidate]})},
+   {id:'csp-constant-rd',name:'RD fictif.pdf',date:'2026-06-01',status:'validated',count:1,detail:JSON.stringify({kind:'csp',documentType:'rd',perEventValidation:true,events:[nomination]})}];
+  const result=await route.PATCH(request({id:'csp-constant-odj',action:'validate-event',eventId:candidate.id,checked:true,events:[award,candidate]},'PATCH'));
+  assert.equal(result.status,200,JSON.stringify(await result.clone().json()));
+  const stored=JSON.parse(m.rows[0].detail).events;assert.deepEqual(stored[0],award);assert.equal(stored[1].approved,true);assert.equal(stored[1].recordedAfter.nr,205);
+ }
+
 });
 

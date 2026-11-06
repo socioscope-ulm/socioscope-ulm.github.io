@@ -27,9 +27,15 @@ export function extractCspPages(pages:CspPage[],documentType:'rd'|'cr'='rd'){
   const head=cspNameHeader(pg.items)?.head;
   if(!head){if(kind==='avancement'){events.push(...unheadedAvancements(pg,report));continue;}report.status='unsupported';report.note='En-tête du tableau non reconnu.';continue;}
   const headerY=head.y;
-  const cutoff=pg.width*(kind==='reclassement'?.35:kind==='avancement'?.32:kind==='mutation'?.18:kind==='nomination'?.255:.20);
+  let cutoff=pg.width*(kind==='reclassement'?.35:kind==='avancement'?.32:kind==='mutation'?.18:kind==='nomination'?.255:.20);
+  if(kind==='admission'){
+   // Admission forms may reserve more than 20% of a portrait page for names.
+   // Derive the boundary from the next printed column instead of truncating it.
+   const next=pg.items.find(i=>Math.abs(i.y-headerY)<=18&&/^UM DUM$/.test(normalName(i.str))&&i.x>head.x+head.width);
+   if(next)cutoff=(head.x+head.width/2+next.x+next.width/2)/2;
+  }
   const content=pg.items.filter(i=>i.y<headerY-7&&i.y>pg.height*.07);
-  let nameRows=lines(content.filter(i=>i.x+i.width/2<cutoff)).filter(r=>/^[A-ZÀ-Ÿ][A-ZÀ-Ÿ '\-’]+$/.test(r.text.replace(/\s+/g,' ').trim())&&r.text.trim().length>4&&!/NOM PRENOM|PAGE |C2 LIMITE|PAS DE CANDIDAT|LA SITUATION/.test(normalName(r.text)));
+  let nameRows=lines(content.filter(i=>i.x+i.width/2<cutoff)).filter(r=>/^[A-ZÀ-Ÿ][A-ZÀ-Ÿ '\-’]+$/iu.test(r.text.replace(/\s+/g,' ').trim())&&r.text.trim().length>4&&!/NOM PRENOM|PAGE |C2 LIMITE|PAS DE CANDIDAT|LA SITUATION/.test(normalName(r.text)));
   // One person may occupy several printed name baselines. Merge only short
   // continuations tied to the SAME dated row; distinct dated people stay separate.
   const dateAnchors=lines(content.filter(i=>i.x+i.width/2>=cutoff&&!!iso(i.str)));

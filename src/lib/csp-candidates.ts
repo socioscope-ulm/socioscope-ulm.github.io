@@ -1,3 +1,4 @@
+import {constantNominationAdvancement} from './csp-constant-nomination.ts';
 import {reclassementReferenceChecks,reclassementReferenceSupported} from './csp-reclassement-reference.ts';
 import {scopeCspPreparation} from './csp-scope.ts';
 import {nominationReferenceChecks,nominationReferenceSupported} from './csp-nomination-reference.ts';
@@ -142,13 +143,14 @@ export function prepareCspDocuments(data:AgentData,events:CspEvent[],prior:CspIm
   if(new Set(checked.map(signature)).size>1)return blocked('Plusieurs RD actifs donnent des nominations différentes pour ce poste et ce candidat.');
   const {d,e,decision}=checked[0];
   const cumulative=cumulativeNomination(p,preview,d);
+  const constantAdvance=constantNominationAdvancement(p,decision,date,evidence);
   if(!decision.agency||!decision.job)return blocked('Destination de la nomination incomplète dans le RD : vérifier l’agence et l’emploi.');
   for(const [field,key] of [['gfBefore','gf'],['nrBefore','nr']] as const){
    const expected=e[field]??decision.before?.[key]??e.recordedBefore?.[key];
-   if(p[field]!==undefined&&expected!==undefined&&p[field]!==expected&&!cumulative)return blocked(`${key.toUpperCase()} du candidat dans l’ODJ (${p[field]}) différent de la situation avant du RD (${expected}). Vérifier les documents.`);
+   if(p[field]!==undefined&&expected!==undefined&&p[field]!==expected&&!cumulative&&!constantAdvance)return blocked(`${key.toUpperCase()} du candidat dans l’ODJ (${p[field]}) différent de la situation avant du RD (${expected}). Vérifier les documents.`);
   }
   for(const field of ['agency','job'] as const)if(p[field]&&e[field]&&normalName(p[field])!==normalName(e[field]))return blocked('Destination différente entre l’ODJ et le RD : vérifier '+(field==='job'?'l’emploi.':'l’agence.'));
-  return {...p,state:decision.state==='scheduled'?'scheduled':'ready',effective:e.effective,before:decision.before||e.recordedBefore,after:decision.after||e.recordedAfter,matchedRD:{id:d.id,eventId:e.id,name:d.name,page:e.page,approved:e.approved===true},problem:(cumulative?'Cumul nomination (+2 NR) et avancement (+'+(cspNRSteps(cumulative.advance)||0)+' NR) concordant malgré un ordre différent entre ODJ et RD. ':'')+'Candidat retenu confirmé par le RD « '+d.name+' ». La prise de poste est appliquée uniquement par le RD validé, sans double comptage.'};
+  return {...p,state:decision.state==='scheduled'?'scheduled':'ready',effective:e.effective,before:decision.before||e.recordedBefore,after:decision.after||e.recordedAfter,matchedRD:{id:d.id,eventId:e.id,name:d.name,page:e.page,approved:e.approved===true},problem:(constantAdvance?'Nomination à GF/NR constants : l’avancement validé de cette CSP explique le passage NR '+constantAdvance.before+' à '+constantAdvance.after+'. Le NR actualisé est conservé. ':cumulative?'Cumul nomination (+2 NR) et avancement (+'+(cspNRSteps(cumulative.advance)||0)+' NR) concordant malgré un ordre différent entre ODJ et RD. ':'')+'Candidat retenu confirmé par le RD « '+d.name+' ». La prise de poste est appliquée uniquement par le RD validé, sans double comptage.'};
  });
 }
 

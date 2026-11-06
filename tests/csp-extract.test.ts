@@ -34,3 +34,15 @@ test('two people with independent date cells remain two decisions even when a na
  ]);
  assert.equal(extractCspPages([p],'rd').events.length,2);
 });
+
+
+test('RD admissions recognize mixed-case names and a wider name column on portrait pages',()=>{
+ const p:CspPage={page:1,width:595,height:842,items:[
+  item('CSP du 23/06/2026',330,790,180),item('ADMISSION AU STAGE',30,720,200),
+  item('NOM PRENOM',55,620,100),item('UM/DUM',200,620,60),item('DATE DEBUT STAGE',390,620,100),
+  item('FICTIF Léa',45,580,190),item('UNITE LOGISTIQUE MAINTENANCE / AGENCE FICTIVE',150,580,100),
+  item('EQUIPE FICTIVE',270,580,100),item('01/07/2026',400,580,65),item('TECHNICIEN',460,580,65),item('7',560,580,10)
+ ]};
+ const r=extractCspPages([p],'rd');assert.equal(r.reports[0].status,'read');assert.equal(r.events.length,1);assert.equal(r.events[0].name,'FICTIF Léa');assert.equal(r.events[0].effective,'2026-07-01');assert.equal(r.events[0].gfAfter,7);
+ const blank=extractCspPages([{...p,items:p.items.filter(i=>i.y!==580)}],'rd');assert.equal(blank.reports[0].status,'unsupported');assert.equal(blank.events.length,0);
+});

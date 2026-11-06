@@ -69,8 +69,8 @@ function identical(target:CspEvent,source:CspEvent){
   if(source[field]!==undefined&&source[part]?.[key]!==undefined&&source[field]!==source[part]![key])return false;
  }
  for(const field of ['agency','job','team','m3e','reference'] as const){
-  // Location columns on a reclassement are observations, not destinations.
-  if(target.kind==='reclassement'&&field!=='reference')continue;
+  // Salary-only decisions quote an observed assignment, not a destination.
+  if(['reclassement','avancement','mesure','posthume'].includes(target.kind)&&field!=='reference')continue;
   const proposed=target[field];if(!proposed)continue;
   const documented=source[field]??(field==='reference'?undefined:source.recordedAfter?.[field]);
   if(!documented||normalName(proposed)!==normalName(documented))return false;
