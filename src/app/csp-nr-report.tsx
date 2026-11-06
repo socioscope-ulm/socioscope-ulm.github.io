@@ -22,6 +22,8 @@ export default function CspNRReport(){
  const [kind,setKind]=useState('');
  const [showDetail,setShowDetail]=useState(false);
  const [page,setPage]=useState(0);
+ const [showAllCsp,setShowAllCsp]=useState(false);
+ useEffect(()=>setShowAllCsp(false),[year,agency,kind]);
  useEffect(()=>{
   const controller=new AbortController();setBusy(true);setError('');setReport(null);
   fetch('/api/csp?nrReport=1&year='+year,{cache:'no-store',signal:controller.signal})
@@ -62,7 +64,8 @@ export default function CspNRReport(){
    {unchecked>0&&<p className="notice">{fmt(unchecked)} décision(s) dont le gain de NR n’est pas établi avec certitude ne sont pas ajoutées au total. Elles sont consultables dans le détail.</p>}
    {!agency&&<div className="table-scroll"><table><thead><tr><th>Agence</th><th>NR attribués</th><th>Agents</th><th>À vérifier</th></tr></thead><tbody>{agenciesTable.map(r=><tr key={r.name}><td>{r.name}</td><td>{fmt(r.total)}</td><td>{fmt(r.agents)}</td><td>{r.unchecked||'—'}</td></tr>)}<tr><th>Ensemble ULM</th><th>{fmt(report.total)}</th><th>{fmt(report.agents)}</th><th>{report.toVerify||'—'}</th></tr></tbody></table></div>}
    <h3 style={{marginTop:20}}>Répartition par CSP</h3>
-   <div className="table-scroll"><table><thead><tr><th>Date de séance</th><th>Document</th><th>NR attribués</th><th>Agents</th></tr></thead><tbody>{documents.map(r=><tr key={r.id}><td>{dated(r.date)}</td><td>{r.name}</td><td>{fmt(r.total)}</td><td>{fmt(r.agents.size)}</td></tr>)}{!documents.length&&<tr><td colSpan={4}>Aucune attribution validée pour la sélection.</td></tr>}</tbody></table></div>
+   <div className="table-scroll"><table><thead><tr><th>Date de séance</th><th>Document</th><th>NR attribués</th><th>Agents</th></tr></thead><tbody>{(showAllCsp?documents:documents.slice(0,3)).map(r=><tr key={r.id}><td>{dated(r.date)}</td><td>{r.name}</td><td>{fmt(r.total)}</td><td>{fmt(r.agents.size)}</td></tr>)}{!documents.length&&<tr><td colSpan={4}>Aucune attribution validée pour la sélection.</td></tr>}</tbody></table></div>
+   {documents.length>3&&<div style={{marginTop:8}}><button className="btn" aria-expanded={showAllCsp} onClick={()=>setShowAllCsp(v=>!v)}>{showAllCsp?'Réduire la liste des CSP':'Afficher toutes les CSP ('+fmt(documents.length)+')'}</button></div>}
    <div style={{marginTop:14}}><button className="btn" onClick={()=>{setShowDetail(v=>!v);setPage(0);}}>{showDetail?'Masquer':'Afficher'} les décisions ({fmt(rows.length)})</button></div>
    {showDetail&&<><div className="table-scroll" style={{marginTop:12}}><table><thead><tr><th>Agent</th><th>Date d’effet</th><th>Agence</th><th>Motif</th><th>GF avant / après</th><th>NR avant / après</th><th>NR attribués</th><th>Document</th></tr></thead><tbody>{rows.slice(page*50,(page+1)*50).map(r=><tr key={r.id}><td>{r.name}</td><td>{dated(r.effective)}</td><td>{r.agency}</td><td>{r.motif}{r.source==='manual'?' · manuel':''}</td><td>{r.beforeGF??'—'} / {r.afterGF??'—'}</td><td>{r.beforeNR??'—'} / {r.afterNR??'—'}</td><td>{r.nr===null?'À vérifier':fmt(r.nr)}</td><td>{r.document}</td></tr>)}</tbody></table></div><div style={{display:'flex',gap:10,alignItems:'center',marginTop:10}}><button className="btn" disabled={page===0} onClick={()=>setPage(p=>Math.max(0,p-1))}>Précédent</button><span>Page {page+1} / {Math.max(1,Math.ceil(rows.length/50))}</span><button className="btn" disabled={(page+1)*50>=rows.length} onClick={()=>setPage(p=>p+1)}>Suivant</button></div></>}
    <p className="filter-note" style={{marginTop:12}}>Une décision déjà reconnue par un autre ODJ/RD n’est comptée qu’une fois. Nominations à NR constant, candidatures non retenues et mouvements non approuvés sont exclus. Les corrections manuelles sont présentées séparément.</p>
