@@ -51,9 +51,16 @@ test('CSP API validates roles, previews without writes, saves one PDF, rejects i
  let stored=JSON.parse(m.rows[0].detail);assert.equal(stored.events[0].approved,true);assert.equal(stored.events[0].recordedAfter.nr,205);assert.equal(stored.events[1].approved,undefined);assert.equal(stored.events[1].selected,true);assert.equal(m.rows[0].status,'validated');assert.equal(m.puts.length,1);
  const listing=await (await route.GET(new Request('https://fixture.test/api/csp',{headers}))).json();assert.equal(listing.records.length,1);assert.equal(listing.records[0].id,'advance');assert.equal(listing.imports[0].partial,true);
  const checked=await (await route.POST(request({id:batch.id,date:'2026-03-24',events:stored.events}))).json();assert.equal(checked.events[0].state,'validated');assert.equal(checked.events[1].state,'blocked');
+ // A browser preview may refresh identity provenance while another row remains pending.
+ // Publishing the remaining row must retain the server's original approval.
+ const refreshed=stored.events.map((e:any)=>e.approved?{...e,identityMethod:'annual',identitySource:'refreshed-fixture',identityDate:'2026-02-01'}:e);
+ const beforeRefresh=structuredClone(stored.events[0]);
+ const refreshedPreview=await route.POST(request({id:batch.id,date:'2026-03-24',events:refreshed}));
+ assert.equal(refreshedPreview.status,200,JSON.stringify(await refreshedPreview.clone().json()));
+ assert.deepEqual(JSON.parse(m.rows[0].detail).events[0],beforeRefresh);
  const tampered=stored.events.map((e:any)=>e.approved?{...e,nrSteps:2}:e);assert.equal((await route.PATCH(request({id:batch.id,action:'save',events:tampered},'PATCH'))).status,409);
  assert.equal((await route.PATCH(request({id:batch.id,action:'save',events:stored.events},'PATCH'))).status,200);assert.equal(m.rows[0].status,'validated');
- const corrected=stored.events.map((e:any)=>e.id==='appointment'?{...e,nrAfter:210}:e);
+ const corrected=refreshed.map((e:any)=>e.id==='appointment'?{...e,nrAfter:210}:e);
  response=await route.PATCH(request({id:batch.id,action:'validate-state',state:'ready',checked:true,events:corrected},'PATCH'));assert.equal(response.status,200);report=await response.json();assert.equal(report.validated,1);assert.equal(report.pending,0);assert.equal(report.approved,2);assert.equal(report.partial,false);
  stored=JSON.parse(m.rows[0].detail);assert.equal(stored.events[0].recordedAfter.nr,205);assert.equal(stored.events[1].recordedBefore.nr,205);assert.equal(stored.events[1].recordedAfter.nr,210);assert.equal(m.puts.length,1);
  // Existing approved data is kept when reactivating a partially validated RD.

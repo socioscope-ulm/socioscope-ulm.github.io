@@ -5,7 +5,9 @@ export function cspProgress(status:string,detail:{events?:CspEvent[];perEventVal
  const selected=(detail.events||[]).filter(e=>e.selected&&!cspNonRetained(e));const approved=selected.filter(e=>status==='validated'&&(!detail.perEventValidation||e.approved===true)||status==='review'&&!!e.acknowledgedByDocument).length;
  return {approved,pending:status==='validated'&&detail.perEventValidation?selected.length-approved:status==='review'?selected.length-approved:0,partial:status==='validated'&&!!detail.perEventValidation&&selected.length>approved};
 }
-const business=(e:CspEvent)=>JSON.stringify(Object.entries(e).filter(([k,v])=>v!==undefined&&!['approved','approvedAt','recordedBefore','recordedAfter','acknowledgedByRD','acknowledgedByDocument','nonRetainedByRD'].includes(k)).sort(([a],[b])=>a.localeCompare(b)));
+// Identity provenance may be refreshed by a preview; the saved approval stays
+// authoritative. NNI, salary facts, dates and manual confirmations remain protected.
+const business=(e:CspEvent)=>JSON.stringify(Object.entries(e).filter(([k,v])=>v!==undefined&&!['approved','approvedAt','recordedBefore','recordedAfter','acknowledgedByRD','acknowledgedByDocument','nonRetainedByRD','identityMethod','identitySource','identityDate'].includes(k)).sort(([a],[b])=>a.localeCompare(b)));
 export function preserveApproved(incoming:CspEvent[],saved:CspEvent[],enabled:boolean):CspEvent[]{
  if(!enabled)return incoming.map(e=>{const {approved,approvedAt,recordedBefore,recordedAfter,salaryReference,nominationReference,reclassementReference,acknowledgedByRD,acknowledgedByDocument,nonRetainedByRD,...draft}=e;return draft;});
  const protectedRows=new Map(saved.filter(e=>e.approved).map(e=>[e.id,e]));
