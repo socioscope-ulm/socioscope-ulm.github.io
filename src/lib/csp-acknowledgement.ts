@@ -40,6 +40,25 @@ function odjConfirmedByRd<T extends Document>(row:T,e:CspEvent,verified:Map<stri
  return {...e,approved:true,approvedAt:rd.approvedAt,recordedBefore:rd.recordedBefore,recordedAfter:rd.recordedAfter,acknowledgedByDocument:proof};
 }
 
+// A recovered RD admission may not yet carry an NNI. An independently
+// approved ODJ admission can identify the exact same dated arrival; this
+// acknowledgement never creates a second movement or an acknowledgement chain.
+function rdAdmissionConfirmedByOdj<T extends Document>(row:T,e:CspEvent,admissions:Map<string,{row:T;event:CspEvent}[]>):CspEvent|undefined{
+ if(type(row)!=='rd'||!['review','validated'].includes(row.status)||e.kind!=='admission'||!e.selected||e.approved||
+  cspExtractionIssue(e)||e.newAgent===false||!validDate(e.effective)||e.gfAfter===undefined||!e.agency||!e.job)return;
+ const matches=admissions.get(JSON.stringify([row.date,cspNameKey(e.name),e.effective]))||[];
+ if(matches.length!==1)return;
+ const {row:source,event:a}=matches[0];
+ if(e.agentId&&e.agentId!==a.agentId||a.newAgent!==true||e.gfAfter!==(a.gfAfter??a.recordedAfter?.gf))return;
+ for(const [field,part,key] of [['gfBefore','recordedBefore','gf'],['nrBefore','recordedBefore','nr'],['nrAfter','recordedAfter','nr']] as const)
+  if(e[field]!==undefined&&e[field]!==(a[field]??a[part]?.[key]))return;
+ for(const field of ['agency','job','team','m3e'] as const)
+  if(e[field]&&normalName(e[field])!==normalName(a[field]??a.recordedAfter?.[field]))return;
+ const proof:CspAcknowledgement={id:source.id,eventId:a.id,name:source.name,page:a.page,documentType:'cr'};
+ return {...e,agentId:a.agentId,newAgent:true,...(!e.agentId?{identityPending:a.identityPending,identityMethod:a.identityMethod,identitySource:a.identitySource,identityDate:a.identityDate}:{}),
+  approved:true,approvedAt:a.approvedAt,recordedBefore:a.recordedBefore,recordedAfter:a.recordedAfter,acknowledgedByDocument:proof};
+}
+
 const clear=(e:CspEvent):CspEvent=>{
  if(!acknowledgement(e))return e;
  const {acknowledgedByDocument,acknowledgedByRD,approved,approvedAt,recordedBefore,recordedAfter,...pending}=e;return pending;
@@ -83,9 +102,13 @@ function identical(target:CspEvent,source:CspEvent){
 // Recomputed from original approvals on every read. An acknowledgement can
 // never approve another document or publish a second career movement.
 export function acknowledgeCspDecisions<T extends Document>(rows:T[]):T[]{
+ const admissions=new Map<string,{row:T;event:CspEvent}[]>();
  const confirmed=new Map<string,{row:T;event:CspEvent}[]>(),dates=new Map<string,Set<string>>(),verified=new Map<string,{row:T;event:CspEvent}[]>();
  for(const row of rows)if(row.status==='validated')for(const event of row.detail.events||[]){
   if(!eligible(event)||acknowledgement(event)||row.detail.perEventValidation&&!event.approved)continue;
+  if(type(row)==='cr'&&event.kind==='admission'){
+   const k=JSON.stringify([row.date,cspNameKey(event.name),event.effective]),values=admissions.get(k)||[];values.push({row,event});admissions.set(k,values);
+  }
   if(type(row)==='rd'){
    const k=rdNameKey(row.date,event),values=verified.get(k)||[];values.push({row,event});verified.set(k,values);
   }
@@ -94,7 +117,7 @@ export function acknowledgeCspDecisions<T extends Document>(rows:T[]):T[]{
  }
  return resolveNominationOutcomes(rows.map(row=>({...row,detail:{...row.detail,events:(row.detail.events||[]).map(original=>{
   const e=clear(original);
-  const linked=odjConfirmedByRd(row,e,verified);
+  const linked=odjConfirmedByRd(row,e,verified)||rdAdmissionConfirmedByOdj(row,e,admissions);
   if(linked)return linked;
   if(!['review','validated'].includes(row.status)||row.status==='validated'&&!row.detail.perEventValidation||e.approved||!eligible(e))return e;
   const candidates=(confirmed.get(key(row.date,e))||[]).filter(m=>m.row.id!==row.id&&type(m.row)!==type(row));

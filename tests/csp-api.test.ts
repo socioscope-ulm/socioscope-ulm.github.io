@@ -529,7 +529,7 @@ test('CSP API validates roles, previews without writes, saves one PDF, rejects i
     {id:'csp-recovered-rd',name:'RD fictif.pdf',date:'2026-06-01',status:'validated',count:2,detail:JSON.stringify({kind:'csp',documentType:'rd',perEventValidation:true,events:recovered})}];
    const original=m.rows[0].detail;
    const checked=await route.POST(request({id:'csp-recovered-rd',date:'2026-06-01',events:recovered}));assert.equal(checked.status,200);
-   const preview=(await checked.json()).events;assert.ok(preview.every(e=>e.state==='duplicate'&&!e.approved&&e.agentId));
+   const preview=(await checked.json()).events;assert.ok(preview.every(e=>e.state==='duplicate'&&e.approved&&e.acknowledgedByDocument&&e.agentId));
    const resolved=recovered.map(e=>cspResolvedEvent(e as any,preview.find(p=>p.id===e.id)));
    if(mode==='duplicate'){
     const originalRows=structuredClone(m.rows);m.rows[0].status='disabled:validated';
@@ -542,6 +542,22 @@ test('CSP API validates roles, previews without writes, saves one PDF, rejects i
    const stored=JSON.parse(m.rows[1].detail).events;assert.ok(stored.every(e=>e.approved&&e.acknowledgedByDocument?.id==='csp-recognized-odj'));assert.equal(m.rows[0].detail,original);
    const listing=await (await route.GET(new Request('https://fixture.test/api/csp',{headers}))).json();assert.equal(listing.records.filter(e=>e.kind==='admission').length,2);
   }
+ }
+
+ // Manual non-retention is saved immediately for only the chosen candidature.
+ {
+  m.identities=[];
+  const candidate={id:'outcome',name:'FICTIF SANS NNI',kind:'nomination',candidacy:true,selected:true,page:1,effective:'',reference:'POSTE-SANS-NOMINATION'};
+  const keep={id:'keep-outcome',name:'TEST ALICE',agentId:'A12345',kind:'avancement',selected:true,page:2,pages:[2],effective:'2026-01-01',nrSteps:1,approved:true,recordedAfter:{gf:9,nr:205}};
+  m.rows=[{id:'csp-outcome',name:'ODJ fictif.pdf',date:'2026-06-01',status:'validated',count:2,detail:JSON.stringify({kind:'csp',documentType:'cr',perEventValidation:true,events:[keep,candidate]})}];
+  const body={id:'csp-outcome',action:'set-candidacy-outcome',eventId:candidate.id,nonRetained:true};
+  assert.equal((await route.PATCH(request(body,'PATCH','viewer'))).status,403);
+  assert.equal((await route.PATCH(request({...body,nonRetained:'yes'},'PATCH'))).status,400);
+  assert.equal((await route.PATCH(request({...body,eventId:keep.id},'PATCH'))).status,409);
+  const result=await route.PATCH(request(body,'PATCH'));assert.equal(result.status,200,JSON.stringify(await result.clone().json()));assert.equal((await result.json()).pending,0);
+  let stored=JSON.parse(m.rows[0].detail);assert.deepEqual(stored.events[0],keep);assert.equal(stored.events[1].nonRetained,true);assert.equal(stored.events[1].approved,undefined);assert.equal(stored.candidacyOutcomes.length,1);
+  const reopened=await route.PATCH(request({...body,nonRetained:false},'PATCH'));assert.equal(reopened.status,200);assert.equal((await reopened.json()).pending,1);
+  stored=JSON.parse(m.rows[0].detail);assert.equal(stored.events[1].nonRetained,false);assert.deepEqual(stored.events[0],keep);
  }
 
 });

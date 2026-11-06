@@ -8,10 +8,10 @@ export function cspProgress(status:string,detail:{events?:CspEvent[];perEventVal
 // Identity provenance may be refreshed by a preview; the saved approval stays
 // authoritative. NNI, salary facts, dates and manual confirmations remain protected.
 const business=(e:CspEvent)=>JSON.stringify(Object.entries(e).filter(([k,v])=>v!==undefined&&!['approved','approvedAt','recordedBefore','recordedAfter','acknowledgedByRD','acknowledgedByDocument','nonRetainedByRD','identityMethod','identitySource','identityDate'].includes(k)).sort(([a],[b])=>a.localeCompare(b)));
-export function preserveApproved(incoming:CspEvent[],saved:CspEvent[],enabled:boolean):CspEvent[]{
+export function preserveApproved(incoming:CspEvent[],saved:CspEvent[],enabled:boolean,original:CspEvent[]=[]):CspEvent[]{
  if(!enabled)return incoming.map(e=>{const {approved,approvedAt,recordedBefore,recordedAfter,salaryReference,nominationReference,reclassementReference,acknowledgedByRD,acknowledgedByDocument,nonRetainedByRD,...draft}=e;return draft;});
  const protectedRows=new Map(saved.filter(e=>e.approved).map(e=>[e.id,e]));
- for(const [id,old] of protectedRows){const candidate=incoming.find(e=>e.id===id);if(!candidate||business(candidate)!==business(old))throw Object.assign(Error('Une décision déjà validée a été modifiée. Utiliser « Corriger » pour la réviser.'),{status:409});}
+ for(const [id,old] of protectedRows){const candidate=incoming.find(e=>e.id===id),raw=original.find(e=>e.id===id);const unchangedOriginal=!!old.acknowledgedByDocument&&!!raw&&!raw.approved&&!!candidate&&business(candidate)===business(raw);if(!candidate||business(candidate)!==business(old)&&!unchangedOriginal)throw Object.assign(Error('Une décision déjà validée a été modifiée. Utiliser « Corriger » pour la réviser.'),{status:409});}
  return incoming.map(e=>protectedRows.get(e.id)||preserveApproved([e],[],false)[0]);
 }
 
@@ -23,4 +23,13 @@ export function restoreExcludedCsp(events:CspEvent[],ids:string[]):CspEvent[]{
  const eligible=new Set(restorableCspEvents(events).map(e=>e.id));
  if(!ids.length||new Set(ids).size!==ids.length||ids.some(id=>!eligible.has(id)))throw Object.assign(Error('Choisir uniquement des décisions écartées, datées et non validées.'),{status:400});
  const wanted=new Set(ids);return events.map(e=>wanted.has(e.id)?{...e,selected:true}:e);
+}
+
+// Closing a candidature is a persisted documentary classification, never an
+// approved career movement. Validated appointments require explicit correction.
+export function setCspCandidateOutcome(events:CspEvent[],id:string,nonRetained:boolean):CspEvent[]{
+ const event=events.find(e=>e.id===id);
+ if(!event||!event.candidacy||event.kind!=='nomination'||event.approved||event.acknowledgedByDocument||event.acknowledgedByRD||event.nonRetainedByRD)
+  throw Object.assign(Error('Choisir une candidature non validée et sans classement automatique.'),{status:409});
+ return events.map(e=>e.id===id?{...e,selected:true,nonRetained}:e);
 }

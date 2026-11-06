@@ -7,7 +7,7 @@ import {cspDocumentLabel} from '../../../lib/csp-document-label';
 import {correctionEvents,planCspCorrection} from '../../../lib/csp-correction';
 import {acknowledgeCspDecisions} from '../../../lib/csp-acknowledgement';
 import {prepareCspDocuments,addCrCandidates} from '../../../lib/csp-candidates';
-import {activeCspEvents,cspProgress,preserveApproved,restoreExcludedCsp} from '../../../lib/csp-validation';
+import {activeCspEvents,cspProgress,preserveApproved,restoreExcludedCsp,setCspCandidateOutcome} from '../../../lib/csp-validation';
 import {agentAuth,agentData,cspIdentityData,agentError} from '../../../lib/agents-store';
 import {resources} from '../../../lib/store';
 import {cspKinds,cspKey,cspNonRetained,cspResolvedEvent,validateCspEvent,deduplicateCsp,validDate,latestAnnual,parisToday,projectCsp,CSP_SOURCE} from '../../../lib/csp';
@@ -52,7 +52,7 @@ export async function GET(request:Request){try{
 }catch(e){return agentError(e);}}
 export async function POST(request:Request){try{
  await agentAuth(request,true);const isForm=request.headers.get('content-type')?.startsWith('multipart/form-data');
- if(!isForm){const body=await request.json();const rows=await imports();const evidence=documents(rows);const saved=body.id?rows.find(r=>r.id===body.id):null;const events=preserveApproved(input(body),saved?.detail.events||[],saved?.status==='review'||saved?.status==='validated'&&saved.detail.perEventValidation===true);const {data:baseData,cspImports}=await agentData(true,undefined,parisToday(),false);const data=await cspIdentityData(baseData,[...events,...cspImports.flatMap(i=>i.events.filter(isPendingAdmission))]);const preview=prepareCspDocuments(data,events,cspImports.filter(i=>i.id!==body.id),body.date,evidence,saved?currentDocument(saved):{id:'csp-unsaved',name:'Document en cours',documentType:body.documentType==='cr'?'cr':'rd'});return Response.json({events:preview.map(e=>e.approved?{...e,state:e.acknowledgedByDocument?'duplicate':'validated',before:e.recordedBefore,after:e.recordedAfter,...(e.acknowledgedByDocument?{matchedDocument:e.acknowledgedByDocument}:{}),problem:e.acknowledgedByDocument?.cumulative?'Cumul nomination et avancement confirmé par le RD validé : même résultat final malgré un ordre différent, aucune nouvelle application.':e.acknowledgedByDocument?'Décision déjà validée dans le document '+cspDocumentLabel(e.acknowledgedByDocument.documentType)+' : reconnue automatiquement, sans nouvelle application.':'Décision déjà validée et intégrée.'}:e),base:latestAnnual(data),blocked:preview.filter(e=>e.selected&&!e.approved&&e.state==='blocked').length});}
+ if(!isForm){const body=await request.json();const rows=await imports();const evidence=documents(rows);const saved=body.id?rows.find(r=>r.id===body.id):null;const events=preserveApproved(input(body),saved?.detail.events||[],saved?.status==='review'||saved?.status==='validated'&&saved.detail.perEventValidation===true,saved?.rawDetail?.events||[]);const {data:baseData,cspImports}=await agentData(true,undefined,parisToday(),false);const data=await cspIdentityData(baseData,[...events,...cspImports.flatMap(i=>i.events.filter(isPendingAdmission))]);const preview=prepareCspDocuments(data,events,cspImports.filter(i=>i.id!==body.id),body.date,evidence,saved?currentDocument(saved):{id:'csp-unsaved',name:'Document en cours',documentType:body.documentType==='cr'?'cr':'rd'});return Response.json({events:preview.map(e=>e.approved?{...e,state:e.acknowledgedByDocument?'duplicate':'validated',before:e.recordedBefore,after:e.recordedAfter,...(e.acknowledgedByDocument?{matchedDocument:e.acknowledgedByDocument}:{}),problem:e.acknowledgedByDocument?.cumulative?'Cumul nomination et avancement confirmé par le RD validé : même résultat final malgré un ordre différent, aucune nouvelle application.':e.acknowledgedByDocument?'Décision déjà validée dans le document '+cspDocumentLabel(e.acknowledgedByDocument.documentType)+' : reconnue automatiquement, sans nouvelle application.':'Décision déjà validée et intégrée.'}:e),base:latestAnnual(data),blocked:preview.filter(e=>e.selected&&!e.approved&&e.state==='blocked').length});}
  const f=await request.formData(),file=f.get('file'),raw=f.get('extraction');
  if(!(file instanceof File)||!file.size||file.size>20*1024*1024||!/\.pdf$/i.test(file.name)||typeof raw!=='string'||raw.length>1500000)fail('Choisir un PDF de moins de 20 Mo.');
  const body=JSON.parse(raw),events=preserveApproved(input(body),[],false);const bytes=await file.arrayBuffer();if(new TextDecoder().decode(bytes.slice(0,5))!=='%PDF-')fail('Le fichier n’est pas un PDF.');
@@ -98,6 +98,14 @@ export async function PATCH(request:Request){try{
   return Response.json({ok:true,id:manual.events[0].id,from:entry.nrBefore,to:entry.nrBefore+5,reason:manualNRReasons[entry.reason]});
  }
  if(typeof b.id!=='string'||!b.id.startsWith('csp-'))fail('Relevé invalide.');const {db}=resources();const row=(await imports()).find(r=>r.id===b.id);if(!row||row.detail.kind!=='csp')fail('Relevé introuvable.',404);
+ if(b.action==='set-candidacy-outcome'){
+  if(!['review','validated'].includes(row.status)||row.detail.documentType!=='cr'||row.status==='validated'&&!row.detail.perEventValidation||typeof b.eventId!=='string'||typeof b.nonRetained!=='boolean')fail('Choisir une candidature de l’ODJ actif et son classement.');
+  const events=setCspCandidateOutcome(row.detail.events||[],b.eventId,b.nonRetained);
+  const detail={...row.detail,events,candidacyOutcomes:[...(row.detail.candidacyOutcomes||[]),{eventId:b.eventId,nonRetained:b.nonRetained,at:new Date().toISOString(),actor:request.headers.get('oai-authenticated-user-email')}]};
+  const changed=await db.prepare('UPDATE agent_imports SET detail=?,status=?,count=? WHERE id=? AND status=? AND detail=?').bind(JSON.stringify(detail),row.status,events.filter((e:CspEvent)=>e.selected).length,b.id,row.status,row.rawDetailText??JSON.stringify(row.rawDetail||row.detail)).run();
+  if(changed.meta.changes!==1)fail('Le document a changé. Actualiser avant de classer la candidature.',409);
+  return Response.json({ok:true,...cspProgress(row.status,detail)});
+ }
  if(b.action==='restore-excluded'){
   if(!['review','validated'].includes(row.status)||b.checked!==true||!Array.isArray(b.eventIds)||b.eventIds.length>250||!b.eventIds.every((x:any)=>typeof x==='string'))fail('Confirmer les mouvements écartés à réintégrer.');
   const events=restoreExcludedCsp(row.detail.events||[],b.eventIds);
@@ -164,7 +172,9 @@ export async function PATCH(request:Request){try{
  if(b.action==='disable'){
   const changed=await db.prepare("UPDATE agent_imports SET status='disabled:validated' WHERE id=? AND status='validated' AND detail=?").bind(b.id,row.rawDetailText??JSON.stringify(row.rawDetail||row.detail)).run();if(changed.meta.changes!==1)fail('Le relevé a changé. Recharger avant de réessayer.',409);return Response.json({ok:true});
  }
- const progress=cspProgress(row.status,row.detail);const partial=row.status==='validated'&&row.detail.perEventValidation===true&&(progress.pending>0||row.detail.events.some((e:CspEvent)=>e.candidacy&&!e.approved));
+ const persistedApproved=new Set((row.rawDetail?.events||row.detail.events||[]).filter((e:CspEvent)=>e.approved).map((e:CspEvent)=>e.id));
+ const newAcknowledgements=row.detail.events.some((e:CspEvent)=>e.approved&&e.acknowledgedByDocument&&!persistedApproved.has(e.id));
+ const progress=cspProgress(row.status,row.detail);const partial=row.status==='validated'&&row.detail.perEventValidation===true&&(newAcknowledgements||progress.pending>0||row.detail.events.some((e:CspEvent)=>e.candidacy&&!e.approved));
  if(['validate','validate-state','validate-event'].includes(b.action)&&row.status!=='review'&&!partial)fail('Ce relevé est déjà validé ou désactivé. Recharger.',409);
  if(b.action==='enable'&&row.status!=='disabled:validated')fail('Ce relevé n’est pas désactivé.',409);
  if(b.action==='revise'){
@@ -175,13 +185,13 @@ export async function PATCH(request:Request){try{
  }
  if(!['save','validate','validate-state','validate-event','enable'].includes(b.action))fail('Action inconnue.');
  if(b.action==='save'&&row.status!=='review'&&!partial)fail('Utiliser « Corriger » pour modifier des décisions déjà validées.',409);
- const events=b.action==='enable'?row.detail.events:preserveApproved(input({date:row.date,events:b.events}),row.detail.events||[],partial||row.status==='review');
+ const events=b.action==='enable'?row.detail.events:preserveApproved(input({date:row.date,events:b.events}),row.detail.events||[],partial||row.status==='review',row.rawDetail?.events||[]);
  const {data:baseData,cspImports}=await agentData(true,undefined,parisToday(),false);const data=await cspIdentityData(baseData,[...events,...cspImports.flatMap(i=>i.events.filter(isPendingAdmission))]);const others=cspImports.filter(i=>i.id!==b.id);const evidence=documents(await imports());
  const preview=prepareCspDocuments(data,b.action==='enable'&&row.detail.perEventValidation?events.map((e:CspEvent)=>({...e,selected:e.selected&&e.approved===true})):events,others,row.date,evidence,currentDocument(row));
  // Identity resolution in the browser preview can make a recovered row
  // recognizable by its already approved counterpart on this request.
  // That is a successful documentary acknowledgement, not a second approval.
- const alreadyApproved=new Set(events.filter((e:CspEvent)=>e.approved).map((e:CspEvent)=>e.id));
+ const alreadyApproved=persistedApproved;
  const recognizedNow=new Set(preview.filter(e=>e.selected&&e.approved&&e.acknowledgedByDocument&&!alreadyApproved.has(e.id)).map(e=>e.id));
  let chosen=new Set<string>();
  if(['validate','validate-state','validate-event','enable'].includes(b.action)){
