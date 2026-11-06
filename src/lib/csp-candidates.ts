@@ -35,7 +35,25 @@ export function preparePendingCspArrivals(data:AgentData,events:CspEvent[],date:
  });
 }
 
+// Fill a missing RD agency from exactly one matching candidature. Never
+// replace a stated destination or use a contradictory ODJ as evidence.
+function completeNominationAgencies(events:CspEvent[],date:string,documents:CspImport[],current?:{id:string;documentType:'rd'|'cr'}){
+ if(current?.documentType!=='rd')return events;
+ return events.map(e=>{
+  if(e.approved||!e.selected||e.candidacy||e.kind!=='nomination'||e.agency?.trim()||e.extractionIssue||!e.reference)return e;
+  const matches=documents.filter(d=>d.id!==current.id&&d.documentType==='cr'&&d.date===date&&!d.status.startsWith('disabled'))
+   .flatMap(d=>d.events.filter(c=>c.candidacy&&c.selected&&!c.nonRetained&&!c.nonRetainedByRD&&c.kind==='nomination'&&c.reference===e.reference&&cspNameKey(c.name)===cspNameKey(e.name)));
+  if(matches.length!==1)return e;
+  const c=matches[0];
+  if(!c.agency?.trim()||c.extractionIssue||e.agentId&&c.agentId&&e.agentId!==c.agentId||
+   ['job','team','m3e'].some(k=>(e as any)[k]&&(c as any)[k]&&normalName((e as any)[k])!==normalName((c as any)[k]))||
+   ['gfBefore','nrBefore'].some(k=>(e as any)[k]!==undefined&&(c as any)[k]!==undefined&&(e as any)[k]!== (c as any)[k]))return e;
+  return {...e,agency:c.agency};
+ });
+}
+
 export function prepareCspDocuments(data:AgentData,events:CspEvent[],prior:CspImport[],date:string,documents:CspImport[]=[],current?:{id:string;name:string;documentType:'rd'|'cr';status?:string}):CspPreview[]{
+ events=completeNominationAgencies(events,date,documents,current);
  const scoped=scopeCspPreparation(data,events,prior);data=scoped.data;prior=scoped.prior;
  // Keep the saved status: approved ODJ decisions may be the original evidence
  // for acknowledged RD rows. Opening a preview must not turn that ODJ into a
@@ -124,7 +142,7 @@ export function prepareCspDocuments(data:AgentData,events:CspEvent[],prior:CspIm
   if(new Set(checked.map(signature)).size>1)return blocked('Plusieurs RD actifs donnent des nominations différentes pour ce poste et ce candidat.');
   const {d,e,decision}=checked[0];
   const cumulative=cumulativeNomination(p,preview,d);
-  if(!e.agency||!e.job)return blocked('Destination de la nomination incomplète dans le RD : vérifier l’agence et l’emploi.');
+  if(!decision.agency||!decision.job)return blocked('Destination de la nomination incomplète dans le RD : vérifier l’agence et l’emploi.');
   for(const [field,key] of [['gfBefore','gf'],['nrBefore','nr']] as const){
    const expected=e[field]??decision.before?.[key]??e.recordedBefore?.[key];
    if(p[field]!==undefined&&expected!==undefined&&p[field]!==expected&&!cumulative)return blocked(`${key.toUpperCase()} du candidat dans l’ODJ (${p[field]}) différent de la situation avant du RD (${expected}). Vérifier les documents.`);

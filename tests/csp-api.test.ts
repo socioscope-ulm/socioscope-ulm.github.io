@@ -487,5 +487,18 @@ test('CSP API validates roles, previews without writes, saves one PDF, rejects i
   }
  }
 
+ // A known external nominee must not be blocked by an empty RD agency cell
+ // when the same-post ODJ candidature supplies a unique concordant destination.
+ {
+  m.identities=[{name:'FICTIF SAMUEL',nni:'Z90123',source:'rup-fiction',date:'2026-09-30'}];
+  const candidate={id:'agency-candidate',name:'FICTIF SAMUEL',agentId:'Z90123',kind:'nomination',candidacy:true,selected:true,page:1,effective:'',reference:'POSTE-FICTIF-02',agency:'AGENCE FICTIVE',job:'EMPLOI FICTIF',gfBefore:8,nrBefore:125};
+  const retained={...candidate,id:'agency-retained',candidacy:undefined,effective:'2026-07-01',agency:'',gfDelta:0,gfAfter:8,nrAfter:125,nrConfirmed:true,newAgent:true};
+  m.rows=[{id:'csp-agency-odj',name:'ODJ fictif.pdf',date:'2026-06-01',status:'review',count:1,detail:JSON.stringify({kind:'csp',documentType:'cr',candidateVersion:1,events:[candidate]})},
+   {id:'csp-agency-rd',name:'RD fictif.pdf',date:'2026-06-01',status:'validated',count:1,detail:JSON.stringify({kind:'csp',documentType:'rd',perEventValidation:true,events:[retained]})}];
+  const result=await route.PATCH(request({id:'csp-agency-rd',action:'validate-event',eventId:retained.id,checked:true,events:[retained]},'PATCH'));
+  assert.equal(result.status,200,JSON.stringify(await result.clone().json()));
+  const stored=JSON.parse(m.rows[1].detail).events[0];assert.equal(stored.approved,true);assert.equal(stored.agency,candidate.agency);assert.equal(stored.recordedAfter.gf,8);assert.equal(stored.recordedAfter.nr,125);
+ }
+
 });
 
