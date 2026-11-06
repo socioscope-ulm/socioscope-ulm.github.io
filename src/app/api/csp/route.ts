@@ -12,6 +12,7 @@ import {agentAuth,agentData,cspIdentityData,agentError} from '../../../lib/agent
 import {resources} from '../../../lib/store';
 import {cspKinds,cspKey,cspNonRetained,cspResolvedEvent,validateCspEvent,deduplicateCsp,validDate,latestAnnual,parisToday,projectCsp,CSP_SOURCE} from '../../../lib/csp';
 import {manualNRImport,validateManualNR,manualNRReasons} from '../../../lib/csp-manual-nr';
+import {calculateNRReport} from '../../../lib/csp-nr-report';
 import {snapshot} from '../../../lib/agents';
 import type {CspEvent} from '../../../lib/csp';
 function fail(message:string,status=400):never{throw Object.assign(Error(message),{status});}
@@ -27,6 +28,25 @@ function input(body:any){
 }
 export async function GET(request:Request){try{
  await agentAuth(request);const p=new URL(request.url).searchParams,id=p.get('id');
+ if(p.get('nrReport')==='1'){
+  await agentAuth(request,true);
+  const year=Number(p.get('year'));
+  if(!Number.isInteger(year)||year<2020||year>2100)fail('Année de bilan NR invalide.');
+  const docs=(await imports()).filter(row=>row.status==='validated').map(row=>({
+   id:row.id,name:row.name,date:row.date,status:row.status,events:row.detail.events||[]
+  }));
+  const manualRows=(await resources().db.prepare("SELECT id,agent,note,created FROM agent_decisions WHERE kind='manual_nr' ORDER BY created DESC").all<any>()).results;
+  for(const row of manualRows){
+   try{
+    const entry=JSON.parse(row.note||'{}');
+    if(!validateManualNR(entry)||entry.agentId!==row.agent)continue;
+    const manual=manualNRImport({...entry,id:row.id,created:row.created,actor:String(entry.actor||'administrateur')});
+    docs.push({...manual,manual:true} as any);
+   }catch{/* Une saisie historique illisible ne bloque pas le bilan. */}
+  }
+  return Response.json(calculateNRReport(docs,year),{headers:{'Cache-Control':'no-store'}});
+ }
+
  if(p.get('manual')==='1'){
   await agentAuth(request,true);
   const entries=(await resources().db.prepare("SELECT id,agent,created,note FROM agent_decisions WHERE kind='manual_nr' ORDER BY created DESC LIMIT 200").all<any>()).results;
