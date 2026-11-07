@@ -1,7 +1,8 @@
 import type {QuarterlyReport,QuarterlyRow} from './csp-quarterly-report';
 import {kindLabels,kindOrder} from './csp-quarterly-report';
 import {CSP_CHARTER_BG_DATA} from './csp-quarterly-background';
-import {CSP_MAIN_CGT_DATA,CSP_LOGO_CGT_DATA} from './csp-quarterly-brand-assets';
+import {CSP_MAIN_CGT_DATA} from './csp-quarterly-brand-assets';
+import {CSP_LOGO_ULM_DATA} from './csp-quarterly-ulm-logo';
 
 const P={bg:'F7F1D8',red:'D7221C',deep:'A61C1C',cream:'FBF8E9',peach:'F3D1BA',text:'202020',muted:'615F57',line:'BD8B7E'};
 const date=(s:string)=>/^\d{4}-\d{2}-\d{2}$/.test(s)?s.slice(8,10)+'/'+s.slice(5,7)+'/'+s.slice(0,4):'—';
@@ -16,17 +17,11 @@ type Presentation={layout:string;author:string;title:string;subject:string;lang:
  addSlide:(opts?:{masterName?:string})=>any;
  defineSlideMaster:(opts:{title:string;background:{color:string};objects:Array<{image:{data:string;x:number;y:number;w:number;h:number}}|{text:{text:string;options:Record<string,unknown>}} >})=>void;
  write:(opts:{outputType:'blob';compression?:boolean})=>Promise<Blob|ArrayBuffer|Uint8Array|string>};
-/** Signature CGT ULM, présente dans les masques, sur toutes les pages.
- * La charte fournit le logo CGT ; le nom ULM reste un texte éditable dans PowerPoint.
+/** Logo CGT ULM original extrait de la présentation de référence fournie.
+ * Le logo est un visuel statique dans le masque ; les titres et tableaux restent modifiables.
  */
 function ulmBrand(){
- return [
-  {image:{data:CSP_LOGO_CGT_DATA,x:11.65,y:0.10,w:.42,h:.49}},
-  {text:{text:'ULM',options:{x:12.05,y:.14,w:.92,h:.37,fontFace:'Arial',
-    fontSize:25,bold:true,italic:true,color:'666666',margin:0}}},
-  {text:{text:'DÉCISION · MAÎTRISE · CADRE',options:{x:12.0,y:.53,w:1.25,h:.13,
-    fontFace:'Arial',fontSize:5.1,color:'B82220',margin:0,align:'center'}}}
- ];
+ return [{image:{data:CSP_LOGO_ULM_DATA,x:11.53,y:6.38,w:1.48,h:.67}}];
 }
 function coverPage(ppt:Presentation,report:QuarterlyReport){
  const s=ppt.addSlide({masterName:'CSP_CGT_COUVERTURE'});s.background={color:P.bg};
