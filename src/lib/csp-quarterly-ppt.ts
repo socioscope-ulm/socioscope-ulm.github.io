@@ -11,7 +11,7 @@ const kindTitles:Record<string,string>={
  nomination:'NOMINATIONS',posthume:'AVANCEMENTS A TITRE POSTHUME'
 };
 type Presentation={layout:string;author:string;title:string;subject:string;lang:string;theme:unknown;
- addSlide:()=>any;writeFile:(opts:{fileName:string})=>Promise<unknown>};
+ addSlide:()=>any;write:(opts:{outputType:'blob';compression?:boolean})=>Promise<Blob|ArrayBuffer|Uint8Array|string>};
 function newPage(ppt:Presentation,title:string,footer:string){
  const s=ppt.addSlide();s.background={color:P.bg};
  s.addText(title,{x:.56,y:.32,w:12,h:.52,fontFace:'Arial',fontSize:22,bold:true,
@@ -127,6 +127,22 @@ export async function downloadQuarterlyPpt(report:QuarterlyReport,includeCandida
   table(s,cells,[.95,1.55,2.15,7.70],1.22,1.14,10.0);
  }
  const file='CR_CSP_Cadres_T'+report.quarter+'_'+report.year+'_Tableaux_modifiables.pptx';
- await ppt.writeFile({fileName:file});
+ // Create the complete binary before starting the browser download.
+ // This makes generation errors visible and avoids relying on the library's download heuristic.
+ const bytes=await ppt.write({outputType:'blob',compression:true});
+ const mime='application/vnd.openxmlformats-officedocument.presentationml.presentation';
+ const blob=bytes instanceof Blob?bytes:new Blob([bytes as BlobPart],{type:mime});
+ if(blob.size<2500)throw Error('Le fichier PowerPoint produit est incomplet. Aucun téléchargement lancé.');
+ const link=URL.createObjectURL(blob);
+ try{
+  const anchor=document.createElement('a');
+  anchor.href=link;anchor.download=file;anchor.style.display='none';
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+ }finally{
+  // Keep the blob URL alive long enough for mobile browsers to retrieve the complete file.
+  setTimeout(()=>URL.revokeObjectURL(link),60000);
+ }
  return file;
 }

@@ -8,7 +8,7 @@ export type QuarterlyEvent = {
  nrSteps?:number; gfDelta?:number; agency?:string; job?:string; reference?:string;
  note?:string; extractionIssue?:string;
  recordedBefore?:{gf?:number;nr?:number;agency?:string;job?:string};
- recordedAfter?:{gf?:number;nr?:number;agency?:string;job?:string};
+ recordedAfter?:{gf?:number;nr?:number;agency?:string;job?:string;nrProvisional?:boolean};
 };
 export type QuarterlyDocument = {
  id:string; name:string; date:string; status:string; documentType:'cr'|'rd';
@@ -94,7 +94,11 @@ function toRow(g:Group):QuarterlyRow{
   const nums=[...new Set(g.items.map(x=>numeric(x.e,k)).filter(filled))];
   if(nums.length>1)checks.push('Écart '+k+' entre documents');
  }
- for(const x of g.items){const warn=[x.e.extractionIssue,x.e.note].filter(Boolean).join(' ; ');
+ for(const x of g.items){
+  if(x.e.recordedAfter?.nrProvisional)checks.push('NR après provisoire dans '+x.ref);
+  const note=String(x.e.note||'');
+  const staleNominationNote=x.e.kind==='nomination'&&/v[eé]rifier les situations avant\/apr[eè]s.*NR apr[eè]s doit [eê]tre renseign[eé]/i.test(note)&&numeric(x.e,'nrAfter')!==undefined;
+  const warn=[x.e.extractionIssue,staleNominationNote?'':note].filter(Boolean).join(' ; ');
   if(/v[eé]rifier|non reconnu|incoh[eé]ren|manquan|[eé]cart/i.test(warn))checks.push('Contrôle '+x.ref);
  }
  const date=g.items[0].doc.date;
@@ -136,15 +140,18 @@ export function calculateQuarterlyReport(documents:QuarterlyDocument[],year:numb
  }
  const rows=groups.map(toRow).sort((a,b)=>a.meeting.localeCompare(b.meeting)||
   kindOrder.indexOf(a.kind)-kindOrder.indexOf(b.kind)||a.name.localeCompare(b.name,'fr')||a.effective.localeCompare(b.effective));
- const pendingDocuments=docs.filter(d=>d.status!=='validated').length;
- if(pendingDocuments)alerts.push(pendingDocuments+' document(s) en cours de vérification : seules les décisions actées des documents validés alimentent le tableau.');
+ const pending=docs.filter(d=>d.status!=='validated');
+ const pendingDocuments=pending.length;
+ const formatted=(d:string)=>d.slice(8,10)+'/'+d.slice(5,7)+'/'+d.slice(0,4);
+ if(pendingDocuments)alerts.push(pendingDocuments+' document(s) encore en vérification : '+pending.map(d=>(d.documentType==='cr'?'ODJ':'RD')+' du '+formatted(d.date)).join(', ')+'. Les décisions confirmées dans un autre document validé restent prises en compte.');
  const meetings=[...new Set(docs.map(d=>d.date))];
  for(const meeting of meetings){
   const xs=sources.filter(s=>s.date===meeting);
-  if(!xs.some(s=>s.type==='ODJ')||!xs.some(s=>s.type==='RD'))alerts.push('Séance du '+meeting+' : ODJ ou RD absent de la sélection.');
+  const missing=!xs.some(s=>s.type==='ODJ')?'ODJ':!xs.some(s=>s.type==='RD')?'RD':'';
+  if(missing)alerts.push('Séance du '+formatted(meeting)+' : '+missing+' non associé dans les documents CSP cadres enregistrés à cette date. Les mouvements déjà validés restent dans le rapport.');
  }
  const checkCount=rows.filter(r=>!!r.notes).length;
- if(checkCount)alerts.push(checkCount+' mouvement(s) avec mention de contrôle ou divergence documentaire : relire les documents sources.');
+ if(checkCount)alerts.push(checkCount+' mouvement(s) présentant un NR provisoire, une donnée à contrôler ou une divergence documentaire : voir les détails du rapport.');
  if(rows.some(r=>r.estimated))alerts.push('Un astérisque (*) signale un NR après calculé à partir du nombre de NR attribués.');
  if(!docs.length)alerts.push('Aucun document CSP cadres enregistré pour ce trimestre.');
  return {year,quarter,sources,rows,candidates:[...candidates.values()].sort((a,b)=>a.meeting.localeCompare(b.meeting)||a.name.localeCompare(b.name,'fr')),alerts,pendingDocuments,meetingDates:meetings};
