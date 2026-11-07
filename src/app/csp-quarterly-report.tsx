@@ -60,7 +60,7 @@ export default function CspQuarterlyReport({revision=0}:{revision?:number}){
   </div></div>
   <div className="analysis-options">
    <label>Année<select aria-label="Année du compte rendu" value={year} onChange={e=>setYear(Number(e.target.value))}>
-    {Array.from({length:8},(_,i)=>2024+i).map(y=><option key={y} value={y}>{y}</option>)}
+    {Array.from({length:Math.max(new Date().getFullYear()+5,year)-2024+1},(_,i)=>2024+i).map(y=><option key={y} value={y}>{y}</option>)}
    </select></label>
    <label>Trimestre<select aria-label="Trimestre du compte rendu" value={quarter} onChange={e=>setQuarter(Number(e.target.value))}>
     <option value={1}>T1 · Janvier à mars</option><option value={2}>T2 · Avril à juin</option>
