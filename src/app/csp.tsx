@@ -125,8 +125,10 @@ function EventEditor({event:e,candidates,update:write,before,problem,manualAvanc
 }
 
 function CspMethod(){
+ const [expanded,setExpanded]=useState(false);
  return <section className="panel csp-method" aria-labelledby="csp-method-title">
-  <h2 id="csp-method-title">Méthode de travail — ODJ puis RD</h2>
+  <div className="panel-heading"><h2 id="csp-method-title">Méthode de travail</h2><button type="button" className="btn" aria-expanded={expanded} aria-controls="csp-method-content" onClick={()=>setExpanded(value=>!value)}>{expanded?'Réduire':'En savoir plus'}</button></div>
+  <div id="csp-method-content" hidden={!expanded}>
   <p><b>Enregistrement :</b> chaque ODJ ou RD lu avec une date de séance valide est enregistré automatiquement en brouillon. Vous pouvez ensuite importer l’autre document : les deux restent dans leurs dossiers. Les décisions ne sont appliquées qu’après validation. Si la date manque ou si l’enregistrement échoue, un message le signale.</p>
   <p>Utiliser <b>« Importer un document CSP »</b> pour les ODJ et les RD. Le type est reconnu automatiquement ; en cas de doute, le confirmer avant l’analyse. Le classement utilise la date de séance. Les documents déjà enregistrés conservent leurs validations et annotations.</p>
   <p>Importer le <b>ODJ</b> pour préparer les situations, puis importer ou réactiver le <b>RD de la même CSP</b> pour confirmer les nominations. Les NNI sont recherchés dans les RUP actifs.</p>
@@ -141,6 +143,7 @@ function CspMethod(){
   <p><b>Corriger une décision déjà validée :</b> ouvrir « Consulter », rechercher l’agent dans « Toutes » ou « Traitées », puis cliquer sur « Modifier cette décision ». Saisir un motif, vérifier le résultat avant/après, puis enregistrer. Les autres validations sont conservées. Une décision reconnue dans les deux documents ouvre automatiquement sa source. « Réviser tout le document » reste réservé à une reprise globale.</p>
   <p><b>Pour les dernières validations :</b> ouvrir « À traiter », filtrer « À vérifier », puis utiliser « Vérifier / corriger ». Après correction, cliquer sur « Vérifier les changements », puis valider la décision individuellement ou les situations « Prêt » en bloc.</p>
   <p className="csp-method-note">Les documents peuvent avoir été importés dans un autre ordre : le rapprochement fonctionne aussi après réactivation du RD puis réouverture de l’ODJ. Une décision validée dans l’ODJ ou le RD est reconnue automatiquement dans l’autre document si elle est identique et quitte « À traiter ». Les différences restent à vérifier. Si le document de référence est désactivé ou corrigé, le rapprochement est recalculé. Les décisions déjà validées et les annotations sont conservées.</p>
+  </div>
  </section>;
 }
 
