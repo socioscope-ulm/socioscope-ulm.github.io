@@ -1,6 +1,7 @@
 import type {QuarterlyReport,QuarterlyRow} from './csp-quarterly-report';
 import {kindLabels,kindOrder} from './csp-quarterly-report';
 import {CSP_CHARTER_BG_DATA} from './csp-quarterly-background';
+import {CSP_MAIN_CGT_DATA,CSP_LOGO_CGT_DATA} from './csp-quarterly-brand-assets';
 
 const P={bg:'F7F1D8',red:'D7221C',deep:'A61C1C',cream:'FBF8E9',peach:'F3D1BA',text:'202020',muted:'615F57',line:'BD8B7E'};
 const date=(s:string)=>/^\d{4}-\d{2}-\d{2}$/.test(s)?s.slice(8,10)+'/'+s.slice(5,7)+'/'+s.slice(0,4):'—';
@@ -13,11 +14,43 @@ const kindTitles:Record<string,string>={
 };
 type Presentation={layout:string;author:string;title:string;subject:string;lang:string;theme:unknown;
  addSlide:(opts?:{masterName?:string})=>any;
- defineSlideMaster:(opts:{title:string;background:{color:string};objects:Array<{image:{data:string;x:number;y:number;w:number;h:number}}>})=>void;
+ defineSlideMaster:(opts:{title:string;background:{color:string};objects:Array<{image:{data:string;x:number;y:number;w:number;h:number}}|{text:{text:string;options:Record<string,unknown>}} >})=>void;
  write:(opts:{outputType:'blob';compression?:boolean})=>Promise<Blob|ArrayBuffer|Uint8Array|string>};
+/** Signature CGT ULM, présente dans les masques, sur toutes les pages.
+ * La charte fournit le logo CGT ; le nom ULM reste un texte éditable dans PowerPoint.
+ */
+function ulmBrand(){
+ return [
+  {image:{data:CSP_LOGO_CGT_DATA,x:11.65,y:0.10,w:.42,h:.49}},
+  {text:{text:'ULM',options:{x:12.05,y:.14,w:.92,h:.37,fontFace:'Arial',
+    fontSize:25,bold:true,italic:true,color:'666666',margin:0}}},
+  {text:{text:'DÉCISION · MAÎTRISE · CADRE',options:{x:12.0,y:.53,w:1.25,h:.13,
+    fontFace:'Arial',fontSize:5.1,color:'B82220',margin:0,align:'center'}}}
+ ];
+}
+function coverPage(ppt:Presentation,report:QuarterlyReport){
+ const s=ppt.addSlide({masterName:'CSP_CGT_COUVERTURE'});s.background={color:P.bg};
+ s.addText('COMMISSION SECONDAIRE\nDU PERSONNEL',{x:5.25,y:1.42,w:7.55,h:1.32,
+  fontFace:'Arial',fontSize:32,bold:true,color:P.text,margin:0,breakLine:false});
+ s.addText('COLLÈGE CADRES · ULM',{x:5.25,y:3.12,w:7.2,h:.50,
+  fontFace:'Arial',fontSize:22,bold:true,color:P.text,margin:0});
+ s.addText('T'+report.quarter+' · '+quarterLabel(report.year,report.quarter),{x:5.25,y:3.70,w:7.2,h:.45,
+  fontFace:'Arial',fontSize:22,color:P.deep,margin:0});
+ s.addText('CSP des Métiers de la PI et de la DOAAT',{x:5.25,y:4.20,w:7.25,h:.37,
+  fontFace:'Arial',fontSize:13,color:P.text,margin:0});
+ // Zone modifiable directement en double-cliquant sur son texte dans PowerPoint.
+ s.addText('Ajouter ici un texte ou un message CGT (modifiable dans PowerPoint)',{
+  x:5.25,y:4.90,w:6.97,h:1.12,fontFace:'Arial',fontSize:13,color:'424242',
+  margin:.10,breakLine:false,valign:'mid',
+  line:{color:'B9231C',transparency:55,width:.55},
+  fill:{color:'FFFFFF',transparency:80}
+ });
+ if(s.addNotes)s.addNotes('Couverture CGT ULM. Les titres et la zone de texte libre sont modifiables. La main et le fond proviennent de la charte FNME-CGT CEF (avril 2025).');
+ return s;
+}
 function newPage(ppt:Presentation,title:string,footer:string){
  const s=ppt.addSlide({masterName:'CSP_CGT_BEIGE'});s.background={color:P.bg};
- s.addText(title,{x:.56,y:.32,w:12,h:.52,fontFace:'Arial',fontSize:22,bold:true,
+ s.addText(title,{x:.56,y:.32,w:10.7,h:.52,fontFace:'Arial',fontSize:22,bold:true,
   color:P.text,margin:0,breakLine:false});
  s.addShape('line',{x:.56,y:.94,w:12.15,h:0,line:{color:P.red,width:1.5}});
  s.addText(footer,{x:.56,y:7.15,w:11.85,h:.20,fontFace:'Arial',fontSize:8.2,bold:true,color:P.deep,margin:0});
@@ -53,15 +86,14 @@ export async function downloadQuarterlyPpt(report:QuarterlyReport,includeCandida
  // Fond beige d'origine FNME-CGT en masque : les tableaux et textes restent modifiables.
  // Le masque permet aussi de dupliquer ou d'ajouter des diapositives avec la même trame.
  ppt.defineSlideMaster({title:'CSP_CGT_BEIGE',background:{color:P.bg},
-  objects:[{image:{data:CSP_CHARTER_BG_DATA,x:0,y:0,w:40/3,h:7.5}}]});
+  objects:[{image:{data:CSP_CHARTER_BG_DATA,x:0,y:0,w:40/3,h:7.5}},...ulmBrand()]});
+ // Un second masque conserve le même fond et le visuel de la main pour la couverture.
+ ppt.defineSlideMaster({title:'CSP_CGT_COUVERTURE',background:{color:P.bg},
+  objects:[{image:{data:CSP_CHARTER_BG_DATA,x:0,y:0,w:40/3,h:7.5}},
+   {image:{data:CSP_MAIN_CGT_DATA,x:0,y:1.10,w:5.5,h:5.6}},...ulmBrand()]});
  const foot='CGT ULM  /  CSP CADRES  /  T'+report.quarter+' '+report.year;
- let s=newPage(ppt,'COMPTE RENDU CSP CADRES',foot);
- bodyText(s,'Unité Logistique Maintenance',1.44,20,.55);
- bodyText(s,quarterLabel(report.year,report.quarter),2.15,22,.6);
- bodyText(s,'CSP des Métiers de la PI et de la DOAAT',3.04,16,.45);
- bodyText(s,'Extrait du Socioscope ULM · documents enregistrés et décisions validées',4.03,13,.45);
- bodyText(s,'Tableaux modifiables dans PowerPoint · une ligne par mouvement',4.69,12,.42);
- s=newPage(ppt,'PERIMETRE ET METHODE',foot);
+ coverPage(ppt,report);
+ let s=newPage(ppt,'PERIMETRE ET METHODE',foot);
  const lines=[
   'Période : '+quarterLabel(report.year,report.quarter)+', classement par date de séance.',
   report.meetingDates.length+' date(s) de séance ; '+report.sources.length+' document(s) CSP cadres.',
