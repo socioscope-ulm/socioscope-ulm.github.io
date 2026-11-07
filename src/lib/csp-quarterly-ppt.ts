@@ -17,14 +17,21 @@ type Presentation={layout:string;author:string;title:string;subject:string;lang:
  addSlide:(opts?:{masterName?:string})=>any;
  defineSlideMaster:(opts:{title:string;background:{color:string};objects:Array<{image:{data:string;x:number;y:number;w:number;h:number}}|{text:{text:string;options:Record<string,unknown>}} >})=>void;
  write:(opts:{outputType:'blob';compression?:boolean})=>Promise<Blob|ArrayBuffer|Uint8Array|string>};
-/** Logo CGT ULM original extrait de la présentation de référence fournie.
- * Le logo est un visuel statique dans le masque ; les titres et tableaux restent modifiables.
+/** Insérer les visuels comme objets de diapositive et non comme objets de masque :
+ * ils deviennent sélectionnables et déplaçables dans PowerPoint.
  */
-function ulmBrand(){
- return [{image:{data:CSP_LOGO_ULM_DATA,x:11.53,y:6.38,w:1.48,h:.67}}];
+function addULMLogo(slide:any,cover=false){
+ slide.addImage({data:CSP_LOGO_ULM_DATA,...(cover
+  ?{x:11.53,y:6.38,w:1.48,h:.67}
+  :{x:11.58,y:.16,w:1.37,h:.62})});
+}
+function addCoverHand(slide:any){
+ slide.addImage({data:CSP_MAIN_CGT_DATA,x:.12,y:1.08,w:5.15,h:5.45});
 }
 function coverPage(ppt:Presentation,report:QuarterlyReport){
  const s=ppt.addSlide({masterName:'CSP_CGT_COUVERTURE'});s.background={color:P.bg};
+ addCoverHand(s);
+ addULMLogo(s,true);
  s.addText('COMMISSION SECONDAIRE\nDU PERSONNEL',{x:5.25,y:1.42,w:7.55,h:1.32,
   fontFace:'Arial',fontSize:32,bold:true,color:P.text,margin:0,breakLine:false});
  s.addText('COLLÈGE CADRES · ULM',{x:5.25,y:3.12,w:7.2,h:.50,
@@ -45,7 +52,8 @@ function coverPage(ppt:Presentation,report:QuarterlyReport){
 }
 function newPage(ppt:Presentation,title:string,footer:string){
  const s=ppt.addSlide({masterName:'CSP_CGT_BEIGE'});s.background={color:P.bg};
- s.addText(title,{x:.56,y:.32,w:10.7,h:.52,fontFace:'Arial',fontSize:22,bold:true,
+ addULMLogo(s);
+ s.addText(title,{x:.56,y:.32,w:10.5,h:.52,fontFace:'Arial',fontSize:21,bold:true,
   color:P.text,margin:0,breakLine:false});
  s.addShape('line',{x:.56,y:.94,w:12.15,h:0,line:{color:P.red,width:1.5}});
  s.addText(footer,{x:.56,y:7.15,w:11.85,h:.20,fontFace:'Arial',fontSize:8.2,bold:true,color:P.deep,margin:0});
@@ -55,17 +63,94 @@ function bodyText(s:any,value:string,y:number,size=13,h=.46){
  s.addText(value,{x:.58,y,w:12.0,h,fontFace:'Arial',fontSize:size,color:P.text,margin:0,
   breakLine:false,valign:'mid'});
 }
-function table(s:any,rows:string[][],widths:number[],y=1.26,rowH=.64,fontSize=10){
- // PowerPoint native table, not a screenshot. Keep 7 rows or fewer for compatibility.
+function table(s:any,rows:string[][],widths:number[],y=1.26,rowH:number|number[]=.46,fontSize=9){
+ // Table native PPTX : aucune ligne n'est convertie en image.
+ const heights=Array.isArray(rowH)?rowH:rows.map(()=>rowH);
  const cells=rows.map((r,i)=>r.map((v,c)=>({text:String(v??''),options:{
-  fontSize:i===0?Math.max(8.3,fontSize-.4):fontSize,
+  fontSize:i===0?Math.max(8.1,fontSize-.3):fontSize,
   bold:i===0||c===0,color:i===0?'FFFFFF':P.text,
   fill:{color:i===0?P.red:i%2===0?P.peach:P.cream},
-  margin:.065,valign:'mid',align:'left'
+  margin:.04,valign:'mid',align:'left'
  }})));
- s.addTable(cells,{x:.37,y,w:widths.reduce((a,b)=>a+b,0),colW:widths,rowH,
-  border:{type:'solid',pt:.45,color:P.line},fontFace:'Arial',fontSize,
-  autoFit:false,showHeader:false,margin:.065,valign:'mid'});
+ s.addTable(cells,{x:.37,y,w:widths.reduce((a,b)=>a+b,0),colW:widths,rowH:heights,
+  border:{type:'solid',pt:.40,color:P.line},fontFace:'Arial',fontSize,
+  autoFit:false,showHeader:false,margin:.04,valign:'mid'});
+ return heights.reduce((n,h)=>n+h,0);
+}
+const movementCols=[2.36,2.46,1.48,1.18,1.21,.56,3.08];
+const movementHeaders=['NOM PRÉNOM','AGENCE / POSTE','CSP / EFFET',
+ 'GF AV. / AP.','NR AV. / AP.','NR +','SOURCE'];
+/** Dimensionnement prudent d'une cellule : une ligne supplémentaire accroît sa hauteur.
+ * Évite l'ancienne limite fixe de 6 mouvements par diapositive.
+ */
+function numberOfLines(value:string,width:number,fontSize=8.9){
+ const chars=Math.max(8,Math.floor(width*12.0*(9/fontSize)));
+ return String(value).split('\n').reduce((n,line)=>n+Math.max(1,Math.ceil(line.length/chars)),0);
+}
+function movementCells(e:QuarterlyRow):string[]{
+ const agency=[e.agency,e.job].filter(x=>x&&x!=='—').join('\n');
+ return [e.name,agency||'—',date(e.meeting)+'\n'+date(e.effective),
+  e.gfBefore+' / '+e.gfAfter,e.nrBefore+' / '+e.nrAfter,e.nrSteps,e.source];
+}
+function movementHeight(e:QuarterlyRow){
+ const cells=movementCells(e);
+ const lines=Math.max(...cells.map((v,i)=>numberOfLines(v,movementCols[i])));
+ return Math.min(.82,Math.max(.40,.085+lines*.148));
+}
+/** Petites rubriques côte à côte verticalement ; grands motifs découpés selon l'espace restant.
+ * Retourne le nombre total de mouvements insérés (test d'exhaustivité).
+ */
+function addCompactMovements(ppt:Presentation,report:QuarterlyReport,foot:string){
+ let slide:any=null;
+ let y=1.20,sectionsOnPage=0,movementsOnPage:QuarterlyRow[]=[];
+ let count=0;
+ const LIMIT=6.87;
+ const startPage=()=>{
+  slide=newPage(ppt,'MOUVEMENTS CSP CADRES',foot);
+  y=1.18;sectionsOnPage=0;movementsOnPage=[];
+ };
+ for(const kind of kindOrder){
+  const values=report.rows.filter(r=>r.kind===kind);
+  if(!values.length)continue;
+  let offset=0;
+  const title=kindTitles[kind]||kindLabels[kind].toUpperCase();
+  while(offset<values.length){
+   const remaining=values.slice(offset);
+   const estimatedTotal=.37+.34+remaining.reduce((n,r)=>n+movementHeight(r),0)+.13;
+   if(!slide)startPage();
+   // Évite les petites rubriques orphelines à la fin d'une page.
+   if(sectionsOnPage>0&&remaining.length<=7&&y+estimatedTotal>LIMIT)startPage();
+   if(sectionsOnPage>0&&remaining.length>7&&LIMIT-y<1.82)startPage();
+   const heading=.30;
+   const gapBefore=sectionsOnPage>0?.16:0;
+   const header=.33;
+   let free=LIMIT-y-heading-gapBefore-header-.11;
+   if(free<.40){startPage();free=LIMIT-y-heading-header-.11;}
+   const block:QuarterlyRow[]=[];
+   const heights:number[]=[header];
+   for(const item of remaining){
+    const h=movementHeight(item);
+    if(h>free&&block.length)break;
+    if(h>free&&!block.length)throw Error('Une ligne de mouvement dépasse la hauteur disponible.');
+    block.push(item);heights.push(h);free-=h;
+   }
+   if(!block.length)throw Error('Pagination CSP impossible : aucune ligne sur la diapositive.');
+   y+=gapBefore;
+   const label=title+(offset>0?' — SUITE':'');
+   slide.addText(label,{x:.48,y,w:11.8,h:heading,fontFace:'Arial',fontSize:15.2,bold:true,
+    color:P.text,margin:0,breakLine:false});
+   y+=heading;
+   const tableRows=[movementHeaders,...block.map(movementCells)];
+   y+=table(slide,tableRows,movementCols,y,heights,8.9);
+   y+=.11;
+   count+=block.length;
+   offset+=block.length;
+   sectionsOnPage++;
+   movementsOnPage.push(...block);
+   // Sources remains present in the editable source column of each movement.
+  }
+ }
+ return count;
 }
 function blocks<T>(xs:T[],n:number){const out:T[][]=[];for(let i=0;i<xs.length;i+=n)out.push(xs.slice(i,i+n));return out;}
 export async function downloadQuarterlyPpt(report:QuarterlyReport,includeCandidates=true){
@@ -78,14 +163,12 @@ export async function downloadQuarterlyPpt(report:QuarterlyReport,includeCandida
  ppt.title='Compte rendu CSP cadres T'+report.quarter+' '+report.year;
  ppt.subject='Synthèse des mouvements CSP cadres, issue du Socioscope';
  ppt.lang='fr-FR';ppt.theme={headFontFace:'Arial',bodyFontFace:'Arial',lang:'fr-FR'};
- // Fond beige d'origine FNME-CGT en masque : les tableaux et textes restent modifiables.
- // Le masque permet aussi de dupliquer ou d'ajouter des diapositives avec la même trame.
+ // Les masques portent uniquement la texture. Les logos sont ajoutés aux slides :
+ // ils sont alors déplaçables après export et ne font pas partie de la texture.
  ppt.defineSlideMaster({title:'CSP_CGT_BEIGE',background:{color:P.bg},
-  objects:[{image:{data:CSP_CHARTER_BG_DATA,x:0,y:0,w:40/3,h:7.5}},...ulmBrand()]});
- // Un second masque conserve le même fond et le visuel de la main pour la couverture.
+  objects:[{image:{data:CSP_CHARTER_BG_DATA,x:0,y:0,w:40/3,h:7.5}}]});
  ppt.defineSlideMaster({title:'CSP_CGT_COUVERTURE',background:{color:P.bg},
-  objects:[{image:{data:CSP_CHARTER_BG_DATA,x:0,y:0,w:40/3,h:7.5}},
-   {image:{data:CSP_MAIN_CGT_DATA,x:0,y:1.10,w:5.5,h:5.6}},...ulmBrand()]});
+  objects:[{image:{data:CSP_CHARTER_BG_DATA,x:0,y:0,w:40/3,h:7.5}}]});
  const foot='CGT ULM  /  CSP CADRES  /  T'+report.quarter+' '+report.year;
  coverPage(ppt,report);
  let s=newPage(ppt,'PERIMETRE ET METHODE',foot);
@@ -110,28 +193,14 @@ export async function downloadQuarterlyPpt(report:QuarterlyReport,includeCandida
   rows.push([kindLabels[kind],...months.map(m=>String(subset.filter(r=>Number(r.meeting.slice(5,7))===m).length)),String(subset.length)]);
  }
  rows.push(['TOTAL',...months.map(m=>String(report.rows.filter(r=>Number(r.meeting.slice(5,7))===m).length)),String(report.rows.length)]);
- table(s,rows,[5.5,1.8,1.8,1.8,1.4],1.20,.48,10.9);
+ table(s,rows,[5.5,1.8,1.8,1.8,1.4],1.20,.43,10.5);
  bodyText(s,'Comptage par séance, et non par date d’effet.',6.60,10,.28);
- for(const kind of kindOrder){
-  const values=report.rows.filter(r=>r.kind===kind);
-  if(!values.length)continue;
-  const parts=blocks(values,6);
-  for(let page=0;page<parts.length;page++){
-   s=newPage(ppt,(kindTitles[kind]||kindLabels[kind].toUpperCase())+
-    (parts.length>1?' ('+(page+1)+'/'+parts.length+')':''),foot);
-   const cells=[['NOM PRÉNOM','AGENCE / POSTE','CSP / EFFET','GF AV. / AP.','NR AV. / AP.','NR +','SOURCE']];
-   for(const e of parts[page]){
-    const agency=[e.agency,e.job].filter(x=>x&&x!=='—').join('\n');
-    cells.push([e.name,agency||'—',date(e.meeting)+'\n'+date(e.effective),
-      e.gfBefore+' / '+e.gfAfter,e.nrBefore+' / '+e.nrAfter,e.nrSteps,e.source]);
-   }
-   table(s,cells,[2.4,2.3,1.50,1.23,1.30,.64,2.98],1.19,.72,9.65);
-   bodyText(s,'* NR après calculé à partir du nombre de NR gagnés (à vérifier).',6.70,9.6,.27);
-   if(s.addNotes)s.addNotes('[Sources]\n'+parts[page].map((e:QuarterlyRow)=>e.name+' : '+e.source).join('\n'));
-  }
- }
+ const exportedMovements=addCompactMovements(ppt,report,foot);
+ if(exportedMovements!==report.rows.length)
+  throw Error('Export incomplet : '+exportedMovements+' / '+report.rows.length+' mouvements.');
+
  if(includeCandidates){
-  const parts=blocks(report.candidates,5);
+  const parts=blocks(report.candidates,7);
   if(!parts.length)parts.push([]);
   for(let p=0;p<parts.length;p++){
    s=newPage(ppt,'CANDIDATURES NON RETENUES'+(parts.length>1?' ('+(p+1)+'/'+parts.length+')':''),foot);
@@ -140,7 +209,7 @@ export async function downloadQuarterlyPpt(report:QuarterlyReport,includeCandida
     const cells=[['NOM PRÉNOM','AGENCE','POSTE / RÉFÉRENCE','DATE CSP','ISSUE','SOURCE']];
     for(const v of parts[p])cells.push([v.name,v.agency,(v.job||'—')+'\n'+(v.reference||''),
      date(v.meeting),v.reason,v.source]);
-    table(s,cells,[2.35,1.76,3.35,1.29,2.43,1.17],1.22,.75,9.9);
+    table(s,cells,[2.35,1.76,3.35,1.29,2.43,1.17],1.22,.63,9.6);
    }
    bodyText(s,'Ces candidatures ne constituent pas des mouvements individuels validés.',6.65,10,.3);
   }
@@ -152,13 +221,13 @@ export async function downloadQuarterlyPpt(report:QuarterlyReport,includeCandida
   part.forEach((x,k)=>s.addText('•  '+x,{x:.59,y:1.32+k*1.03,w:12.03,h:.92,
    fontFace:'Arial',fontSize:12,color:P.text,margin:.03,valign:'top',breakLine:false}));
  }
- const sources=blocks(report.sources,3);
+ const sources=blocks(report.sources,6);
  for(let i=0;i<sources.length;i++){
   s=newPage(ppt,'DOCUMENTS DE REFERENCE ('+(i+1)+'/'+sources.length+')',foot);
   const cells=[['REPÈRE','CSP','TYPE / STATUT','DOCUMENT ORIGINAL']];
   for(const d of sources[i])cells.push([d.ref,date(d.date),
    d.type+(d.status==='validated'?' validé':' à vérifier'),d.name]);
-  table(s,cells,[.95,1.55,2.15,7.70],1.22,1.14,10.0);
+  table(s,cells,[.95,1.55,2.15,7.70],1.22,.72,9.5);
  }
  const file='CR_CSP_Cadres_T'+report.quarter+'_'+report.year+'_Tableaux_modifiables.pptx';
  // Create the complete binary before starting the browser download.
