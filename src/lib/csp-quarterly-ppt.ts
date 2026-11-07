@@ -1,5 +1,6 @@
 import type {QuarterlyReport,QuarterlyRow} from './csp-quarterly-report';
 import {kindLabels,kindOrder} from './csp-quarterly-report';
+import {CSP_CHARTER_BG_DATA} from './csp-quarterly-background';
 
 const P={bg:'F7F1D8',red:'D7221C',deep:'A61C1C',cream:'FBF8E9',peach:'F3D1BA',text:'202020',muted:'615F57',line:'BD8B7E'};
 const date=(s:string)=>/^\d{4}-\d{2}-\d{2}$/.test(s)?s.slice(8,10)+'/'+s.slice(5,7)+'/'+s.slice(0,4):'—';
@@ -11,9 +12,11 @@ const kindTitles:Record<string,string>={
  nomination:'NOMINATIONS',posthume:'AVANCEMENTS A TITRE POSTHUME'
 };
 type Presentation={layout:string;author:string;title:string;subject:string;lang:string;theme:unknown;
- addSlide:()=>any;write:(opts:{outputType:'blob';compression?:boolean})=>Promise<Blob|ArrayBuffer|Uint8Array|string>};
+ addSlide:(opts?:{masterName?:string})=>any;
+ defineSlideMaster:(opts:{title:string;background:{color:string};objects:Array<{image:{data:string;x:number;y:number;w:number;h:number}}>})=>void;
+ write:(opts:{outputType:'blob';compression?:boolean})=>Promise<Blob|ArrayBuffer|Uint8Array|string>};
 function newPage(ppt:Presentation,title:string,footer:string){
- const s=ppt.addSlide();s.background={color:P.bg};
+ const s=ppt.addSlide({masterName:'CSP_CGT_BEIGE'});s.background={color:P.bg};
  s.addText(title,{x:.56,y:.32,w:12,h:.52,fontFace:'Arial',fontSize:22,bold:true,
   color:P.text,margin:0,breakLine:false});
  s.addShape('line',{x:.56,y:.94,w:12.15,h:0,line:{color:P.red,width:1.5}});
@@ -47,6 +50,10 @@ export async function downloadQuarterlyPpt(report:QuarterlyReport,includeCandida
  ppt.title='Compte rendu CSP cadres T'+report.quarter+' '+report.year;
  ppt.subject='Synthèse des mouvements CSP cadres, issue du Socioscope';
  ppt.lang='fr-FR';ppt.theme={headFontFace:'Arial',bodyFontFace:'Arial',lang:'fr-FR'};
+ // Fond beige d'origine FNME-CGT en masque : les tableaux et textes restent modifiables.
+ // Le masque permet aussi de dupliquer ou d'ajouter des diapositives avec la même trame.
+ ppt.defineSlideMaster({title:'CSP_CGT_BEIGE',background:{color:P.bg},
+  objects:[{image:{data:CSP_CHARTER_BG_DATA,x:0,y:0,w:40/3,h:7.5}}]});
  const foot='CGT ULM  /  CSP CADRES  /  T'+report.quarter+' '+report.year;
  let s=newPage(ppt,'COMPTE RENDU CSP CADRES',foot);
  bodyText(s,'Unité Logistique Maintenance',1.44,20,.55);
