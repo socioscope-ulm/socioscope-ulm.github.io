@@ -13,10 +13,10 @@ test('real individual payroll route matches the full payroll including corrected
  const imports=[{id:'import',date:'2025-12-31',name:'import',status:'validated',count:1,complete:false,detail:'{}'}];
  const imported=[{id:'imported',agentId:'imported',source:'import',row:1,name:'Linked import',gf:8,nr:100,agency:'AMTC',iegYears:10,seniorityDate:'2025-12-31'}];
  const rates={'1.24':{'100':Array(12).fill(14000),'200':Array.from({length:12},(_,i)=>20000+i*100)},'1.245':{'100':Array(12).fill(15000),'200':Array(12).fill(23000)}};
- const refs=[{id:'grid',kind:'grid',status:'validated',date:'2026-01-01',created:'',payload:{rates}},{id:'bonus',kind:'bonus-detail',status:'validated',date:'2025-01-01',created:'',payload:{objectiveYear:2025,paymentYear:2025,rows:{'8':{rpc:null,rpem:4000,pvpa:null},'15':{rpc:6000,rpem:null,pvpa:66200}}}}];
+ const refs=[{id:'grid',kind:'grid',status:'validated',date:'2026-01-01',created:'',payload:{rates}},{id:'bonus',kind:'bonus-detail',status:'validated',date:'2025-01-01',created:'',payload:{objectiveYear:2024,paymentYear:2025,rows:{'8':{rpc:null,rpem:4000,pvpa:null},'15':{rpc:6000,rpem:null,pvpa:66200}}}},{id:'bonus2026',kind:'bonus-detail',status:'validated',date:'2026-01-01',created:'',payload:{objectiveYear:2025,paymentYear:2026,rows:{'8':{rpc:null,rpem:5000,pvpa:null},'15':{rpc:7000,rpem:null,pvpa:70000}}}}];
  const result=await build({stdin:{contents:`export {GET} from './src/app/api/agents/route.ts'; export {agentData} from './src/lib/agents-store.ts';`,resolveDir:new URL('..',import.meta.url).pathname},bundle:true,write:false,platform:'node',format:'esm',plugins:[{name:'individual-payroll-fixture',setup(b){
   b.onResolve({filter:/\/(seeds|store|payroll-store)(\.ts)?$/},a=>({path:a.path.split('/').at(-1)!.replace('.ts',''),namespace:'individual-test'}));
-  b.onLoad({filter:/.*/,namespace:'individual-test'},a=>({contents:a.path==='seeds'?`export async function loadSeeds(){throw Error("Unexpected seed reload in payroll");}export const packedText=${JSON.stringify(JSON.stringify(packed))};export const rupSeedText=${JSON.stringify(JSON.stringify(rup))};`:a.path==='payroll-store'?`export async function payrollReferences(){return ${JSON.stringify(refs)};}export async function activeAnnualBonusId(){return 'bonus';}`:`
+  b.onLoad({filter:/.*/,namespace:'individual-test'},a=>({contents:a.path==='seeds'?`export async function loadSeeds(){throw Error("Unexpected seed reload in payroll");}export const packedText=${JSON.stringify(JSON.stringify(packed))};export const rupSeedText=${JSON.stringify(JSON.stringify(rup))};`:a.path==='payroll-store'?`export async function payrollReferences(){return ${JSON.stringify(refs)};}`:`
    export function resources(){return {
     db:{prepare(query){return {async all(){return {results:query.includes('agent_imports')?${JSON.stringify(imports)}:query.includes('agent_decisions')?${JSON.stringify(decisions)}:[]};},async first(){return {settings:{engagementRate:3.5,autonomieRate:4}};}};}},
     bucket:{async get(key){if(key==='agents/import/records.json')return {async json(){return ${JSON.stringify(imported)};}};throw Error('Unexpected object');}}
@@ -37,6 +37,11 @@ test('real individual payroll route matches the full payroll including corrected
  const current=await (await call('agent=A12345')).json();assert.match(current.row.method,/correction administrative/);assert.equal(current.row.level,10);
  const focus=await agentData(false,'A12345');assert.equal(focus.data.records.length,2);assert.ok(focus.data.records.every((r:any)=>r.agentId==='A12345'));assert.equal(focus.data.records[0].rupCareer.date,'2000-01-01');
  const presence=await (await call('agent=B12345')).json();assert.equal(presence.row.manualPresence,true);
+ const collective2025=await (await call('')).json();assert.equal(collective2025.bonusId,'bonus');assert.equal(collective2025.bonusSelection,'exact');
+ const individual2025=await (await call('agent=A12345')).json();assert.equal(individual2025.bonusId,'bonus');
+ const individualOverride=await (await call('agent=A12345&bonus=bonus2026')).json();assert.equal(individualOverride.bonusId,'bonus2026');assert.equal(individualOverride.bonusSelection,'manual');
+ const massOverride=await (await call('bonus=bonus2026')).json();assert.equal(massOverride.bonusId,'bonus2026');assert.equal(massOverride.bonusSelection,'manual');
+ assert.notEqual(massOverride.annualBonusCents,collective2025.annualBonusCents);
  const bad=await GET(new Request('https://fixture.test/api/agents?view=payroll&source=unknown&agent=A12345',{headers:{'oai-authenticated-user-id':'fixture-user'}}));assert.equal(bad.status,404);
 });
 

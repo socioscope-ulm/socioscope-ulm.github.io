@@ -8,7 +8,8 @@ export function selectReference(refs:PayrollReference[],kind:PayrollReference['k
  * calendar year; otherwise use the validated payment year nearest to it.
  * When equidistant, prefer the earlier payment year (no future-looking tie).
  * References sharing a payment year are resolved by most recent objective year.
- * This intentionally does not change default mass-payroll/simulator selection.
+ * Individual and collective payroll snapshots use this same nearest-year rule.
+ * Simulations without a photograph instead use the latest validated year.
  */
 export function selectNearestAnnualBonusReference(refs:PayrollReference[],situationDate:string):PayrollReference|undefined{
  if(!/^\d{4}-\d{2}-\d{2}$/.test(situationDate))return undefined;
@@ -23,6 +24,14 @@ export function selectNearestAnnualBonusReference(refs:PayrollReference[],situat
     ||String(b.created||'').localeCompare(String(a.created||''))
     ||a.id.localeCompare(b.id);
  })[0];
+}
+/** Latest validated payment year, then latest objective year. */
+export function selectLatestAnnualBonusReference(refs:PayrollReference[]):PayrollReference|undefined{
+ return refs.filter(r=>r.kind==='bonus-detail'&&r.status==='validated'&&Number.isInteger(r.payload?.paymentYear))
+  .sort((a,b)=>Number(b.payload.paymentYear)-Number(a.payload.paymentYear)
+   ||Number(b.payload.objectiveYear||0)-Number(a.payload.objectiveYear||0)
+   ||String(b.created||'').localeCompare(String(a.created||''))
+   ||a.id.localeCompare(b.id))[0];
 }
 export function validateReference(kind:string,p:any){
  if(!p||typeof p!=='object')return false;
