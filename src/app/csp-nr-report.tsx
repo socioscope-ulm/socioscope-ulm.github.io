@@ -1,6 +1,6 @@
 'use client';
 import {useEffect,useMemo,useRef,useState} from 'react';
-import {Download,RefreshCw} from 'lucide-react';
+import {BarChart3,ChevronRight,Download,RefreshCw} from 'lucide-react';
 import type {NRReportRow} from '../lib/csp-nr-report';
 type Report={year:number;rows:NRReportRow[];totalCsp:number;totalManual:number;total:number;toVerify:number;agents:number};
 const fmt=(v:number)=>new Intl.NumberFormat('fr-FR').format(v);
@@ -18,6 +18,7 @@ export default function CspNRReport(){
  const [busy,setBusy]=useState(false);
  const [error,setError]=useState('');
  const [revision,setRevision]=useState(0);
+ const [hasOpened,setHasOpened]=useState(false);
  const [agency,setAgency]=useState('');
  const [kind,setKind]=useState('');
  const [showDetail,setShowDetail]=useState(false);
@@ -31,6 +32,8 @@ export default function CspNRReport(){
  const [showAllCsp,setShowAllCsp]=useState(false);
  useEffect(()=>setShowAllCsp(false),[year,agency,kind]);
  useEffect(()=>{
+  // Avoid reading Supabase until the administrator first opens this report.
+  if(!hasOpened)return;
   const controller=new AbortController();setBusy(true);setError('');setReport(null);
   fetch('/api/csp?nrReport=1&year='+year,{cache:'no-store',signal:controller.signal})
    .then(async r=>{const b=await r.json();if(!r.ok)throw Error(b.error||'Bilan indisponible.');return b as Report;})
@@ -38,7 +41,7 @@ export default function CspNRReport(){
    .catch(e=>{if(!controller.signal.aborted)setError((e as Error).message);})
    .finally(()=>{if(!controller.signal.aborted)setBusy(false);});
   return ()=>controller.abort();
- },[year,revision]);
+ },[hasOpened,year,revision]);
  const agencies=useMemo(()=>[...new Set(report?.rows.map(r=>r.agency)||[])].sort((a,b)=>a.localeCompare(b,'fr')),[report]);
  const rows=useMemo(()=>report?.rows.filter(r=>(!agency||r.agency===agency)&&(!kind||r.kind===kind))||[],[report,agency,kind]);
  const detailRows=rows.filter(r=>detailFilter==='manual'?r.source==='manual'&&r.nr!==null:detailFilter==='unchecked'?r.nr===null:true);
@@ -53,8 +56,10 @@ export default function CspNRReport(){
   item.total+=r.nr!;item.agents.add(r.agentId||r.name);acc[r.documentId]=item;return acc;
  },{})).sort((a,b)=>a.date.localeCompare(b.date)||a.name.localeCompare(b.name,'fr'));
  const years=Array.from({length:Math.max(1,new Date().getFullYear()-2023)},(_,i)=>new Date().getFullYear()-i);
- return <section className="panel" aria-label="Bilan annuel des NR attribués">
-  <div className="panel-heading"><div><h2>Bilan annuel des NR attribués</h2><p>Attributions validées du 1er janvier au 31 décembre, classées par date d’effet. Ce bilan est indépendant des règles de validation des CSP.</p></div></div>
+ return <details className="document-folder" aria-label="Bilan annuel des NR attribués" onToggle={event=>{if(event.currentTarget.open)setHasOpened(true);}}>
+  <summary><ChevronRight size={16} className="folder-chevron"/><BarChart3 size={20}/><strong>Bilan annuel des NR attribués</strong><span className="badge">Afficher le bilan</span></summary>
+  <div className="document-folder-content">
+  <p>Attributions validées du 1er janvier au 31 décembre, classées par date d’effet. Ce bilan est indépendant des règles de validation des CSP.</p>
   <div style={{display:'flex',flexWrap:'wrap',alignItems:'end',gap:12,margin:'14px 0'}}>
    <label>Année<select value={year} onChange={e=>{setYear(Number(e.target.value));setAgency('');setKind('');setPage(0);}}>{years.map(y=><option value={y} key={y}>{y}</option>)}</select></label>
    <label>Agence<select value={agency} onChange={e=>{setAgency(e.target.value);setPage(0);}}><option value="">Toute l’ULM</option>{agencies.map(a=><option value={a} key={a}>{a}</option>)}</select></label>
@@ -83,5 +88,6 @@ export default function CspNRReport(){
    </div>}
    <p className="filter-note" style={{marginTop:12}}>Une décision déjà reconnue par un autre ODJ/RD n’est comptée qu’une fois. Nominations à NR constant, candidatures non retenues et mouvements non approuvés sont exclus. Les corrections manuelles sont présentées séparément.</p>
   </>}
- </section>;
+  </div>
+ </details>;
 }
