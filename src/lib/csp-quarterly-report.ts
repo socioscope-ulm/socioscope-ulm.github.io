@@ -66,16 +66,40 @@ const sameNomination=(a:QuarterlyEvent,b:QuarterlyEvent)=>a.kind==='nomination'&
  (!a.job||!b.job||norm(a.job)===norm(b.job))&&
  // La date d'effet n'est pas toujours renseignée dans les candidatures ODJ.
  (!a.effective||!b.effective||a.effective===b.effective);
+// Some RDs put the already-attributed NR in "NR before" while the ODJ
+// has the actual NR before/after and the same NR+ count. This is not a
+// second advancement. Match only across ODJ/RD for one meeting, one person,
+// one effective date and one consistent award; never merge two ODJ or two RDs.
+function shiftedAdvancement(odj:Item,rd:Item){
+ if(odj.doc.documentType!=='cr'||rd.doc.documentType!=='rd'||
+  odj.doc.date!==rd.doc.date||odj.e.kind!=='avancement'||rd.e.kind!=='avancement'||
+  odj.e.effective!==rd.e.effective||
+  norm(odj.e.agentId||odj.e.name)!==norm(rd.e.agentId||rd.e.name))return false;
+ const stepOdj=nrGain(odj.e),stepRd=nrGain(rd.e);
+ const before=numeric(odj.e,'nrBefore'),after=numeric(odj.e,'nrAfter');
+ const rdBefore=numeric(rd.e,'nrBefore'),rdAfter=numeric(rd.e,'nrAfter');
+ const odjGF=numeric(odj.e,'gfBefore'),rdGF=numeric(rd.e,'gfBefore');
+ return filled(stepOdj)&&Number.isInteger(stepOdj)&&stepOdj>0&&
+  stepOdj===stepRd&&filled(before)&&filled(after)&&after-before===stepOdj*5&&
+  rdBefore===after&&rdAfter===undefined&&
+  (!filled(odjGF)||!filled(rdGF)||odjGF===rdGF)&&
+  (!odj.e.reference||!rd.e.reference||norm(odj.e.reference)===norm(rd.e.reference));
+}
+function shiftedPair(a:Item,b:Item){
+ return shiftedAdvancement(a,b)||shiftedAdvancement(b,a);
+}
 function compatible(g:Group,item:Item){
  const e=item.e;
  if(g.items.some(i=>i.doc.id===item.doc.id))return false;
  for(const old of g.items){
   const a=old.e;
+  if(old.doc.date!==item.doc.date)return false;
   if(a.reference&&e.reference&&norm(a.reference)!==norm(e.reference))return false;
   if(a.kind==='nomination'&&a.job&&e.job&&norm(a.job)!==norm(e.job))return false;
   if(['avancement','mesure','posthume'].includes(a.kind)){
    const first=nrGain(a),second=nrGain(e);
    if(filled(first)&&filled(second)&&first!==second)return false;
+   if(shiftedPair(old,item))continue;
    if(filled(numeric(a,'nrBefore'))&&filled(numeric(e,'nrBefore'))&&numeric(a,'nrBefore')!==numeric(e,'nrBefore'))return false;
    if(filled(numeric(a,'nrAfter'))&&filled(numeric(e,'nrAfter'))&&numeric(a,'nrAfter')!==numeric(e,'nrAfter'))return false;
   }
@@ -85,6 +109,7 @@ function compatible(g:Group,item:Item){
 function toRow(g:Group):QuarterlyRow{
  const priority=[...g.items].sort((a,b)=>evidence(b.e)-evidence(a.e)||Number(b.doc.documentType==='rd')-Number(a.doc.documentType==='rd'));
  const first=priority[0].e;
+ const shifted=g.items.flatMap(a=>g.items.map(b=>({a,b}))).find(({a,b})=>shiftedAdvancement(a,b));
  const confirmation=g.items.find(x=>x.doc.documentType==='rd'&&gfConstant(x.e));
  const odjEvidence=confirmation?g.items.find(x=>x.doc.documentType==='cr'&&sameNomination(x.e,confirmation.e)&&
   filled(numeric(x.e,'gfBefore'))&&filled(numeric(x.e,'nrBefore'))&&
@@ -99,6 +124,8 @@ function toRow(g:Group):QuarterlyRow{
  };
  const pick=(k:'gfBefore'|'gfAfter'|'nrBefore'|'nrAfter')=>{
   const confirmed=constantValue(k);if(confirmed!==undefined)return confirmed;
+  // The verified ODJ has the true starting/ending NR of this single award.
+  if(shifted&&k.startsWith('nr'))return numeric(shifted.a.e,k);
   for(const x of priority){const n=numeric(x.e,k);if(n!==undefined)return n;}return undefined;
  };
  // Admission au stage et titularisation ne modifient pas le GF.
@@ -132,7 +159,10 @@ function toRow(g:Group):QuarterlyRow{
  const labels={gfBefore:'GF avant',gfAfter:'GF après',nrBefore:'NR avant',nrAfter:'NR après'};
  for(const k of ['gfBefore','gfAfter','nrBefore','nrAfter'] as const){
   const nums=[...new Set(g.items.map(x=>numeric(x.e,k)).filter(filled))];
-  if(nums.length>1)checks.push('Divergence '+labels[k]+' : '+g.items.filter(x=>numeric(x.e,k)!==undefined).map(x=>numeric(x.e,k)+' dans '+location(x)).join(' / '));
+  // RD's "NR before" may echo ODJ's "NR after": not a real conflict.
+  if(nums.length>1&&!(shifted&&k==='nrBefore'&&
+   nums.length===2&&nums.includes(numeric(shifted.a.e,'nrBefore')!)&&nums.includes(numeric(shifted.a.e,'nrAfter')!)))
+   checks.push('Divergence '+labels[k]+' : '+g.items.filter(x=>numeric(x.e,k)!==undefined).map(x=>numeric(x.e,k)+' dans '+location(x)).join(' / '));
  }
  for(const x of g.items){
   const where=location(x);
