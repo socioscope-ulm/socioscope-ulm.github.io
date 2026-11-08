@@ -101,7 +101,16 @@ function toRow(g:Group):QuarterlyRow{
   const confirmed=constantValue(k);if(confirmed!==undefined)return confirmed;
   for(const x of priority){const n=numeric(x.e,k);if(n!==undefined)return n;}return undefined;
  };
- const beforeGF=pick('gfBefore'),afterGF=pick('gfAfter');
+ // Admission au stage et titularisation ne modifient pas le GF.
+ // Les sources peuvent ne renseigner qu'une seule des deux valeurs :
+ // compléter uniquement le côté manquant pour le CR (aucune écriture en base).
+ const originalBeforeGF=pick('gfBefore'),originalAfterGF=pick('gfAfter');
+ const constantStageGF=first.kind==='admission'||first.kind==='titularisation';
+ const knownStageGF=constantStageGF
+  ?first.kind==='admission'?(originalAfterGF??originalBeforeGF):(originalBeforeGF??originalAfterGF)
+  :undefined;
+ const beforeGF=originalBeforeGF??knownStageGF;
+ const afterGF=originalAfterGF??knownStageGF;
  const beforeNR=pick('nrBefore');let afterNR=pick('nrAfter');
  const steps=priority.map(x=>nrGain(x.e)).find(filled);
  let estimated=false;
@@ -112,6 +121,13 @@ function toRow(g:Group):QuarterlyRow{
  const agency=priority.map(x=>x.e.recordedAfter?.agency||x.e.agency||x.e.recordedBefore?.agency||'').find(Boolean)||'—';
  const job=priority.map(x=>x.e.job||x.e.recordedAfter?.job||'').find(Boolean)||'';
  const checks:string[]=[],resolved:string[]=[];
+ // Ne jamais masquer un éventuel écart réel GF sur ces mouvements.
+ if(constantStageGF&&filled(originalBeforeGF)&&filled(originalAfterGF)&&originalBeforeGF!==originalAfterGF){
+  checks.push('Incohérence GF pour '+kindLabels[first.kind]+' : GF avant '+originalBeforeGF+' différent du GF après '+originalAfterGF+'. Les documents sources doivent être vérifiés.');
+ }
+ if(constantStageGF&&knownStageGF===undefined){
+  checks.push('GF absent des documents pour '+kindLabels[first.kind]+' : impossible de compléter les GF avant et après sans valeur source.');
+ }
  const location=(x:Item)=>x.ref+' · '+x.doc.name+' · page '+(x.e.page||'?');
  const labels={gfBefore:'GF avant',gfAfter:'GF après',nrBefore:'NR avant',nrAfter:'NR après'};
  for(const k of ['gfBefore','gfAfter','nrBefore','nrAfter'] as const){
