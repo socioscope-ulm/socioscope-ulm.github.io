@@ -85,7 +85,9 @@ function toRow(g:Group):QuarterlyRow{
  const first=priority[0].e;
  const confirmation=g.items.find(x=>x.doc.documentType==='rd'&&gfConstant(x.e));
  const odjEvidence=confirmation?g.items.find(x=>x.doc.documentType==='cr'&&sameNomination(x.e,confirmation.e)&&
-  filled(numeric(x.e,'gfBefore'))&&filled(numeric(x.e,'nrBefore'))):undefined;
+  filled(numeric(x.e,'gfBefore'))&&filled(numeric(x.e,'nrBefore'))&&
+  (!filled(numeric(x.e,'gfAfter'))||numeric(x.e,'gfAfter')===numeric(x.e,'gfBefore'))&&
+  (!filled(numeric(x.e,'nrAfter'))||numeric(x.e,'nrAfter')===numeric(x.e,'nrBefore'))):undefined;
  const constantValue=(k:'gfBefore'|'gfAfter'|'nrBefore'|'nrAfter')=>{
   if(!odjEvidence||!confirmation)return undefined;
   const before=k.endsWith('Before');
@@ -112,7 +114,7 @@ function toRow(g:Group):QuarterlyRow{
  const labels={gfBefore:'GF avant',gfAfter:'GF après',nrBefore:'NR avant',nrAfter:'NR après'};
  for(const k of ['gfBefore','gfAfter','nrBefore','nrAfter'] as const){
   const nums=[...new Set(g.items.map(x=>numeric(x.e,k)).filter(filled))];
-  if(nums.length>1&&!odjEvidence)checks.push('Divergence '+labels[k]+' : '+g.items.filter(x=>numeric(x.e,k)!==undefined).map(x=>numeric(x.e,k)+' dans '+location(x)).join(' / '));
+  if(nums.length>1)checks.push('Divergence '+labels[k]+' : '+g.items.filter(x=>numeric(x.e,k)!==undefined).map(x=>numeric(x.e,k)+' dans '+location(x)).join(' / '));
  }
  for(const x of g.items){
   const where=location(x);
