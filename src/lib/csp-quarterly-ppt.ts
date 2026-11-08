@@ -189,7 +189,7 @@ export async function downloadQuarterlyPpt(report:QuarterlyReport,includeCandida
  const checkRows=report.rows.filter(r=>r.notes);
  const alertLines=report.alerts;
  for(const [i,part] of blocks(alertLines.length?alertLines:['Aucun point particulier signalé.'],5).entries()){
-  s=newPage(ppt,'CONTROLES DOCUMENTAIRES'+(alertLines.length>5?' ('+(i+1)+')':''),foot);
+  s=newPage(ppt,'CONTROLES DOCUMENTAIRES · ANOMALIES'+(alertLines.length>5?' ('+(i+1)+')':''),foot);
   part.forEach((x,k)=>s.addText('•  '+x,{x:.59,y:1.32+k*1.03,w:12.03,h:.92,
    fontFace:'Arial',fontSize:12,color:P.text,margin:.03,valign:'top',breakLine:false}));
  }
