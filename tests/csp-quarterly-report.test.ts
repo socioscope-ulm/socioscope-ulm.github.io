@@ -70,3 +70,20 @@ test('Un statut désactivé ne peut pas bénéficier d’une ancienne confirmati
  assert.equal(r.rows.length,0);
  assert.equal(r.sources[0].automaticallyValidated,false);
 });
+
+test('Conserver les 14 contrôles avec identité, motif et document original',()=>{
+ const r=calculateQuarterlyReport([doc(Array.from({length:14},(_,i)=>ev({id:'fictif-'+i,agentId:'FICTIF-'+i,name:'FICTIF '+i,page:7,note:'Vérifier la référence du poste.'})))],2026,1);
+ assert.equal(r.rows.filter(r=>r.notes).length,14);
+ for(const row of r.rows){assert.match(row.notes,/Note à relire/);assert.match(row.notes,/Vérifier la référence du poste/);assert.match(row.notes,/ODJ-CSP Cadres du 06-03-2026.pdf · page 7/);}
+});
+test('Une ancienne demande résolue ne masque pas une autre réserve dans la même note',()=>{
+ const r=calculateQuarterlyReport([doc([ev({note:'Vérifier les situations avant/après ; le NR après doit être renseigné. Écart sur le poste à vérifier.'})])],2026,1);
+ assert.match(r.rows[0].resolvedNotes||'',/désormais renseigné/);
+ assert.match(r.rows[0].notes,/Écart sur le poste/);
+ assert.doesNotMatch(r.rows[0].notes,/doit être renseigné/);
+});
+test('La validation seule ne résout pas une réserve de NR provisoire',()=>{
+ const r=calculateQuarterlyReport([doc([ev({recordedAfter:{gf:13,nr:220,nrProvisional:true},note:'Vérifier les situations avant/après ; le NR après doit être renseigné.'})])],2026,1);
+ assert.match(r.rows[0].notes,/NR après provisoire/);
+ assert.equal(r.rows[0].resolvedNotes,'');
+});

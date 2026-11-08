@@ -187,11 +187,21 @@ export async function downloadQuarterlyPpt(report:QuarterlyReport,includeCandida
   }
  }
  const checkRows=report.rows.filter(r=>r.notes);
- const alertLines=[...report.alerts,...checkRows.slice(0,12).map(r=>r.name+' ('+date(r.meeting)+') : '+r.notes)];
+ const alertLines=report.alerts;
  for(const [i,part] of blocks(alertLines.length?alertLines:['Aucun point particulier signalé.'],5).entries()){
   s=newPage(ppt,'CONTROLES DOCUMENTAIRES'+(alertLines.length>5?' ('+(i+1)+')':''),foot);
   part.forEach((x,k)=>s.addText('•  '+x,{x:.59,y:1.32+k*1.03,w:12.03,h:.92,
    fontFace:'Arial',fontSize:12,color:P.text,margin:.03,valign:'top',breakLine:false}));
+ }
+ // Every control is exported, with bounded text per slide to avoid truncation.
+ for(const [index,row] of checkRows.entries()){
+  const text=kindLabels[row.kind]+' · CSP '+date(row.meeting)+' · Effet '+date(row.effective)+'\nGF : '+row.gfBefore+' / '+row.gfAfter+' · NR : '+row.nrBefore+' / '+row.nrAfter+'\n\n'+row.notes;
+  const parts=text.match(/[\s\S]{1,800}/g)||[''];
+  for(const [partIndex,part] of parts.entries()){
+   s=newPage(ppt,'CONTROLE '+(index+1)+' / '+checkRows.length+(parts.length>1?' · '+(partIndex+1)+' / '+parts.length:''),foot);
+   s.addText(row.name,{x:.59,y:1.2,w:12.03,h:.6,fontFace:'Arial',fontSize:18,bold:true,color:P.text,margin:0});
+   s.addText(part,{x:.59,y:1.95,w:12.03,h:4.85,fontFace:'Arial',fontSize:13,color:P.text,margin:0,valign:'top',breakLine:false});
+  }
  }
  const sources=blocks(report.sources,6);
  for(let i=0;i<sources.length;i++){

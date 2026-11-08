@@ -95,6 +95,18 @@ export default function CspQuarterlyReport({revision=0}:{revision?:number}){
    </div>
    {report.alerts.length>0&&<div className="notice"><b>Points de vigilance</b>
     <ul>{report.alerts.map((msg,i)=><li key={i}>{msg}</li>)}</ul></div>}
+   {!!report.rows.filter(r=>r.notes).length&&<details open>
+    <summary>Contrôles documentaires : {report.rows.filter(r=>r.notes).length} mouvement(s) signalé(s)</summary>
+    <p className="filter-note">Les mouvements ci-dessous sont validés. Le motif précise si la réserve concerne le NR, une divergence, la lecture ou une note à relire. La liste est complète, indépendamment des colonnes choisies pour les tableaux.</p>
+    <div className="table-scroll"><table><thead><tr><th>Nom / prénom</th><th>Mouvement</th><th>CSP / effet</th><th>GF avant / après</th><th>NR avant / après</th><th>Motif et document source</th></tr></thead>
+     <tbody>{report.rows.filter(r=>r.notes).map((r,i)=><tr key={r.id+i}><td>{r.name}</td><td>{kindLabels[r.kind]}</td><td>{r.meeting}<br/>{r.effective}</td><td>{r.gfBefore} / {r.gfAfter}</td><td>{r.nrBefore} / {r.nrAfter}</td><td style={{whiteSpace:'pre-line'}}>{r.notes}</td></tr>)}</tbody>
+    </table></div>
+   </details>}
+   {!!report.rows.filter(r=>r.resolvedNotes).length&&<details>
+    <summary>Anciennes notes résolues ({report.rows.filter(r=>r.resolvedNotes).length} mouvement(s))</summary>
+    <p className="filter-note">Ces anciennes demandes de renseignement ne sont plus comptées comme motifs de contrôle. Un mouvement peut conserver une autre réserve, détaillée ci-dessus.</p>
+    {report.rows.filter(r=>r.resolvedNotes).map((r,i)=><p key={r.id+i} style={{whiteSpace:'pre-line'}}><b>{r.name} · {kindLabels[r.kind]} · {r.meeting}</b><br/>{r.resolvedNotes}</p>)}
+   </details>}
    {!!grouped.length&&<div className="table-scroll"><table><thead><tr><th>Rubrique</th><th>Mouvements</th></tr></thead>
     <tbody>{grouped.map(x=><tr key={x.kind}><td>{x.label}</td><td>{x.count}</td></tr>)}</tbody></table></div>}
    {!!report.rows.length&&<details><summary>Aperçu des mouvements ({report.rows.length})</summary>

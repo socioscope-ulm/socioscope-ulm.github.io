@@ -19,7 +19,7 @@ export type QuarterlyRow = {
  id:string; name:string; kind:string; meeting:string; effective:string;
  agency:string; job:string; gfBefore:string; gfAfter:string;
  nrBefore:string; nrAfter:string; nrSteps:string; source:string;
- notes:string; sources:string[]; estimated:boolean;
+ notes:string; resolvedNotes?:string; sources:string[]; estimated:boolean;
 };
 export type QuarterlyCandidate = {id:string;name:string;meeting:string;agency:string;job:string;reference:string;reason:string;source:string};
 export type QuarterlyReport = {
@@ -89,17 +89,25 @@ function toRow(g:Group):QuarterlyRow{
  const sourceRefs=[...new Set(g.items.map(x=>x.ref+' p.'+(x.e.page||'?')))];
  const agency=priority.map(x=>x.e.recordedAfter?.agency||x.e.agency||x.e.recordedBefore?.agency||'').find(Boolean)||'—';
  const job=priority.map(x=>x.e.job||x.e.recordedAfter?.job||'').find(Boolean)||'';
- const checks:string[]=[];
+ const checks:string[]=[],resolved:string[]=[];
+ const location=(x:Item)=>x.ref+' · '+x.doc.name+' · page '+(x.e.page||'?');
+ const labels={gfBefore:'GF avant',gfAfter:'GF après',nrBefore:'NR avant',nrAfter:'NR après'};
  for(const k of ['gfBefore','gfAfter','nrBefore','nrAfter'] as const){
   const nums=[...new Set(g.items.map(x=>numeric(x.e,k)).filter(filled))];
-  if(nums.length>1)checks.push('Écart '+k+' entre documents');
+  if(nums.length>1)checks.push('Divergence '+labels[k]+' : '+g.items.filter(x=>numeric(x.e,k)!==undefined).map(x=>numeric(x.e,k)+' dans '+location(x)).join(' / '));
  }
  for(const x of g.items){
-  if(x.e.recordedAfter?.nrProvisional)checks.push('NR après provisoire dans '+x.ref);
-  const note=String(x.e.note||'');
-  const staleNominationNote=x.e.kind==='nomination'&&/v[eé]rifier les situations avant\/apr[eè]s.*NR apr[eè]s doit [eê]tre renseign[eé]/i.test(note)&&numeric(x.e,'nrAfter')!==undefined;
-  const warn=[x.e.extractionIssue,staleNominationNote?'':note].filter(Boolean).join(' ; ');
-  if(/v[eé]rifier|non reconnu|incoh[eé]ren|manquan|[eé]cart/i.test(warn))checks.push('Contrôle '+x.ref);
+  const where=location(x);
+  if(x.e.recordedAfter?.nrProvisional)checks.push('NR après provisoire ('+fmt(numeric(x.e,'nrAfter'))+') : valeur conservée sans confirmation explicite du NR. Le mouvement est validé. Source : '+where);
+  let note=String(x.e.note||'');
+  // Remove only the known obsolete instruction, never the rest of a warning.
+  const generic=/v[eé]rifier les situations avant\/apr[eè]s\s*;\s*le NR apr[eè]s doit [eê]tre renseign[eé]\.?/i;
+  if(x.e.kind==='nomination'&&generic.test(note)&&numeric(x.e,'nrAfter')!==undefined&&!x.e.recordedAfter?.nrProvisional){
+   note=note.replace(generic,'').trim();
+   resolved.push('Ancienne demande de renseignement du NR : NR après désormais renseigné ('+numeric(x.e,'nrAfter')+'). Source : '+where);
+  }
+  if(x.e.extractionIssue)checks.push('Anomalie de lecture : '+x.e.extractionIssue+'. Source : '+where);
+  if(/v[eé]rifier|non reconnu|incoh[eé]ren|manquan|[eé]cart/i.test(note))checks.push('Note à relire (ne signifie pas que le NR est provisoire) : '+note+'. Source : '+where);
  }
  const date=g.items[0].doc.date;
  return {id:g.base+':'+g.items[0].e.id,name:first.name,kind:first.kind,
@@ -108,7 +116,7 @@ function toRow(g:Group):QuarterlyRow{
   nrBefore:fmt(beforeNR),nrAfter:fmt(afterNR)+(estimated?'*':''),
   nrSteps:steps===undefined||!Number.isInteger(steps)?'—':String(steps),
   source:sourceRefs.join(', '),sources:[...new Set(g.items.map(x=>x.ref))],
-  notes:[...new Set(checks)].join(' ; '),estimated};
+  notes:[...new Set(checks)].join('\n'),resolvedNotes:[...new Set(resolved)].join('\n'),estimated};
 }
 export function calculateQuarterlyReport(documents:QuarterlyDocument[],year:number,quarter:number):QuarterlyReport{
  const {start,end}=quarterBounds(year,quarter);
@@ -154,7 +162,7 @@ export function calculateQuarterlyReport(documents:QuarterlyDocument[],year:numb
   if(missing)alerts.push('Séance du '+formatted(meeting)+' : '+missing+' non associé dans les documents CSP cadres enregistrés à cette date. Les mouvements déjà validés restent dans le rapport.');
  }
  const checkCount=rows.filter(r=>!!r.notes).length;
- if(checkCount)alerts.push(checkCount+' mouvement(s) présentant un NR provisoire, une donnée à contrôler ou une divergence documentaire : voir les détails du rapport.');
+ if(checkCount)alerts.push(checkCount+' mouvement(s) signalé(s) : NR provisoire, divergence documentaire, anomalie de lecture ou note à relire. Voir la liste complète des contrôles documentaires ; tous ne sont pas des NR provisoires.');
  if(rows.some(r=>r.estimated))alerts.push('Un astérisque (*) signale un NR après calculé à partir du nombre de NR attribués.');
  if(!docs.length)alerts.push('Aucun document CSP cadres enregistré pour ce trimestre.');
  return {year,quarter,sources,rows,candidates:[...candidates.values()].sort((a,b)=>a.meeting.localeCompare(b.meeting)||a.name.localeCompare(b.name,'fr')),alerts,pendingDocuments,meetingDates:meetings};
