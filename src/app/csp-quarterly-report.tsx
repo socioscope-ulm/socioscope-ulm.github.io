@@ -11,11 +11,12 @@ export default function CspQuarterlyReport({revision=0}:{revision?:number}){
  const [quarter,setQuarter]=useState(Math.ceil((current.getMonth()+1)/3));
  const [includeCandidates,setIncludeCandidates]=useState(true);
  const [selectedColumns,setSelectedColumns]=useState<OptionalMovementColumn[]>(defaultMovementColumns);
- // L'aperçu est un tableau commun : conserver le GF si une rubrique l'impose.
- const visibleColumns=getMovementColumns(selectedColumns,report?.rows.some(r=>r.kind==='admission'||r.kind==='titularisation')?'admission':undefined);
  const [busy,setBusy]=useState(false);
  const [error,setError]=useState('');
  const [report,setReport]=useState<QuarterlyReport|null>(null);
+// L'aperçu est un tableau commun : conserver le GF si une rubrique l'impose.
+  const visibleColumns=getMovementColumns(selectedColumns,report?.rows.some(r=>r.kind==='admission'||r.kind==='titularisation')?'admission':undefined);
+ 
  const [loadRevision,setLoadRevision]=useState(0);
  useEffect(()=>{setReport(null);setError('');},[year,quarter,revision]);
  const grouped=useMemo(()=>Object.entries(kindLabels).map(([kind,label])=>({
