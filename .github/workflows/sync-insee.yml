@@ -1,5 +1,9 @@
 name: Synchronisation annuelle INSEE
 on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/sync-insee.yml'
   schedule:
     # Contrôles après la fin de l'année : janvier à avril, à trois dates fixes.
     - cron: '23 8 5,15,25 1-4 *'
