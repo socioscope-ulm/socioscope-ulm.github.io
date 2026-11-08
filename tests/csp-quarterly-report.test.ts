@@ -134,3 +134,26 @@ test('Une divergence réelle entre ODJ et RD reste signalée malgré GF constant
  assert.equal(r.rows.length,1);
  assert.match(r.rows[0].notes,/Divergence NR avant/);
 });
+
+test('Balligand: ODJ candidature sans effet, RD gfDelta 0 et note NR ancienne',()=>{
+ const odjEvent=ev({id:'p4c0',name:'BALLIGAND REMI',agentId:'E42175',reference:'26-06801.01',job:'APPUI DE SERVICE',effective:'',
+  candidacy:true,gfBefore:13,gfAfter:undefined,nrBefore:205,nrAfter:undefined,
+  recordedBefore:{gf:13,nr:205},recordedAfter:{gf:13,nr:205,nrProvisional:true},
+  note:'Candidature de l’ODJ : en attente de confirmation par un RD.'});
+ const rdEvent=ev({id:'p4r0',name:'BALLIGAND REMI',agentId:'E42175',reference:'26-06801.01',job:'APPUI DE SERVICE',
+  effective:'2026-05-01',gfDelta:0,gfBefore:undefined,gfAfter:undefined,nrBefore:undefined,nrAfter:undefined,
+  recordedBefore:{gf:13,nr:205},recordedAfter:{gf:13,nr:205,nrProvisional:true},
+  note:'Vérifier les situations avant/après ; le NR après doit être renseigné.'});
+ const originals=JSON.stringify([odjEvent,rdEvent]);
+ const r=calculateQuarterlyReport([
+  doc([odjEvent],{id:'odj1',date:'2026-05-07'}),
+  doc([rdEvent],{id:'rd1',date:'2026-05-07',documentType:'rd'})
+ ],2026,2);
+ assert.equal(r.rows.length,1);
+ assert.equal(r.rows[0].gfBefore,'13');
+ assert.equal(r.rows[0].gfAfter,'13');
+ assert.equal(r.rows[0].nrBefore,'205');
+ assert.equal(r.rows[0].nrAfter,'205');
+ assert.equal(r.rows[0].notes,'');
+ assert.equal(JSON.stringify([odjEvent,rdEvent]),originals);
+});
