@@ -198,3 +198,67 @@ test('La règle de GF identique ne modifie pas les autres types de mouvements',(
  assert.equal(r.rows[0].gfBefore,'12');
  assert.equal(r.rows[0].gfAfter,'13');
 });
+
+test('ODJ/RD: 1 NR en colonne avant du RD représente le NR après ODJ, pas une seconde attribution',()=>{
+ const odjEvent=ev({id:'p4r0',agentId:'A81776',name:'LE COINTE THIBAULT',kind:'avancement',
+  effective:'2026-01-01',nrSteps:1,gfBefore:14,nrBefore:225,nrAfter:230,
+  recordedBefore:{gf:14,nr:225},recordedAfter:{gf:14,nr:230}});
+ const rdEvent=ev({id:'p4r0',agentId:'A81776',name:'LE COINTE THIBAULT',kind:'avancement',
+  effective:'2026-01-01',nrSteps:1,gfBefore:undefined,nrBefore:undefined,nrAfter:undefined,
+  recordedBefore:{gf:14,nr:230},recordedAfter:undefined});
+ const original=JSON.stringify([odjEvent,rdEvent]);
+ const report=calculateQuarterlyReport([
+  doc([odjEvent],{id:'odj-june',date:'2026-06-05'}),
+  doc([rdEvent],{id:'rd-june',date:'2026-06-05',documentType:'rd'})
+ ],2026,2);
+ assert.equal(report.rows.length,1);
+ assert.equal(report.rows[0].nrBefore,'225');
+ assert.equal(report.rows[0].nrAfter,'230');
+ assert.equal(report.rows[0].nrSteps,'1');
+ assert.equal(report.rows[0].sources.length,2);
+ assert.doesNotMatch(report.rows[0].notes,/Divergence NR avant/);
+ assert.equal(JSON.stringify([odjEvent,rdEvent]),original);
+});
+test('Deux NR dans le RD, deux NR dans ODJ : ne compter que deux NR une seule fois',()=>{
+ const r=calculateQuarterlyReport([
+  doc([ev({id:'p4r1',kind:'avancement',effective:'2026-01-01',nrSteps:2,
+   recordedBefore:{gf:17,nr:310},recordedAfter:{gf:17,nr:320}})],{date:'2026-06-05'}),
+  doc([ev({id:'p4r1',kind:'avancement',effective:'2026-01-01',nrSteps:2,
+   recordedBefore:{gf:17,nr:320},recordedAfter:undefined})],
+   {id:'rd-2',date:'2026-06-05',documentType:'rd'})
+ ],2026,2);
+ assert.equal(r.rows.length,1);
+ assert.equal(r.rows[0].nrBefore,'310');
+ assert.equal(r.rows[0].nrAfter,'320');
+ assert.equal(r.rows[0].nrSteps,'2');
+});
+test('Deux vrais avancements distincts du même agent dans une séance restent distincts',()=>{
+ const first=ev({id:'odj-first',kind:'avancement',effective:'2026-01-01',nrSteps:1,
+  recordedBefore:{gf:13,nr:220},recordedAfter:{gf:13,nr:225}});
+ const second=ev({id:'odj-second',kind:'avancement',effective:'2026-01-01',nrSteps:1,
+  recordedBefore:{gf:13,nr:225},recordedAfter:{gf:13,nr:230}});
+ const rdFirst=ev({id:'rd-first',kind:'avancement',effective:'2026-01-01',nrSteps:1,
+  recordedBefore:{gf:13,nr:225},recordedAfter:undefined});
+ const rdSecond=ev({id:'rd-second',kind:'avancement',effective:'2026-01-01',nrSteps:1,
+  recordedBefore:{gf:13,nr:230},recordedAfter:undefined});
+ const r=calculateQuarterlyReport([
+  doc([first,second],{date:'2026-06-05'}),
+  doc([rdFirst,rdSecond],{date:'2026-06-05',id:'rd2',documentType:'rd'})
+ ],2026,2);
+ assert.equal(r.rows.length,2);
+ assert.deepEqual(r.rows.map(x=>[x.nrBefore,x.nrAfter]),[['220','225'],['225','230']]);
+});
+test('Séances différentes ou résultats incohérents ne sont pas fusionnés',()=>{
+ const o=ev({kind:'avancement',nrSteps:1,effective:'2026-01-01',recordedBefore:{gf:14,nr:225},recordedAfter:{gf:14,nr:230}});
+ const rd=ev({kind:'avancement',nrSteps:1,effective:'2026-01-01',recordedBefore:{gf:14,nr:235},recordedAfter:undefined});
+ const report=calculateQuarterlyReport([
+  doc([o],{date:'2026-06-05'}),
+  doc([rd],{date:'2026-06-05',id:'rd',documentType:'rd'})
+ ],2026,2);
+ assert.equal(report.rows.length,2);
+ const differentMeeting=calculateQuarterlyReport([
+  doc([o],{date:'2026-06-05'}),
+  doc([ev({...rd,recordedBefore:{gf:14,nr:230}})],{date:'2026-06-12',id:'rd',documentType:'rd'})
+ ],2026,2);
+ assert.equal(differentMeeting.rows.length,2);
+});
