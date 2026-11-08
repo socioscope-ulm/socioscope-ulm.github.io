@@ -59,11 +59,13 @@ type Item={doc:QuarterlyDocument;ref:string;e:QuarterlyEvent};
 type Group={base:string;items:Item[]};
 // Le libellé du RD vaut confirmation d'une nomination à GF/NR constants,
 // uniquement en présence du bordereau ODJ correspondant.
-const gfConstant=(e:QuarterlyEvent)=>/\bGF\s+CONSTANT(?:E|S)?\b/i.test(norm(e.note));
+const gfConstant=(e:QuarterlyEvent)=>e.kind==='nomination'&&(e.gfDelta===0||/\bGF\s+CONSTANT(?:E|S)?\b/i.test(norm(e.note)));
 const sameNomination=(a:QuarterlyEvent,b:QuarterlyEvent)=>a.kind==='nomination'&&b.kind==='nomination'&&
- norm(a.agentId||a.name)===norm(b.agentId||b.name)&&a.effective===b.effective&&
+ norm(a.agentId||a.name)===norm(b.agentId||b.name)&&
  (!a.reference||!b.reference||norm(a.reference)===norm(b.reference))&&
- (!a.job||!b.job||norm(a.job)===norm(b.job));
+ (!a.job||!b.job||norm(a.job)===norm(b.job))&&
+ // La date d'effet n'est pas toujours renseignée dans les candidatures ODJ.
+ (!a.effective||!b.effective||a.effective===b.effective);
 function compatible(g:Group,item:Item){
  const e=item.e;
  if(g.items.some(i=>i.doc.id===item.doc.id))return false;
@@ -177,7 +179,7 @@ export function calculateQuarterlyReport(documents:QuarterlyDocument[],year:numb
   if(!rd)continue;
   const candidates=docs.flatMap((d,i)=>d.documentType==='cr'&&d.date===rd.doc.date&&
    (d.status==='validated'||d.status==='review'&&d.automaticallyValidated===true)?
-   (d.events||[]).filter(e=>e.selected&&sameNomination(e,rd.e)&&
+   (d.events||[]).filter(e=>e.selected&&!e.nonRetained&&!e.nonRetainedByRD&&sameNomination(e,rd.e)&&
     (d.status==='validated'&&(!d.perEventValidation||e.approved===true)||!!e.acknowledgedByRD||!!e.acknowledgedByDocument))
     .map(e=>({doc:d,ref:sources[i].ref,e})):[]);
   if(candidates.length===1&&!group.items.some(x=>x.doc.id===candidates[0].doc.id))group.items.push(candidates[0]);
