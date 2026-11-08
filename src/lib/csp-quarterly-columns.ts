@@ -18,10 +18,13 @@ const columns=[
  {id:'source',label:'Source',header:'SOURCE',width:3.08,value:(r:QuarterlyRow)=>r.source}
 ];
 export function getMovementColumns(selected:readonly OptionalMovementColumn[]=defaultMovementColumns,kind?:string){
- // L'admission au stage et la titularisation conservent toujours le GF avant/après,
- // indépendamment du choix global des colonnes facultatives du CR.
- const mandatoryGF=kind==='admission'||kind==='titularisation';
- const visible=columns.filter((c,i)=>i<3||(c.id==='gf'&&mandatoryGF)||selected.includes(c.id as OptionalMovementColumn));
+ // Pour les admissions au stage et les titularisations, le GF est obligatoire
+ // et la colonne NR+ n'est jamais pertinente, même si l'option globale est cochée.
+ const stageOrTitularisation=kind==='admission'||kind==='titularisation';
+ const visible=columns.filter((c,i)=>
+  i<3||(c.id==='gf'&&stageOrTitularisation)||
+  (c.id!=='nrSteps'||!stageOrTitularisation)&&selected.includes(c.id as OptionalMovementColumn)
+ );
  const total=visible.reduce((n,c)=>n+c.width,0);
  const fullWidth=columns.reduce((n,c)=>n+c.width,0);
  return visible.map(c=>({...c,width:c.width*fullWidth/total}));
