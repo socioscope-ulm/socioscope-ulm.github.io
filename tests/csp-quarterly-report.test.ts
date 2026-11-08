@@ -42,3 +42,31 @@ test('Plusieurs mouvements distincts d’un même agent restent des lignes sépa
  const r=calculateQuarterlyReport([doc([ev({kind:'reclassement'}),ev({id:'two',kind:'avancement',nrSteps:1})])],2026,1);
  assert.equal(r.rows.length,2);
 });
+test('ODJ entièrement confirmé par le RD : pas de fausse alerte ni double mouvement',()=>{
+ const odj=doc([ev({acknowledgedByDocument:{id:'rd1'}})],{status:'review',automaticallyValidated:true});
+ const rd=doc([ev()],{id:'rd1',documentType:'rd',name:'RD-CSP Cadres.pdf'});
+ const r=calculateQuarterlyReport([odj,rd],2026,1);
+ assert.equal(r.pendingDocuments,0);
+ assert.ok(!r.alerts.some(x=>x.includes('encore en vérification')));
+ assert.equal(r.rows.length,1);
+ assert.deepEqual(r.rows[0].sources,['D02']);
+ assert.equal(r.sources[0].automaticallyValidated,true);
+ assert.equal(odj.status,'review');
+});
+test('ODJ partiel, page non lue ou preuve retirée : conserver l’alerte du serveur',()=>{
+ for(const automaticallyValidated of [false,undefined]){
+  const r=calculateQuarterlyReport([
+   doc([ev()],{status:'review',automaticallyValidated}),
+   doc([ev()],{id:'rd1',documentType:'rd',name:'RD-CSP Cadres.pdf'})
+  ],2026,1);
+  assert.equal(r.pendingDocuments,1);
+  assert.equal(r.rows.length,1);
+  assert.match(r.alerts.join(' '),/encore en vérification/);
+ }
+});
+test('Un statut désactivé ne peut pas bénéficier d’une ancienne confirmation automatique',()=>{
+ const r=calculateQuarterlyReport([doc([ev()],{status:'disabled:validated',automaticallyValidated:true})],2026,1);
+ assert.equal(r.pendingDocuments,1);
+ assert.equal(r.rows.length,0);
+ assert.equal(r.sources[0].automaticallyValidated,false);
+});

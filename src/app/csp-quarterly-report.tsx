@@ -4,7 +4,7 @@ import {defaultMovementColumns,getMovementColumns,optionalMovementColumns,type O
 import {Download,RefreshCw,FileText} from 'lucide-react';
 import {calculateQuarterlyReport,isCadresDocument,kindLabels} from '../lib/csp-quarterly-report';
 import type {QuarterlyDocument,QuarterlyReport,QuarterlyEvent} from '../lib/csp-quarterly-report';
-type ImportMeta={id:string;name:string;date:string;status:string;documentType:'cr'|'rd';perEventValidation?:boolean};
+type ImportMeta={id:string;name:string;date:string;status:string;documentType:'cr'|'rd';perEventValidation?:boolean;automaticallyValidated?:boolean};
 const current=new Date();
 export default function CspQuarterlyReport({revision=0}:{revision?:number}){
  const [year,setYear]=useState(current.getFullYear());
@@ -38,8 +38,10 @@ export default function CspQuarterlyReport({revision=0}:{revision?:number}){
     const response=await fetch('/api/csp?id='+encodeURIComponent(meta.id),{cache:'no-store'});
     const detail=await response.json();
     if(!response.ok)throw Error(detail.error||'Impossible de lire '+meta.name);
-    docs.push({id:meta.id,name:meta.name,date:meta.date,status:meta.status,
-      documentType:meta.documentType,perEventValidation:!!meta.perEventValidation,
+    const fresh:ImportMeta=detail.meta||meta;
+   docs.push({id:fresh.id,name:fresh.name,date:fresh.date,status:fresh.status,
+      documentType:fresh.documentType,perEventValidation:!!fresh.perEventValidation,
+      automaticallyValidated:fresh.automaticallyValidated===true,
       events:(detail.events||[]) as QuarterlyEvent[]});
    }
    const nextReport=calculateQuarterlyReport(docs,year,quarter);

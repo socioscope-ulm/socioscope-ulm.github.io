@@ -198,7 +198,7 @@ export async function downloadQuarterlyPpt(report:QuarterlyReport,includeCandida
   s=newPage(ppt,'DOCUMENTS DE REFERENCE ('+(i+1)+'/'+sources.length+')',foot);
   const cells=[['REPÈRE','CSP','TYPE / STATUT','DOCUMENT ORIGINAL']];
   for(const d of sources[i])cells.push([d.ref,date(d.date),
-   d.type+(d.status==='validated'?' validé':' à vérifier'),d.name]);
+   d.type+(d.status==='validated'?' validé':d.automaticallyValidated?' confirmé automatiquement':' à vérifier'),d.name]);
   table(s,cells,[.95,1.55,2.15,7.70],1.22,.72,9.5);
  }
  const file='CR_CSP_Cadres_T'+report.quarter+'_'+report.year+'_Tableaux_modifiables.pptx';

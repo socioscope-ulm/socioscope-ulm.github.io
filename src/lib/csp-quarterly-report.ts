@@ -12,9 +12,9 @@ export type QuarterlyEvent = {
 };
 export type QuarterlyDocument = {
  id:string; name:string; date:string; status:string; documentType:'cr'|'rd';
- perEventValidation?:boolean; events:QuarterlyEvent[];
+ perEventValidation?:boolean; automaticallyValidated?:boolean; events:QuarterlyEvent[];
 };
-export type QuarterlySource = {id:string;ref:string;name:string;date:string;type:'ODJ'|'RD';status:string};
+export type QuarterlySource = {id:string;ref:string;name:string;date:string;type:'ODJ'|'RD';status:string;automaticallyValidated?:boolean};
 export type QuarterlyRow = {
  id:string; name:string; kind:string; meeting:string; effective:string;
  agency:string; job:string; gfBefore:string; gfAfter:string;
@@ -115,8 +115,11 @@ export function calculateQuarterlyReport(documents:QuarterlyDocument[],year:numb
  const docs=documents.filter(d=>isCadresDocument(d.name)&&d.date>=start&&d.date<end)
   .sort((a,b)=>a.date.localeCompare(b.date)||
    Number(a.documentType==='rd')-Number(b.documentType==='rd')||a.name.localeCompare(b.name,'fr'));
+ // Reuse the server's completion result: it checks active validation proofs,
+ // unresolved events and unread pages. This never promotes events for export.
+ const completedAutomatically=(d:QuarterlyDocument)=>d.status==='review'&&d.automaticallyValidated===true;
  const sources=docs.map((d,i)=>({id:d.id,ref:'D'+String(i+1).padStart(2,'0'),
-  name:d.name,date:d.date,type:d.documentType==='cr'?'ODJ' as const:'RD' as const,status:d.status}));
+  name:d.name,date:d.date,type:d.documentType==='cr'?'ODJ' as const:'RD' as const,status:d.status,automaticallyValidated:completedAutomatically(d)}));
  const groups:Group[]=[];const candidates=new Map<string,QuarterlyCandidate>();const alerts:string[]=[];
  for(let index=0;index<docs.length;index++){
   const doc=docs[index],ref=sources[index].ref;
@@ -140,7 +143,7 @@ export function calculateQuarterlyReport(documents:QuarterlyDocument[],year:numb
  }
  const rows=groups.map(toRow).sort((a,b)=>a.meeting.localeCompare(b.meeting)||
   kindOrder.indexOf(a.kind)-kindOrder.indexOf(b.kind)||a.name.localeCompare(b.name,'fr')||a.effective.localeCompare(b.effective));
- const pending=docs.filter(d=>d.status!=='validated');
+ const pending=docs.filter(d=>d.status!=='validated'&&!completedAutomatically(d));
  const pendingDocuments=pending.length;
  const formatted=(d:string)=>d.slice(8,10)+'/'+d.slice(5,7)+'/'+d.slice(0,4);
  if(pendingDocuments)alerts.push(pendingDocuments+' document(s) encore en vérification : '+pending.map(d=>(d.documentType==='cr'?'ODJ':'RD')+' du '+formatted(d.date)).join(', ')+'. Les décisions confirmées dans un autre document validé restent prises en compte.');
