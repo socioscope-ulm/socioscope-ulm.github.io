@@ -1,7 +1,7 @@
 'use client';
 import {useEffect,useMemo,useState} from 'react';
 import {defaultMovementColumns,getMovementColumns,optionalMovementColumns,type OptionalMovementColumn} from '../lib/csp-quarterly-columns';
-import {Download,RefreshCw,FileText} from 'lucide-react';
+import {ChevronRight,Download,RefreshCw,FileText} from 'lucide-react';
 import {calculateQuarterlyReport,isCadresDocument,kindLabels} from '../lib/csp-quarterly-report';
 import type {QuarterlyDocument,QuarterlyReport,QuarterlyEvent} from '../lib/csp-quarterly-report';
 type ImportMeta={id:string;name:string;date:string;status:string;documentType:'cr'|'rd';perEventValidation?:boolean;automaticallyValidated?:boolean};
@@ -60,10 +60,10 @@ export default function CspQuarterlyReport({revision=0}:{revision?:number}){
   }catch(ex){setError(ex instanceof Error?ex.message:"L'export PowerPoint a échoué.");}
   finally{setBusy(false);}
  }
- return <section className="panel" aria-label="Générateur de comptes rendus CSP cadres">
-  <div className="panel-heading"><div><h2>Comptes rendus trimestriels CSP cadres</h2>
-   <p>Générer un PowerPoint de la CSP cadres (Métiers de la PI et de la DOAAT), avec une ligne par mouvement et de vrais tableaux modifiables. Aucune incidence sur les validations CSP.</p>
-  </div></div>
+ return <details className="document-folder" aria-label="Comptes rendus trimestriels CSP cadres">
+  <summary><ChevronRight size={16} className="folder-chevron"/><FileText size={20}/><strong>Comptes rendus trimestriels CSP cadres</strong><span className="badge">Afficher le générateur</span></summary>
+  <div className="document-folder-content">
+   <p style={{marginBottom:14}}>Générer un PowerPoint de la CSP cadres (Métiers de la PI et de la DOAAT), avec une ligne par mouvement et de vrais tableaux modifiables. Aucune incidence sur les validations CSP.</p>
   <div className="analysis-options">
    <label>Année<select aria-label="Année du compte rendu" value={year} onChange={e=>setYear(Number(e.target.value))}>
     {Array.from({length:Math.max(new Date().getFullYear()+5,year)-2024+1},(_,i)=>2024+i).map(y=><option key={y} value={y}>{y}</option>)}
@@ -124,5 +124,6 @@ export default function CspQuarterlyReport({revision=0}:{revision?:number}){
    </div>
   </>}
   <p className="filter-note">Périmètre : CSP cadres uniquement. Dates de séance dans le trimestre ; dates d’effet conservées. Les documents non validés ne créent pas de mouvements définitifs. Aucun import ni mise à jour de données lors de cet export.</p>
- </section>;
+  </div>
+ </details>;
 }
