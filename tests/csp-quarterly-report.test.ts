@@ -157,3 +157,44 @@ test('Balligand: ODJ candidature sans effet, RD gfDelta 0 et note NR ancienne',(
  assert.equal(r.rows[0].notes,'');
  assert.equal(JSON.stringify([odjEvent,rdEvent]),originals);
 });
+
+test('Admissions au stage : compléter le GF avant depuis le GF après sans modifier le document',()=>{
+ const event=ev({kind:'admission',gfBefore:undefined,gfAfter:13,recordedBefore:undefined,recordedAfter:{gf:13,nr:205}});
+ const original=JSON.stringify(event);
+ const r=calculateQuarterlyReport([doc([event])],2026,1);
+ assert.equal(r.rows.length,1);
+ assert.equal(r.rows[0].gfBefore,'13');
+ assert.equal(r.rows[0].gfAfter,'13');
+ assert.equal(r.rows[0].notes,'');
+ assert.equal(JSON.stringify(event),original);
+});
+test('Titularisations : compléter le GF après depuis le GF avant sans modifier le document',()=>{
+ const event=ev({kind:'titularisation',gfBefore:undefined,gfAfter:undefined,recordedBefore:{gf:12,nr:185},recordedAfter:undefined});
+ const original=JSON.stringify(event);
+ const r=calculateQuarterlyReport([doc([event],{documentType:'rd'})],2026,1);
+ assert.equal(r.rows[0].gfBefore,'12');
+ assert.equal(r.rows[0].gfAfter,'12');
+ assert.equal(r.rows[0].notes,'');
+ assert.equal(JSON.stringify(event),original);
+});
+test('GF contradictoire pour une admission ou titularisation : conserver les valeurs et signaler',()=>{
+ for(const kind of ['admission','titularisation']){
+  const r=calculateQuarterlyReport([doc([ev({kind,gfBefore:12,gfAfter:13,recordedBefore:undefined,recordedAfter:undefined})])],2026,1);
+  assert.equal(r.rows[0].gfBefore,'12');
+  assert.equal(r.rows[0].gfAfter,'13');
+  assert.match(r.rows[0].notes,/Incohérence GF/);
+ }
+});
+test('Aucun GF source : ne pas inventer de GF pour l admission au stage ou la titularisation',()=>{
+ for(const kind of ['admission','titularisation']){
+  const r=calculateQuarterlyReport([doc([ev({kind,gfBefore:undefined,gfAfter:undefined,recordedBefore:undefined,recordedAfter:undefined})])],2026,1);
+  assert.equal(r.rows[0].gfBefore,'—');
+  assert.equal(r.rows[0].gfAfter,'—');
+  assert.match(r.rows[0].notes,/GF absent des documents/);
+ }
+});
+test('La règle de GF identique ne modifie pas les autres types de mouvements',()=>{
+ const r=calculateQuarterlyReport([doc([ev({kind:'reclassement',gfBefore:12,gfAfter:13,recordedBefore:undefined,recordedAfter:undefined})])],2026,1);
+ assert.equal(r.rows[0].gfBefore,'12');
+ assert.equal(r.rows[0].gfAfter,'13');
+});
