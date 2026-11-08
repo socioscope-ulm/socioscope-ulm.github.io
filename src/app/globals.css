@@ -133,3 +133,30 @@
  .import-workspace .import-subsection .source-card>div:nth-child(2){flex-basis:calc(100% - 65px)}
  .import-workspace .import-subsection .source-card>.btn{white-space:normal}
 }
+
+
+/* CR CSP : les quatre cases de colonnes restent groupées à gauche.
+   On neutralise ici le flex:1 générique du premier label des filtres. */
+.analysis-options.csp-column-options{
+ justify-content:flex-start;
+ align-items:center;
+ gap:12px 22px;
+ margin-bottom:8px;
+}
+.analysis-options.csp-column-options>label,
+.analysis-options.csp-column-options>label:first-child{
+ flex:0 0 auto;
+ display:inline-flex;
+ align-items:center;
+ gap:7px;
+ margin:0;
+ white-space:nowrap;
+}
+.analysis-options.csp-column-options input[type=checkbox]{
+ margin:0;
+ flex:0 0 auto;
+}
+@media(max-width:600px){
+ .analysis-options.csp-column-options{gap:12px 16px}
+ .analysis-options.csp-column-options>label{white-space:normal}
+}
