@@ -1,6 +1,6 @@
-/** Read-only detailed annual bonus tables. They never enter payroll projections. */
+/** Source unique des primes annuelles, consultée par les calculs et les graphiques. */
 export type AnnualBonusRow={rpc:number|null;rpem:number|null;pvpa:number|null};
-export type AnnualBonusDetails={paymentYear:number;objectiveYear:number;rows:Record<string,AnnualBonusRow>;sourceName?:string;hasOriginal?:boolean;entryMode?:'manual'|'file'};
+export type AnnualBonusDetails={paymentYear:number;objectiveYear:number;rows:Record<string,AnnualBonusRow>;sourceName?:string;originalPath?:string;hasOriginal?:boolean;entryMode?:'manual'|'file'};
 export const ANNUAL_BONUS_GFS=Array.from({length:18},(_,i)=>19-i);
 export const bonusApplicable=(gf:number,key:keyof AnnualBonusRow)=>key==='rpem'?gf>=2&&gf<=11:gf>=12&&gf<=19;
 const cents=(value:unknown)=>Number.isSafeInteger(value)&&Number(value)>=0&&Number(value)<=10000000;
@@ -9,6 +9,7 @@ export function validateAnnualBonusDetails(v:unknown):v is AnnualBonusDetails{
  const p=v as Partial<AnnualBonusDetails>;
  if(!Number.isInteger(p.paymentYear)||!Number.isInteger(p.objectiveYear)||p.paymentYear!<2000||p.paymentYear!>2100||p.objectiveYear!<2000||p.objectiveYear!>p.paymentYear!)return false;
  if(p.sourceName!==undefined&&(typeof p.sourceName!=='string'||p.sourceName.length>240))return false;
+ if(p.originalPath!==undefined&&(typeof p.originalPath!=='string'||p.originalPath.length>280||!p.originalPath.startsWith('/sources/')))return false;
  if(p.hasOriginal!==undefined&&typeof p.hasOriginal!=='boolean')return false;
  if(p.entryMode!==undefined&&!['manual','file'].includes(p.entryMode))return false;
  if(!p.rows||typeof p.rows!=='object'||Array.isArray(p.rows))return false;
@@ -26,7 +27,10 @@ export function validateAnnualBonusDetails(v:unknown):v is AnnualBonusDetails{
  return present;
 }
 export function annualBonusLabel(paymentYear:number,objectiveYear:number){return `Primes versées en ${paymentYear} · objectifs ${objectiveYear}`;}
-export function legacyBonusSplit(bonuses:Record<string,number>,gf:number){
- const value=bonuses[String(gf)];
- return {rpc:gf>=12?(Number.isSafeInteger(value)?value:null):null,rpem:gf<=11?(Number.isSafeInteger(value)?value:null):null};
+export function bonusForGF(rows:Record<string,AnnualBonusRow>,gf:number){
+ const row=rows[String(gf)];
+ if(!row)return {rpcRpem:null as number|null,pvpa:null as number|null,total:null as number|null};
+ const rpcRpem=gf<=11?row.rpem:row.rpc;
+ const pvpa=gf<=11?0:row.pvpa;
+ return {rpcRpem,pvpa,total:rpcRpem===null||pvpa===null?null:rpcRpem+pvpa};
 }

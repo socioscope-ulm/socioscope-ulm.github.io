@@ -13,7 +13,7 @@ const agents=[
 ].map(r=>({...r,source:'s2025',row:1,iegYears:20,seniorityDate:'2025-12-31'}));
 const fixture={sources:[source],records:agents,events:[],issues:[],updated:'2026-10-21'};
 const rates={'1.24':{'200':Array(12).fill(20000),'205':Array(12).fill(23000),'100':Array(12).fill(14000)}};
-const config={rates,bonuses:{'15':6000,'8':4000},gridDate:'2025-12-31',bonusReferenceYear:2025,gridId:'grille',bonusId:'primes'};
+const config={rates,bonusRows:{'15':{rpc:6000,rpem:null,pvpa:66200},'8':{rpc:null,rpem:4000,pvpa:null}},gridDate:'2025-12-31',bonusReferenceYear:2025,gridId:'grille',bonusId:'primes'};
 const calc=(college='',sex='')=>agentPayroll(fixture as any,'s2025','agency',config,{college,sex})!;
 
 test('Default payroll preserves unfiltered totals and original salary levels',()=>{
