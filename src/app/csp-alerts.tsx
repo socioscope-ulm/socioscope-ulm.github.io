@@ -1,5 +1,6 @@
 'use client';
 import {useEffect,useState} from 'react';
+import {AlertTriangle,ChevronRight} from 'lucide-react';
 import type {CspAlert} from '../lib/csp-alerts';
 
 const day=(value:string)=>value?new Intl.DateTimeFormat('fr-FR',{dateStyle:'medium',timeZone:'UTC'}).format(new Date(value+'T12:00:00Z')):'Non renseignée';
@@ -27,8 +28,10 @@ export default function CspAlerts({revision,onOpen}:{revision:number;onOpen:(imp
  },[revision,refresh]);
  const application=alerts.filter(item=>item.category==='application').length;
  const verification=alerts.length-application;
- return <section className="panel" aria-label="Alertes et anomalies CSP">
-  <div className="panel-heading"><div><h2>Alertes et anomalies CSP</h2>
+ return <details className="document-folder csp-subsection" aria-label="Alertes et anomalies CSP">
+  <summary><ChevronRight size={16} className="folder-chevron"/><AlertTriangle size={20}/><strong>Alertes et anomalies CSP</strong><span className="badge">{loading?'Chargement…':error?'À vérifier':alerts.length?alerts.length+' signalement(s)':'Aucune alerte'}</span></summary>
+  <div className="document-folder-content"><section className="panel">
+  <div className="panel-heading"><div><h2>Contrôles à traiter</h2>
    <p>Repérer les mouvements qui bloquent les situations actualisées, retrouver le bordereau et vérifier la décision en autonomie.</p>
   </div><button type="button" className="btn" disabled={loading} onClick={()=>setRefresh(n=>n+1)}>Actualiser les contrôles</button></div>
   {loading?<p role="status">Recherche des incohérences CSP…</p>:error?<p className="notice" role="alert">{error} Réessayer avec « Actualiser les contrôles ».</p>:!alerts.length?<p role="status">Aucune anomalie d’application ni décision CSP signalée en attente de justificatif.</p>:<>
@@ -50,5 +53,6 @@ export default function CspAlerts({revision,onOpen}:{revision:number;onOpen:(imp
    </tbody></table></div>
    <p className="filter-note">Les décisions en attente ne sont pas validées automatiquement. Une anomalie documentaire et un blocage de projection peuvent concerner le même agent, mais exigent des vérifications distinctes.</p>
   </>}
- </section>;
+ </section></div>
+ </details>;
 }
