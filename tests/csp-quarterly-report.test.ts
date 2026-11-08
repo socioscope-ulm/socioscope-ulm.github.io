@@ -262,3 +262,64 @@ test('Séances différentes ou résultats incohérents ne sont pas fusionnés',(
  ],2026,2);
  assert.equal(differentMeeting.rows.length,2);
 });
+
+test('Décision à effet différé : ne la publier que dans la première CSP de présentation',()=>{
+ const movement=ev({id:'progression',kind:'avancement',agentId:'A-A',name:'AGENT A',effective:'2026-07-01',
+  nrSteps:1,gfBefore:13,nrBefore:225,nrAfter:230,
+  recordedBefore:{gf:13,nr:225},recordedAfter:{gf:13,nr:230}});
+ const previous=doc([movement],{id:'odj-mars',date:'2026-03-05'});
+ const later=doc([{...movement,id:'same-again'}],{id:'odj-juillet',date:'2026-07-15'});
+ const snapshot=JSON.stringify([previous,later]);
+ const t1=calculateQuarterlyReport([previous,later],2026,1);
+ const t3=calculateQuarterlyReport([previous,later],2026,3);
+ assert.equal(t1.rows.length,1);
+ assert.equal(t1.rows[0].effective,'2026-07-01');
+ assert.equal(t3.rows.length,0);
+ assert.equal(t3.previouslyReported.length,1);
+ assert.equal(t3.previouslyReported[0].originalMeeting,'2026-03-05');
+ assert.equal(t3.sources.length,1);
+ assert.equal(JSON.stringify([previous,later]),snapshot);
+});
+test('Deux vrais avancements à même date d’effet restent deux lignes sur deux trimestres',()=>{
+ const first=ev({kind:'avancement',effective:'2026-07-01',nrSteps:1,
+  nrBefore:250,nrAfter:255,recordedBefore:{gf:14,nr:250},recordedAfter:{gf:14,nr:255}});
+ const next=ev({id:'next-award',kind:'avancement',effective:'2026-07-01',nrSteps:1,
+  nrBefore:255,nrAfter:260,recordedBefore:{gf:14,nr:255},recordedAfter:{gf:14,nr:260}});
+ const report=calculateQuarterlyReport([
+  doc([first],{date:'2026-03-05'}),
+  doc([next],{date:'2026-06-12',id:'odj-june'})
+ ],2026,2);
+ assert.equal(report.rows.length,1);
+ assert.equal(report.rows[0].nrBefore,'255');
+ assert.equal(report.rows[0].nrAfter,'260');
+ assert.equal(report.previouslyReported.length,0);
+});
+test('Un ancien brouillon ou document non validé ne retire aucun mouvement du CR',()=>{
+ const e=ev({kind:'avancement',effective:'2026-07-01',nrSteps:1,
+  nrBefore:250,nrAfter:255,recordedBefore:{gf:14,nr:250},recordedAfter:{gf:14,nr:255}});
+ const report=calculateQuarterlyReport([
+  doc([e],{date:'2026-03-05',status:'review'}),
+  doc([{...e,id:'validated'}],{date:'2026-07-15',id:'new'})
+ ],2026,3);
+ assert.equal(report.rows.length,1);
+ assert.equal(report.previouslyReported.length,0);
+});
+test('Même agent et même effet mais deux décisions indépendantes ne sont pas confondues',()=>{
+ const before=ev({kind:'avancement',effective:'2026-07-01',nrSteps:1,reference:'POSTE A',
+  nrBefore:250,nrAfter:255,recordedBefore:{gf:14,nr:250},recordedAfter:{gf:14,nr:255}});
+ const later=ev({id:'another',kind:'avancement',effective:'2026-07-01',nrSteps:1,reference:'POSTE B',
+  nrBefore:250,nrAfter:255,recordedBefore:{gf:14,nr:250},recordedAfter:{gf:14,nr:255}});
+ const r=calculateQuarterlyReport([
+  doc([before],{date:'2026-03-05'}),doc([later],{id:'later',date:'2026-07-15'})
+ ],2026,3);
+ assert.equal(r.rows.length,1);
+ assert.equal(r.previouslyReported.length,0);
+});
+test('Une candidature non retenue ne constitue pas un mouvement historique à masquer',()=>{
+ const movement=ev({kind:'nomination',effective:'2026-07-01',gfDelta:0,reference:'POSTE A',job:'POSTE A'});
+ const r=calculateQuarterlyReport([
+  doc([{...movement,candidacy:true,nonRetained:true}],{date:'2026-03-05'}),
+  doc([movement],{date:'2026-07-15',id:'july'})
+ ],2026,3);
+ assert.equal(r.rows.length,1);
+});
