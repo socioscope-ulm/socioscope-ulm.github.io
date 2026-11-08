@@ -1,0 +1,11 @@
+{
+  "idbank": "011814640",
+  "series": "Variation annuelle moyenne des prix à la consommation, ensemble des ménages, France, ensemble",
+  "source": "https://www.insee.fr/fr/statistiques/serie/011814640",
+  "values": [
+    {
+      "year": 2025,
+      "value": 0.9
+    }
+  ]
+}
