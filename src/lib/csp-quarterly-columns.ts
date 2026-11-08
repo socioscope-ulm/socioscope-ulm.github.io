@@ -17,8 +17,11 @@ const columns=[
  {id:'nrSteps',label:'NR attribués (NR +)',header:'NR +',width:.56,value:(r:QuarterlyRow)=>r.nrSteps},
  {id:'source',label:'Source',header:'SOURCE',width:3.08,value:(r:QuarterlyRow)=>r.source}
 ];
-export function getMovementColumns(selected:readonly OptionalMovementColumn[]=defaultMovementColumns){
- const visible=columns.filter((c,i)=>i<3||selected.includes(c.id as OptionalMovementColumn));
+export function getMovementColumns(selected:readonly OptionalMovementColumn[]=defaultMovementColumns,kind?:string){
+ // L'admission au stage et la titularisation conservent toujours le GF avant/après,
+ // indépendamment du choix global des colonnes facultatives du CR.
+ const mandatoryGF=kind==='admission'||kind==='titularisation';
+ const visible=columns.filter((c,i)=>i<3||(c.id==='gf'&&mandatoryGF)||selected.includes(c.id as OptionalMovementColumn));
  const total=visible.reduce((n,c)=>n+c.width,0);
  const fullWidth=columns.reduce((n,c)=>n+c.width,0);
  return visible.map(c=>({...c,width:c.width*fullWidth/total}));
