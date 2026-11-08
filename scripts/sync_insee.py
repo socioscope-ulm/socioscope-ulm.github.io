@@ -88,7 +88,7 @@ def run() -> None:
     original = json.loads(DATA_PATH.read_text(encoding="utf-8"))
     req = Request(
         XML_URL,
-        headers={"Accept": "application/xml", "User-Agent": "Socioscope-ULM-INSEE-Annual/1.0"},
+        headers={"Accept": "application/vnd.sdmx.genericdata+xml;version=2.1", "User-Agent": "Socioscope-ULM-INSEE-Annual/1.0"},
     )
     with urlopen(req, timeout=35) as response:
         if response.status != 200:
