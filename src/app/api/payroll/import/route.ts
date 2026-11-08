@@ -4,7 +4,7 @@ import {resources} from '../../../../lib/store';
 import {validateReference} from '../../../../lib/payroll-reference';
 import {validateAnnualBonusDetails,annualBonusLabel} from '../../../../lib/bonus-tables';
 const bad=(message:string,status=400)=>Object.assign(Error(message),{status});
-const sha256=async(value:Uint8Array)=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',value))).map(v=>v.toString(16).padStart(2,'0')).join('');
+const sha256=async(value:Uint8Array)=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',value.buffer as ArrayBuffer))).map(v=>v.toString(16).padStart(2,'0')).join('');
 const validDate=(date:unknown)=>typeof date==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(date)&&date>='2000-01-01'&&date<='2100-12-31'&&new Date(date+'T00:00:00Z').toISOString().slice(0,10)===date;
 
 export async function POST(request:Request){
