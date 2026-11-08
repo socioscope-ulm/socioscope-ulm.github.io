@@ -27,7 +27,7 @@ jobs:
         with:
           node-version: '22'
       - run: npm install --no-audit --no-fund
-      - run: node --experimental-strip-types --test tests/bonus-tables.test.ts tests/payroll-filters.test.ts tests/individual-payroll.test.ts
+      - run: node --experimental-strip-types --test tests/bonus-tables.test.ts tests/payroll-filters.test.ts tests/individual-payroll.test.ts tests/individual-bonus-selection.test.ts
       - run: npm run build
       - run: sh .github/scripts/package-autonomous-api.sh
       - uses: denoland/setup-deno@v2

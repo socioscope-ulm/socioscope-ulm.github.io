@@ -17,13 +17,14 @@ export default function AgentRemuneration({agentId,source,grid,bonus,residence,a
  const [months,setMonths]=useState(13);
  const [contrib,setContrib]=useState(21);
  const [pas,setPas]=useState(0);
+ const [manualBonus,setManualBonus]=useState('');
  useEffect(()=>{
   let active=true;
   const controller=new AbortController();
   setData(null);setError('');setLoading(true);
   const load=async()=>{
    // Une erreur 546/503 transitoire ne doit pas laisser la fiche bloquée en chargement.
-   const query=new URLSearchParams({view:'payroll',asof:asOf||'',source,agent:agentId,grid,bonus,residence});
+   const query=new URLSearchParams({view:'payroll',asof:asOf||'',source,agent:agentId,grid,bonus:manualBonus,residence});
    for(let attempt=0;attempt<2;attempt++){
     try{
      const response=await fetch('/api/agents?'+query,{signal:controller.signal,cache:'no-store'});
@@ -44,7 +45,7 @@ export default function AgentRemuneration({agentId,source,grid,bonus,residence,a
   };
   void load().finally(()=>{if(active)setLoading(false);});
   return()=>{active=false;controller.abort();};
- },[agentId,source,grid,bonus,residence,retry,asOf]);
+ },[agentId,source,grid,manualBonus,residence,retry,asOf]);
  const row=data?.row;
  const monthly=typeof row?.monthlyCents==='number'&&Number.isFinite(row.monthlyCents)?row.monthlyCents:null;
  const bonusAnnual=typeof row?.annualBonusCents==='number'&&Number.isFinite(row.annualBonusCents)?row.annualBonusCents:null;
@@ -88,6 +89,9 @@ export default function AgentRemuneration({agentId,source,grid,bonus,residence,a
   ['Date de grille',data?.gridDate??'',''],
   ['Référence grille',data?.gridId??'',''],
   ['Référence primes',data?.bonusId??'',''],
+  ['Année de versement des primes',data?.bonusPaymentYear??'',''],
+  ['Année des objectifs des primes',data?.bonusObjectiveYear??'',''],
+  ['Mode de sélection des primes',data?.bonusSelection??'',''],
   ['Coefficient résidentiel',row?.residence??'',''],
   ['Majoration provisoire',row?.residenceProvisional?'Oui':'Non',''],
   ['Méthode ancienneté',row?.method??'',''],
@@ -104,8 +108,10 @@ export default function AgentRemuneration({agentId,source,grid,bonus,residence,a
  if(!row)return <section className="panel"><h2>Rémunération estimée</h2><p>Aucune situation salariale calculable dans la photographie retenue. Vérifier le fichier de situation et les références sélectionnées.</p><button className="btn" onClick={()=>setRetry(v=>v+1)}>Actualiser</button></section>;
  return <section className="panel agent-remuneration" aria-label="Rémunération estimée" tabIndex={0} style={{display:'grid',gap:16}}>
   <div className="panel-heading"><div><h2>Rémunération estimée</h2><p>Situation au {date(data.referenceDate)} · grille du {date(data.gridDate)} · simulation individuelle basée sur les mêmes hypothèses que le simulateur de paie.</p></div><button className="btn" onClick={download}>Exporter la rémunération (CSV)</button></div>
+  <div className="notice" role="status">Primes utilisées : versées en {data.bonusPaymentYear}, objectifs {data.bonusObjectiveYear} · situation du {date(data.referenceDate)}. {data.bonusSelection==='nearest'?'Aucune référence validée pour cette année : montant connu le plus proche utilisé pour une estimation, sans prétendre qu’il s’agisse du montant historiquement versé.':data.bonusSelection==='manual'?'Référence sélectionnée manuellement pour une simulation.':'Référence correspondant à l’année de la situation.'}</div>
   {row.nrProvisional&&<div className="notice" role="status">Le NR n’est pas précisé dans le mouvement à GF constant : cette estimation utilise la dernière valeur connue.</div>}{row.reason&&<div className="notice" role="status">Salaire indisponible : {row.reason}. Les montants impossibles à calculer ne sont pas remplacés par zéro.</div>}
   <div className="analysis-options" style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(190px,1fr))',alignItems:'start',gap:14}}>
+   <label>Référence de primes<select aria-label="Référence des primes individuelles" value={manualBonus} onChange={e=>setManualBonus(e.target.value)}><option value="">Automatique — année de versement la plus proche</option>{(data.bonusReferences||[]).map((r:any)=><option key={r.id} value={r.id}>Versées en {r.paymentYear} · objectifs {r.objectiveYear}</option>)}</select></label>
    <label>Annualisation<select value={months} onChange={e=>setMonths(Number(e.target.value))}><option value={12}>12 mois</option><option value={13}>13 mois</option></select></label>
    <label>Cotisations estimées (%)<input type="number" min={0} max={70} step={0.1} value={contrib} onChange={e=>setContrib(Math.max(0,Math.min(70,Number(e.target.value)||0)))}/></label>
    <label>Taux de PAS personnalisé (%)<input type="number" min={0} max={60} step={0.1} value={pas} onChange={e=>setPas(Math.max(0,Math.min(60,Number(e.target.value)||0)))}/><small>Taux indicatifs : 0 %, 2 %, 5 %, 8 %, 10 %, 12,1 %, 12,3 %, 15 %, 20 %, 25 %, 30 %.</small></label>
@@ -122,7 +128,7 @@ export default function AgentRemuneration({agentId,source,grid,bonus,residence,a
   <div><h3>Détail des primes</h3><div className="agent-detail-grid">{primeItems.map(([label,value])=><div key={label}><small>{label}</small><b>{money(value)}</b></div>)}</div></div>
   <div><h3>Compléments du calcul</h3><div className="agent-detail-grid"><div><small>Taux horaire hors primes</small><b>{rate(hourly?.withoutBonuses)}</b></div><div><small>Équivalent horaire avec primes</small><b>{rate(hourly?.withBonuses)}</b></div></div></div>
   <p>GF {row.gf??'non renseigné'} · NR {row.nr??'non renseigné'} · échelon estimé {row.level??'non calculable'} · ancienneté retenue : {typeof row.years==='number'?new Intl.NumberFormat('fr-FR',{maximumFractionDigits:2}).format(row.years)+' ans':'non calculable'} · majoration résidentielle : {pct((Number(row.residence)-1)*100)} %.</p>
-  <p className="gap-method">RPC / RPEM et PVPA selon la même référence d'objectifs {data.bonusReferenceYear}, selon le GF. Les primes fixes cadres engagement ({data?.engagementRate??3.5} %) et autonomie ({data?.autonomieRate??4} %) sont calculées sur le brut mensuel de base, pour 12 versements. Les remboursements de frais ne sont pas ajoutés. Les hypothèses sont des simulations et non des bulletins de paie.</p>
+  <p className="gap-method">RPC / RPEM et PVPA selon le tableau versé en {data.bonusPaymentYear} pour les objectifs {data.bonusObjectiveYear}, selon le GF. Les primes fixes cadres engagement ({data?.engagementRate??3.5} %) et autonomie ({data?.autonomieRate??4} %) sont calculées sur le brut mensuel de base, pour 12 versements. Les remboursements de frais ne sont pas ajoutés. Les hypothèses sont des simulations et non des bulletins de paie.</p>
  </section>;
 }
 
