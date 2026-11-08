@@ -27,14 +27,14 @@ const readAmounts=(rows:unknown[][])=>{
 };
 async function api(url:string,options?:RequestInit){const response=await fetch(url,options);const body=await response.json();if(!response.ok)throw Error(body.error||'Action impossible.');return body;}
 export default function BonusTables({onChanged}:{onChanged?:()=>void}){
- const [refs,setRefs]=useState<Ref[]>([]),[activeId,setActiveId]=useState(''),[selectedId,setSelectedId]=useState('');
+ const [refs,setRefs]=useState<Ref[]>([]),[selectedId,setSelectedId]=useState('');
  const [paymentYear,setPaymentYear]=useState('2026'),[objectiveYear,setObjectiveYear]=useState('2025');
  const [values,setValues]=useState(blank),[file,setFile]=useState<File|null>(null);
  const [busy,setBusy]=useState(false),[checked,setChecked]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('');
- const reload=async()=>{const d=await api('/api/payroll');setRefs(d.references||[]);setActiveId(d.activeBonusId||'');};
+ const reload=async()=>{const d=await api('/api/payroll');setRefs(d.references||[]);};
  useEffect(()=>{reload().catch(e=>setError(e.message));},[]);
  const docs=useMemo(()=>refs.filter(r=>r.kind==='bonus-detail').sort((a,b)=>b.payload.objectiveYear-a.payload.objectiveYear||b.payload.paymentYear-a.payload.paymentYear||String(b.created||'').localeCompare(String(a.created||''))),[refs]);
- const current=docs.find(r=>r.id===selectedId)||docs.find(r=>r.id===activeId)||docs[0];
+ const current=docs.find(r=>r.id===selectedId)||docs[0];
  const pick=async(f:File|null)=>{
   setFile(f);setError('');
   if(!f||!(/\.(csv|xlsx?|xlsm)$/i.test(f.name)))return;
@@ -57,37 +57,30 @@ export default function BonusTables({onChanged}:{onChanged?:()=>void}){
    if(file){const form=new FormData();form.set('file',file);form.set('extraction',JSON.stringify(input));result=await api('/api/payroll/import',{method:'POST',body:form});}
    else result=await api('/api/payroll/import',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(input)});
    await reload();setSelectedId(result.id);setChecked(false);
-   setNotice('Nouvelle référence enregistrée pour vérification. Les calculs ne changent pas avant son activation explicite.');
+   setNotice('Nouvelle référence enregistrée pour vérification. Aucun calcul ne change avant sa validation.');
   }catch(e){setError((e as Error).message);}finally{setBusy(false);}
  };
  const validate=async()=>{
   if(!current||busy||current.status!=='review'||!checked)return;
   setBusy(true);setError('');
-  try{await api('/api/payroll/import/'+encodeURIComponent(current.id),{method:'POST'});await reload();setChecked(false);onChanged?.();setNotice('Référence validée. Elle reste inactive tant que vous ne la choisissez pas pour les calculs.');}
-  catch(e){setError((e as Error).message);}finally{setBusy(false);}
- };
- const activate=async()=>{
-  if(!current||current.status!=='validated'||busy)return;
-  setBusy(true);setError('');
-  try{const result=await api('/api/payroll',{method:'PATCH',headers:{'content-type':'application/json'},body:JSON.stringify({id:current.id})});setActiveId(result.activeBonusId);onChanged?.();setNotice('Référence active modifiée : le simulateur et la masse salariale utilisent désormais cette même table.');}
+  try{await api('/api/payroll/import/'+encodeURIComponent(current.id),{method:'POST'});await reload();setChecked(false);onChanged?.();setNotice('Référence validée. Les calculs utilisent automatiquement la référence pertinente : année de versement la plus proche pour les situations, dernière année validée dans le simulateur.');}
   catch(e){setError((e as Error).message);}finally{setBusy(false);}
  };
  return <ImportSubsection title="Primes annuelles par GF : consulter, saisir et valider" badge={docs.length+' tableau(x)'} defaultOpen>
   <section className="panel" style={{display:'grid',gap:14}}>
    <h2>Référentiel unique des primes annuelles</h2>
-   <p>Une référence contient les années de versement et d’objectifs, la RPC, la RPEM et la PVPA par GF. La référence active alimente directement le simulateur et la masse salariale. Les années précédentes restent disponibles pour comparaison.</p>
+   <p>Une référence contient les années de versement et d’objectifs, la RPC, la RPEM et la PVPA par GF. La dernière année validée est proposée dans le simulateur, tandis que les situations individuelles et la masse salariale utilisent les primes versées l’année de la photographie, ou le tableau validé le plus proche. Le choix manuel reste disponible dans chaque outil.</p>
    {current&&<>
     <label>Tableau enregistré
      <select value={current.id} onChange={e=>{setSelectedId(e.target.value);setChecked(false);}}>
-      {docs.map(d=><option key={d.id} value={d.id}>{annualBonusLabel(d.payload.paymentYear,d.payload.objectiveYear)} · {d.status==='validated'?'validé':'à vérifier'}{d.id===activeId?' · ACTIVE POUR LES CALCULS':''}</option>)}
+      {docs.map(d=><option key={d.id} value={d.id}>{annualBonusLabel(d.payload.paymentYear,d.payload.objectiveYear)} · {d.status==='validated'?'validé':'à vérifier'}</option>)}
      </select>
     </label>
-    <div><strong>{annualBonusLabel(current.payload.paymentYear,current.payload.objectiveYear)}</strong> · {current.id===activeId?'Référence active pour les calculs':current.status==='validated'?'Référence consultable':'En attente de validation'}<small style={{display:'block'}}>Origine : {current.payload.sourceName||current.name}</small></div>
+    <div><strong>{annualBonusLabel(current.payload.paymentYear,current.payload.objectiveYear)}</strong> · {current.status==='validated'?'Référence validée':'En attente de validation'}<small style={{display:'block'}}>Origine : {current.payload.sourceName||current.name}</small></div>
     <div className="table-scroll"><table style={{width:'100%',minWidth:490}}><thead><tr><th>GF</th><th>RPC</th><th>RPEM</th><th>PVPA</th></tr></thead><tbody>{ANNUAL_BONUS_GFS.map(gf=><tr key={gf}><th>{gf}</th>{(['rpc','rpem','pvpa'] as const).map(key=><td key={key} style={{fontVariantNumeric:'tabular-nums'}}>{display(current.payload.rows?.[String(gf)]?.[key]??null,bonusApplicable(gf,key))}</td>)}</tr>)}</tbody></table></div>
     {current.payload.originalPath&&<a className="btn" href={current.payload.originalPath}>Télécharger le document d’origine</a>}
     {!current.payload.originalPath&&current.payload.hasOriginal&&<a className="btn" href={'/api/payroll/files/'+current.id}>Télécharger le document d’origine</a>}
     {current.status==='review'&&<><label className="archive-toggle"><input type="checkbox" checked={checked} onChange={e=>setChecked(e.target.checked)}/>J’ai vérifié les montants, les années et les GF.</label><button className="btn primary" onClick={validate} disabled={busy||!checked}>Valider ce tableau</button></>}
-    {current.status==='validated'&&current.id!==activeId&&<button className="btn" disabled={busy} onClick={activate}>Utiliser ce tableau pour les calculs</button>}
    </>}
    <p className="filter-note">« — » : prime non applicable ; « Non renseigné » : montant absent ; « 0 € » : zéro explicitement publié. GF 2 à 11 : RPEM. GF 12 à 19 : RPC et PVPA. La JDD n’est pas ajoutée.</p>
    <details><summary>Ajouter un tableau (fichier ou saisie manuelle)</summary>

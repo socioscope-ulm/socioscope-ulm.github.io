@@ -1,7 +1,7 @@
 'use client';
 import {useEffect,useMemo,useState} from 'react';
 import type {PayrollReference} from '../lib/payroll-reference';
-import {selectReference} from '../lib/payroll-reference';
+import {selectReference,selectLatestAnnualBonusReference} from '../lib/payroll-reference';
 import {bonusForGF,annualBonusLabel} from '../lib/bonus-tables';
 
 const euros=(c:number|null)=>c===null?'Non calculable':new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR'}).format(c/100);
@@ -11,7 +11,6 @@ export default function PaySimulator({revision=0}:{revision?:number}){
  const [error,setError]=useState('');
  const [gridId,setGridId]=useState('');
  const [bonusId,setBonusId]=useState('');
- const [activeBonusId,setActiveBonusId]=useState('');
  const [residence,setResidence]=useState('1.245');
  const [gf,setGf]=useState('12');
  const [nr,setNr]=useState('200');
@@ -30,11 +29,11 @@ export default function PaySimulator({revision=0}:{revision?:number}){
  const [afe,setAfe]=useState(false);
  const [familial,setFamilial]=useState(false);
  useEffect(()=>{const c=new AbortController();fetch('/api/prime-settings',{signal:c.signal,cache:'no-store'}).then(async r=>{const d=await r.json();if(!r.ok)throw Error(d.error||'Paramètres des primes indisponibles');setPrimeDefaults(d.settings);setPrimeValues(d.settings);}).catch(e=>{if(e.name!=='AbortError')setError(e.message);});return()=>c.abort();},[revision]);
- useEffect(()=>{const c=new AbortController();fetch('/api/payroll',{signal:c.signal,cache:'no-store'}).then(async r=>{if(!r.ok)throw Error('Références salariales indisponibles ('+r.status+').');return r.json();}).then(d=>{setRefs(d.references||[]);setActiveBonusId(d.activeBonusId||'');}).catch(e=>{if(e.name!=='AbortError')setError(e.message);});return()=>c.abort();},[revision]);
+ useEffect(()=>{const c=new AbortController();fetch('/api/payroll',{signal:c.signal,cache:'no-store'}).then(async r=>{if(!r.ok)throw Error('Références salariales indisponibles ('+r.status+').');return r.json();}).then(d=>setRefs(d.references||[])).catch(e=>{if(e.name!=='AbortError')setError(e.message);});return()=>c.abort();},[revision]);
  const grids=useMemo(()=>refs.filter(r=>r.kind==='grid'&&r.status==='validated').sort((a,b)=>b.date.localeCompare(a.date)),[refs]);
  const bonuses=useMemo(()=>refs.filter(r=>r.kind==='bonus-detail'&&r.status==='validated').sort((a,b)=>b.date.localeCompare(a.date)),[refs]);
  const grid=selectReference(refs,'grid',gridId)||grids[0];
- const bonus=selectReference(refs,'bonus-detail',bonusId||activeBonusId)||bonuses[0];
+ const bonus=bonusId?selectReference(refs,'bonus-detail',bonusId):selectLatestAnnualBonusReference(refs);
  const rates=(grid?.payload?.rates||{}) as Record<string,Record<string,(number|null)[]>>;
  const residences=Object.keys(rates).sort((a,b)=>numeric(a)-numeric(b));
  const effectiveResidence=rates[residence]?residence:residences[0]||'';
@@ -69,7 +68,7 @@ export default function PaySimulator({revision=0}:{revision?:number}){
   <div className="panel"><h2>Simulateur de paie</h2><p>Simulation indicative à partir des grilles et primes validées dans les documents Socioscope. Tous les paramètres sont modifiables ; aucune fiche individuelle n'est modifiée.</p>{error&&<p role="alert">{error}</p>}
    <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(190px,1fr))',gap:16}}>
     {input('Grille de rémunération',<select value={grid?.id||''} onChange={e=>{setGridId(e.target.value);setNr('');}}>{grids.map(r=><option key={r.id} value={r.id}>{r.name} · {r.date}</option>)}</select>)}
-    {input('Grille des primes · RPC / RPEM / PVPA',<select value={bonus?.id||''} onChange={e=>setBonusId(e.target.value)}>{bonuses.map(r=><option key={r.id} value={r.id}>{annualBonusLabel(r.payload.paymentYear,r.payload.objectiveYear)}</option>)}</select>)}
+    {input('Grille des primes · RPC / RPEM / PVPA',<select value={bonusId} onChange={e=>setBonusId(e.target.value)}><option value="">Automatique — dernière référence validée{bonus?' ('+bonus.payload.paymentYear+')':''}</option>{bonuses.map(r=><option key={r.id} value={r.id}>{annualBonusLabel(r.payload.paymentYear,r.payload.objectiveYear)}</option>)}</select>)}
     {input('Majoration résidentielle',<select value={effectiveResidence} onChange={e=>{setResidence(e.target.value);setNr('');}}>{residences.map(r=><option key={r} value={r}>{((Number(r)-1)*100).toLocaleString('fr-FR',{maximumFractionDigits:2})} %</option>)}</select>)}
     {input('Groupe fonctionnel (GF)',<select value={gf} onChange={e=>setGf(e.target.value)}>{Array.from({length:19},(_,i)=>String(i+1)).map(v=><option key={v} value={v}>GF {v}</option>)}</select>)}
     {input('Niveau de rémunération (NR)',<select value={effectiveNr} onChange={e=>setNr(e.target.value)}>{nrs.map(v=><option key={v} value={v}>NR {v}</option>)}</select>)}

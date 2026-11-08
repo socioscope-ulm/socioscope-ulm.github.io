@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {selectNearestAnnualBonusReference} from '../src/lib/payroll-reference.ts';
+import {selectNearestAnnualBonusReference,selectLatestAnnualBonusReference} from '../src/lib/payroll-reference.ts';
 
 const refs=[
  {id:'old2025',kind:'bonus-detail',status:'validated',date:'2025-01-01',created:'',payload:{paymentYear:2025,objectiveYear:2024}},
@@ -37,4 +37,20 @@ test('does not mutate references or fabricate an absent reference',()=>{
  assert.equal(selectNearestAnnualBonusReference(refs,'not-a-date'),undefined);
  assert.equal(selectNearestAnnualBonusReference([], '2025-12-31'),undefined);
  assert.equal(JSON.stringify(refs),input);
+});
+
+test('latest validated reference is the default for the standalone simulator',()=>{
+ assert.equal(selectLatestAnnualBonusReference(refs)?.id,'new2026');
+});
+test('latest bonus selects payment year ahead of objectives and excludes drafts',()=>{
+ const next=[...refs,{...refs[0],id:'new2027',payload:{paymentYear:2027,objectiveYear:2026}},{...refs[1],id:'draft2030',status:'review',payload:{paymentYear:2030,objectiveYear:2029}}] as any;
+ assert.equal(selectLatestAnnualBonusReference(next)?.id,'new2027');
+});
+test('collective year logic follows the historical individual logic',()=>{
+ const year2025=selectNearestAnnualBonusReference(refs,'2025-12-31');
+ const year2026=selectNearestAnnualBonusReference(refs,'2026-12-31');
+ const missing=selectNearestAnnualBonusReference(refs,'2022-12-31');
+ assert.equal(year2025?.payload.paymentYear,2025);
+ assert.equal(year2026?.payload.paymentYear,2026);
+ assert.equal(missing?.payload.paymentYear,2025);
 });
