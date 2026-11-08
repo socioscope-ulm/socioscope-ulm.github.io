@@ -1,5 +1,6 @@
 'use client';
 import {useEffect,useState} from 'react';
+import {Activity,ChevronRight} from 'lucide-react';
 import {consumptionCycle} from '../lib/consumption-cycle';
 
 const gb=(bytes:number)=>{
@@ -33,8 +34,10 @@ export default function UsageAdmin(){
  const days=[...new Set<string>(rows.map((r:any)=>r.day))].reverse().slice(0,7);
  const level=Math.max(cached,uncached);
  const alert=level>=4.5e9?'Seuil indicatif de 4,5 Go atteint':level>=4e9?'Attention : 4 Go atteints':level>=3.5e9?'Vigilance : 3,5 Go atteints':'';
- return <section className="panel" aria-label="Consommation et accès utilisateurs" style={{display:'grid',gap:16}}>
-  <div className="panel-heading"><div><h2>Consommation et accès utilisateurs</h2><p>Suivi local estimé de Socioscope · administrateur uniquement</p></div><button type="button" className="btn" disabled={busy} onClick={()=>void refresh()}>Actualiser le suivi</button></div>
+ return <details className="document-folder" aria-label="Consommation et accès utilisateurs">
+  <summary><ChevronRight size={16} className="folder-chevron"/><Activity size={20}/><strong>Consommation et accès utilisateurs</strong><span className="badge">Afficher le suivi</span></summary>
+  <div className="document-folder-content" style={{display:'grid',gap:16}}>
+  <div className="panel-heading" style={{padding:0}}><div><p>Suivi local estimé de Socioscope · administrateur uniquement</p></div><button type="button" className="btn" disabled={busy} onClick={()=>void refresh()}>Actualiser le suivi</button></div>
   <p>Ce suivi commence à son activation. Il exclut les usages antérieurs, Pointage, les échanges avec la base de données et l’authentification. Il ne représente pas le relevé de facturation Supabase de l’organisation.</p>
   {data?<>
    {data.recordingAvailable===false&&<p className="notice" role="alert">L’enregistrement des mesures est momentanément indisponible. Les valeurs affichées sont incomplètes. Actualisez le suivi pour réessayer.</p>}
@@ -51,5 +54,6 @@ export default function UsageAdmin(){
    {days.length>0&&<div className="table-scroll"><table><caption>Derniers jours de suivi local</caption><thead><tr><th>Jour UTC</th><th>Storage avec cache</th><th>Sans cache estimé</th><th>Storage non classé</th></tr></thead><tbody>{days.map(day=>{const total=(bucket:string)=>rows.filter((r:any)=>r.day===day&&r.bucket===bucket).reduce((n:number,r:any)=>n+r.bytes,0);return <tr key={day}><td>{day.split('-').reverse().join('/')}</td><td>{gb(total('storage_cached'))}</td><td>{gb(total('storage_uncached')+total('api'))}</td><td>{gb(total('storage_unknown'))}</td></tr>;})}</tbody></table></div>}
   </>:<p>Chargement du suivi…</p>}
   {notice&&<p role="status">{notice}</p>}
- </section>;
+  </div>
+ </details>;
 }
