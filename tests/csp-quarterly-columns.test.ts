@@ -23,3 +23,22 @@ test('Les largeurs des tableaux restent constantes quel que soit le motif',()=>{
   assert.ok(Math.abs(total(getMovementColumns([],kind))-expected)<.000001);
  }
 });
+
+test('NR+ absent pour les admissions au stage et les titularisations même si la case globale est cochée',()=>{
+ for(const kind of ['admission','titularisation']){
+  const columns=getMovementColumns(['gf','nr','nrSteps','source'],kind);
+  assert.equal(columns.some(c=>c.id==='nrSteps'),false);
+  assert.equal(columns.some(c=>c.id==='gf'),true);
+  assert.equal(columns.some(c=>c.id==='nr'),true);
+ }
+});
+test('NR+ reste une option pour les autres mouvements et les largeurs restent équilibrées',()=>{
+ for(const kind of ['avancement','reclassement','nomination','mutation','mesure','posthume']){
+  assert.equal(getMovementColumns(['nrSteps'],kind).some(c=>c.id==='nrSteps'),true);
+  assert.equal(getMovementColumns([],kind).some(c=>c.id==='nrSteps'),false);
+ }
+ const full=getMovementColumns().reduce((n,c)=>n+c.width,0);
+ for(const kind of ['admission','titularisation']){
+  assert.ok(Math.abs(getMovementColumns(['gf','nr','nrSteps','source'],kind).reduce((n,c)=>n+c.width,0)-full)<1e-6);
+ }
+});
