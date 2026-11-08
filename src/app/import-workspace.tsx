@@ -1,5 +1,5 @@
 'use client';
-import type {ReactNode} from 'react';
+import {useEffect,useRef,type ReactNode} from 'react';
 import {ChevronRight,FileText,FolderOpen} from 'lucide-react';
 
 /** Mêmes codes visuels que l'espace CSP, sans modifier les parcours d'import. */
@@ -23,10 +23,12 @@ export default function ImportWorkspace({kind,children}:{kind:ImportKind;childre
  </section>;
 }
 
-export function ImportSubsection({title,badge,children,defaultOpen=false}:{
- title:string;badge?:string;children:ReactNode;defaultOpen?:boolean;
+export function ImportSubsection({title,badge,children,defaultOpen=false,reveal=false}:{
+ title:string;badge?:string;children:ReactNode;defaultOpen?:boolean;reveal?:boolean;
 }){
- return <details className="document-folder csp-subsection import-subsection" defaultOpen={defaultOpen}>
+ const ref=useRef<HTMLDetailsElement>(null);
+ useEffect(()=>{if(reveal&&ref.current)ref.current.open=true;},[reveal]);
+ return <details ref={ref} className="document-folder csp-subsection import-subsection" defaultOpen={defaultOpen||reveal}>
   <summary><ChevronRight size={16} className="folder-chevron"/><FolderOpen size={20}/><strong>{title}</strong>{badge&&<span className="badge">{badge}</span>}</summary>
   <div className="document-folder-content">{children}</div>
  </details>;
