@@ -87,3 +87,39 @@ test('La validation seule ne résout pas une réserve de NR provisoire',()=>{
  assert.match(r.rows[0].notes,/NR après provisoire/);
  assert.equal(r.rows[0].resolvedNotes,'');
 });
+
+test('RD GF constant : confirme les GF et NR du bordereau ODJ sans modifier les données',()=>{
+ const odjEvent=ev({id:'odj-constant',name:'BALLIGAND TEST',agentId:'B-1',reference:'POSTE 14',job:'POSTE 14',
+  recordedBefore:{gf:13,nr:230},recordedAfter:{gf:13,nr:230,nrProvisional:true},
+  note:'Vérifier les situations avant/après ; le NR après doit être renseigné.',
+  acknowledgedByRD:{id:'rd1'}});
+ const rdEvent=ev({id:'rd-constant',name:'BALLIGAND TEST',agentId:'B-1',reference:'POSTE 14',job:'POSTE 14',
+  recordedBefore:{gf:13},recordedAfter:{gf:13,nr:230,nrProvisional:true},note:'GF constant'});
+ const original=JSON.stringify([odjEvent,rdEvent]);
+ const r=calculateQuarterlyReport([
+  doc([odjEvent],{id:'odj1',status:'review',automaticallyValidated:true}),
+  doc([rdEvent],{id:'rd1',documentType:'rd'})
+ ],2026,1);
+ assert.equal(r.rows.length,1);
+ assert.equal(r.rows[0].gfBefore,'13');
+ assert.equal(r.rows[0].gfAfter,'13');
+ assert.equal(r.rows[0].nrBefore,'230');
+ assert.equal(r.rows[0].nrAfter,'230');
+ assert.doesNotMatch(r.rows[0].notes,/provisoire|divergence/i);
+ assert.equal(JSON.stringify([odjEvent,rdEvent]),original);
+});
+test('GF constant sans ODJ confirmé conserve les réserves',()=>{
+ const r=calculateQuarterlyReport([doc([ev({note:'GF constant',recordedAfter:{gf:13,nr:220,nrProvisional:true}})],{
+  id:'rd-alone',documentType:'rd'
+ })],2026,1);
+ assert.match(r.rows[0].notes,/NR après provisoire/);
+});
+test('Un autre poste ne doit jamais être confirmé par erreur',()=>{
+ const odjEvent=ev({id:'odj',reference:'POSTE A',job:'POSTE A',acknowledgedByRD:{id:'rd1'}});
+ const rdEvent=ev({id:'rd',reference:'POSTE B',job:'POSTE B',note:'GF constant',recordedAfter:{gf:13,nr:220,nrProvisional:true}});
+ const r=calculateQuarterlyReport([
+  doc([odjEvent],{status:'review',automaticallyValidated:true}),
+  doc([rdEvent],{id:'rd1',documentType:'rd'})
+ ],2026,1);
+ assert.match(r.rows[0].notes,/NR après provisoire/);
+});
