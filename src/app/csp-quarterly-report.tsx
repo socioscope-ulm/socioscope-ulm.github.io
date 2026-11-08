@@ -1,15 +1,17 @@
 'use client';
 import {useEffect,useMemo,useState} from 'react';
+import {defaultMovementColumns,getMovementColumns,optionalMovementColumns,type OptionalMovementColumn} from '../lib/csp-quarterly-columns';
 import {Download,RefreshCw,FileText} from 'lucide-react';
 import {calculateQuarterlyReport,isCadresDocument,kindLabels} from '../lib/csp-quarterly-report';
 import type {QuarterlyDocument,QuarterlyReport,QuarterlyEvent} from '../lib/csp-quarterly-report';
 type ImportMeta={id:string;name:string;date:string;status:string;documentType:'cr'|'rd';perEventValidation?:boolean};
-const fr=(s:string)=>/^\d{4}-\d{2}-\d{2}$/.test(s)?s.slice(8)+'/'+s.slice(5,7)+'/'+s.slice(0,4):'—';
 const current=new Date();
 export default function CspQuarterlyReport({revision=0}:{revision?:number}){
  const [year,setYear]=useState(current.getFullYear());
  const [quarter,setQuarter]=useState(Math.ceil((current.getMonth()+1)/3));
  const [includeCandidates,setIncludeCandidates]=useState(true);
+ const [selectedColumns,setSelectedColumns]=useState<OptionalMovementColumn[]>(defaultMovementColumns);
+ const visibleColumns=getMovementColumns(selectedColumns);
  const [busy,setBusy]=useState(false);
  const [error,setError]=useState('');
  const [report,setReport]=useState<QuarterlyReport|null>(null);
@@ -50,7 +52,7 @@ export default function CspQuarterlyReport({revision=0}:{revision?:number}){
   setBusy(true);setError('');
   try{
    const {downloadQuarterlyPpt}=await import('../lib/csp-quarterly-ppt');
-   await downloadQuarterlyPpt(report,includeCandidates);
+   await downloadQuarterlyPpt(report,includeCandidates,selectedColumns);
   }catch(ex){setError(ex instanceof Error?ex.message:"L'export PowerPoint a échoué.");}
   finally{setBusy(false);}
  }
@@ -72,6 +74,14 @@ export default function CspQuarterlyReport({revision=0}:{revision?:number}){
   </div>
   <label className="check-label"><input type="checkbox" checked={includeCandidates} onChange={e=>setIncludeCandidates(e.target.checked)}/>
    Inclure les candidatures non retenues dans une rubrique distincte</label>
+  <fieldset disabled={busy} style={{margin:'16px 0',padding:16,border:'1px solid #ddd',borderRadius:8}}>
+   <legend>Colonnes des tableaux de mouvements</legend>
+   <p className="filter-note">Toujours présentes : Nom / prénom, Agence / poste et CSP / effet.</p>
+   <div className="analysis-options">{optionalMovementColumns.map(c=><label key={c.id} className="check-label">
+    <input type="checkbox" checked={selectedColumns.includes(c.id)} onChange={e=>setSelectedColumns(previous=>e.target.checked?[...previous,c.id]:previous.filter(id=>id!==c.id))}/>{c.label}
+   </label>)}</div>
+   <p className="filter-note">Décochez les colonnes à masquer. L’aperçu et les tableaux du PowerPoint suivent ce choix ; les colonnes restantes occupent toute la largeur.</p>
+  </fieldset>
   {error&&<p className="notice" role="alert">{error}</p>}
   {!report&&!busy&&<p className="filter-note">Sélectionner une période, puis préparer le rapport. Les données ne sont chargées que sur demande pour limiter la consommation Supabase.</p>}
   {report&&<>
@@ -86,8 +96,8 @@ export default function CspQuarterlyReport({revision=0}:{revision?:number}){
    {!!grouped.length&&<div className="table-scroll"><table><thead><tr><th>Rubrique</th><th>Mouvements</th></tr></thead>
     <tbody>{grouped.map(x=><tr key={x.kind}><td>{x.label}</td><td>{x.count}</td></tr>)}</tbody></table></div>}
    {!!report.rows.length&&<details><summary>Aperçu des mouvements ({report.rows.length})</summary>
-    <div className="table-scroll"><table><thead><tr><th>Agent</th><th>Décision</th><th>CSP</th><th>Date d’effet</th><th>GF avant / après</th><th>NR avant / après</th><th>Source</th></tr></thead>
-     <tbody>{report.rows.slice(0,80).map((r,i)=><tr key={r.id+i}><td>{r.name}</td><td>{kindLabels[r.kind]}</td><td>{fr(r.meeting)}</td><td>{fr(r.effective)}</td><td>{r.gfBefore} / {r.gfAfter}</td><td>{r.nrBefore} / {r.nrAfter}</td><td>{r.source}</td></tr>)}</tbody>
+    <div className="table-scroll"><table><thead><tr>{visibleColumns.map(c=><th key={c.id}>{c.label}</th>)}</tr></thead>
+     <tbody>{report.rows.slice(0,80).map((r,i)=><tr key={r.id+i}>{visibleColumns.map(c=><td key={c.id} style={{whiteSpace:'pre-line'}}>{c.value(r)}</td>)}</tr>)}</tbody>
     </table></div>{report.rows.length>80&&<p>Affichage limité aux 80 premières lignes. Le PowerPoint contient toutes les lignes.</p>}
    </details>}
    <div className="analysis-options">

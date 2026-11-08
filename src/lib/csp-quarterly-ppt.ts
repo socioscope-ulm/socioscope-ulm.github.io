@@ -1,3 +1,4 @@
+import {getMovementColumns,type OptionalMovementColumn} from './csp-quarterly-columns';
 import type {QuarterlyReport,QuarterlyRow} from './csp-quarterly-report';
 import {kindLabels,kindOrder} from './csp-quarterly-report';
 import {CSP_CHARTER_BG_DATA} from './csp-quarterly-background';
@@ -54,9 +55,6 @@ function table(s:any,rows:string[][],widths:number[],y=1.26,rowH:number|number[]
   autoFit:false,showHeader:false,margin:.04,valign:'mid'});
  return heights.reduce((n,h)=>n+h,0);
 }
-const movementCols=[2.36,2.46,1.48,1.18,1.21,.56,3.08];
-const movementHeaders=['NOM PRÉNOM','AGENCE / POSTE','CSP / EFFET',
- 'GF AV. / AP.','NR AV. / AP.','NR +','SOURCE'];
 /** Dimensionnement prudent d'une cellule : une ligne supplémentaire accroît sa hauteur.
  * Évite l'ancienne limite fixe de 6 mouvements par diapositive.
  */
@@ -64,20 +62,17 @@ function numberOfLines(value:string,width:number,fontSize=8.9){
  const chars=Math.max(8,Math.floor(width*12.0*(9/fontSize)));
  return String(value).split('\n').reduce((n,line)=>n+Math.max(1,Math.ceil(line.length/chars)),0);
 }
-function movementCells(e:QuarterlyRow):string[]{
- const agency=[e.agency,e.job].filter(x=>x&&x!=='—').join('\n');
- return [e.name,agency||'—',date(e.meeting)+'\n'+date(e.effective),
-  e.gfBefore+' / '+e.gfAfter,e.nrBefore+' / '+e.nrAfter,e.nrSteps,e.source];
-}
-function movementHeight(e:QuarterlyRow){
- const cells=movementCells(e);
- const lines=Math.max(...cells.map((v,i)=>numberOfLines(v,movementCols[i])));
+function movementHeight(e:QuarterlyRow,columns:ReturnType<typeof getMovementColumns>){
+ const lines=Math.max(...columns.map(c=>numberOfLines(c.value(e),c.width)));
  return Math.min(.82,Math.max(.40,.085+lines*.148));
 }
 /** Petites rubriques côte à côte verticalement ; grands motifs découpés selon l'espace restant.
  * Retourne le nombre total de mouvements insérés (test d'exhaustivité).
  */
-function addCompactMovements(ppt:Presentation,report:QuarterlyReport,foot:string){
+function addCompactMovements(ppt:Presentation,report:QuarterlyReport,foot:string,selected?:readonly OptionalMovementColumn[]){
+ const columns=getMovementColumns(selected);
+ const movementCols=columns.map(c=>c.width);
+ const movementHeaders=columns.map(c=>c.header);
  let slide:any=null;
  let y=1.20,sectionsOnPage=0,movementsOnPage:QuarterlyRow[]=[];
  let count=0;
@@ -93,7 +88,7 @@ function addCompactMovements(ppt:Presentation,report:QuarterlyReport,foot:string
   const title=kindTitles[kind]||kindLabels[kind].toUpperCase();
   while(offset<values.length){
    const remaining=values.slice(offset);
-   const estimatedTotal=.37+.34+remaining.reduce((n,r)=>n+movementHeight(r),0)+.13;
+   const estimatedTotal=.37+.34+remaining.reduce((n,r)=>n+movementHeight(r,columns),0)+.13;
    if(!slide)startPage();
    // Évite les petites rubriques orphelines à la fin d'une page.
    if(sectionsOnPage>0&&remaining.length<=7&&y+estimatedTotal>LIMIT)startPage();
@@ -106,7 +101,7 @@ function addCompactMovements(ppt:Presentation,report:QuarterlyReport,foot:string
    const block:QuarterlyRow[]=[];
    const heights:number[]=[header];
    for(const item of remaining){
-    const h=movementHeight(item);
+    const h=movementHeight(item,columns);
     if(h>free&&block.length)break;
     if(h>free&&!block.length)throw Error('Une ligne de mouvement dépasse la hauteur disponible.');
     block.push(item);heights.push(h);free-=h;
@@ -117,20 +112,20 @@ function addCompactMovements(ppt:Presentation,report:QuarterlyReport,foot:string
    slide.addText(label,{x:.48,y,w:11.8,h:heading,fontFace:'Arial',fontSize:15.2,bold:true,
     color:P.text,margin:0,breakLine:false});
    y+=heading;
-   const tableRows=[movementHeaders,...block.map(movementCells)];
+   const tableRows=[movementHeaders,...block.map(r=>columns.map(c=>c.value(r)))];
    y+=table(slide,tableRows,movementCols,y,heights,8.9);
    y+=.11;
    count+=block.length;
    offset+=block.length;
    sectionsOnPage++;
    movementsOnPage.push(...block);
-   // Sources remains present in the editable source column of each movement.
+
   }
  }
  return count;
 }
 function blocks<T>(xs:T[],n:number){const out:T[][]=[];for(let i=0;i<xs.length;i+=n)out.push(xs.slice(i,i+n));return out;}
-export async function downloadQuarterlyPpt(report:QuarterlyReport,includeCandidates=true){
+export async function downloadQuarterlyPpt(report:QuarterlyReport,includeCandidates=true,selectedColumns?:readonly OptionalMovementColumn[]){
  if(!report.sources.length)throw Error('Aucun document CSP cadres pour ce trimestre.');
  // Load only when the administrator actively exports a deck.
  const module=await import('pptxgenjs');
@@ -172,7 +167,7 @@ export async function downloadQuarterlyPpt(report:QuarterlyReport,includeCandida
  rows.push(['TOTAL',...months.map(m=>String(report.rows.filter(r=>Number(r.meeting.slice(5,7))===m).length)),String(report.rows.length)]);
  table(s,rows,[5.5,1.8,1.8,1.8,1.4],1.20,.43,10.5);
  bodyText(s,'Comptage par séance, et non par date d’effet.',6.60,10,.28);
- const exportedMovements=addCompactMovements(ppt,report,foot);
+ const exportedMovements=addCompactMovements(ppt,report,foot,selectedColumns);
  if(exportedMovements!==report.rows.length)
   throw Error('Export incomplet : '+exportedMovements+' / '+report.rows.length+' mouvements.');
 
