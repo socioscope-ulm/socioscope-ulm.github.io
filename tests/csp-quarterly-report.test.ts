@@ -323,3 +323,32 @@ test('Une candidature non retenue ne constitue pas un mouvement historique à ma
  ],2026,3);
  assert.equal(r.rows.length,1);
 });
+
+test('La trace de contrôle des exclusions conserve les deux documents et la date d effet hors trimestre',()=>{
+ const before=ev({kind:'avancement',name:'AGENT TRACE',agentId:'TRACE-1',effective:'2026-07-01',nrSteps:1,
+  nrBefore:220,nrAfter:225,recordedBefore:{gf:13,nr:220},recordedAfter:{gf:13,nr:225}});
+ const earlier=doc([before],{id:'first-csp',name:'ODJ-CSP Cadres 05 mars.pdf',date:'2026-03-05'});
+ const later=doc([{...before,id:'second-event'}],{id:'second-csp',name:'ODJ-CSP Cadres 10 juillet.pdf',date:'2026-07-10'});
+ const original=JSON.stringify([earlier,later]);
+ const report=calculateQuarterlyReport([earlier,later],2026,3);
+ assert.equal(report.rows.length,0);
+ assert.equal(report.previouslyReported.length,1);
+ const trace=report.previouslyReported[0];
+ assert.equal(trace.effective,'2026-07-01');
+ assert.equal(trace.meeting,'2026-07-10');
+ assert.equal(trace.originalMeeting,'2026-03-05');
+ assert.equal(trace.currentDocument,later.name);
+ assert.equal(trace.originalDocument,earlier.name);
+ assert.equal(trace.effectOutsideOriginalQuarter,true);
+ assert.equal(JSON.stringify([earlier,later]),original);
+});
+test('La trace de doublon même trimestre ne signale pas à tort une date d effet externe',()=>{
+ const before=ev({kind:'avancement',agentId:'DUP-2',effective:'2026-06-01',nrSteps:1,
+  nrBefore:220,nrAfter:225,recordedBefore:{gf:13,nr:220},recordedAfter:{gf:13,nr:225}});
+ const report=calculateQuarterlyReport([
+  doc([before],{id:'a',date:'2026-05-04'}),
+  doc([{...before,id:'b'}],{id:'b',date:'2026-06-04'})
+ ],2026,2);
+ assert.equal(report.previouslyReported.length,1);
+ assert.equal(report.previouslyReported[0].effectOutsideOriginalQuarter,false);
+});
