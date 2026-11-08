@@ -11,7 +11,8 @@ export default function CspQuarterlyReport({revision=0}:{revision?:number}){
  const [quarter,setQuarter]=useState(Math.ceil((current.getMonth()+1)/3));
  const [includeCandidates,setIncludeCandidates]=useState(true);
  const [selectedColumns,setSelectedColumns]=useState<OptionalMovementColumn[]>(defaultMovementColumns);
- const visibleColumns=getMovementColumns(selectedColumns);
+ // L'aperçu est un tableau commun : conserver le GF si une rubrique l'impose.
+ const visibleColumns=getMovementColumns(selectedColumns,report?.rows.some(r=>r.kind==='admission'||r.kind==='titularisation')?'admission':undefined);
  const [busy,setBusy]=useState(false);
  const [error,setError]=useState('');
  const [report,setReport]=useState<QuarterlyReport|null>(null);
@@ -82,7 +83,7 @@ export default function CspQuarterlyReport({revision=0}:{revision?:number}){
    <div className="analysis-options">{optionalMovementColumns.map(c=><label key={c.id} className="check-label">
     <input type="checkbox" checked={selectedColumns.includes(c.id)} onChange={e=>setSelectedColumns(previous=>e.target.checked?[...previous,c.id]:previous.filter(id=>id!==c.id))}/>{c.label}
    </label>)}</div>
-   <p className="filter-note">Décochez les colonnes à masquer. L’aperçu et les tableaux du PowerPoint suivent ce choix ; les colonnes restantes occupent toute la largeur.</p>
+   <p className="filter-note">Le GF avant / après reste obligatoire pour les admissions au stage et les titularisations, même si la case est décochée. Les autres motifs suivent votre sélection. Dans l’aperçu commun, la colonne GF reste affichée dès qu’un de ces deux motifs est présent.</p>
   </fieldset>
   {error&&<p className="notice" role="alert">{error}</p>}
   {!report&&!busy&&<p className="filter-note">Sélectionner une période, puis préparer le rapport. Les données ne sont chargées que sur demande pour limiter la consommation Supabase.</p>}
