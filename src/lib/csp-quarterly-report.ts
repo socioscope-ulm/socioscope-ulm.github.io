@@ -22,9 +22,14 @@ export type QuarterlyRow = {
  notes:string; resolvedNotes?:string; sources:string[]; estimated:boolean;
 };
 export type QuarterlyCandidate = {id:string;name:string;meeting:string;agency:string;job:string;reference:string;reason:string;source:string};
+export type PreviouslyReportedMovement = {
+ name:string;kind:string;effective:string;meeting:string;originalMeeting:string;
+ originalDocument:string;
+};
 export type QuarterlyReport = {
  year:number;quarter:number;sources:QuarterlySource[];
  rows:QuarterlyRow[];candidates:QuarterlyCandidate[];
+ previouslyReported:PreviouslyReportedMovement[];
  alerts:string[];pendingDocuments:number;meetingDates:string[];
 };
 export const kindLabels:Record<string,string>={
@@ -187,6 +192,73 @@ function toRow(g:Group):QuarterlyRow{
   source:sourceRefs.join(', '),sources:[...new Set(g.items.map(x=>x.ref))],
   notes:[...new Set(checks)].join('\n'),resolvedNotes:[...new Set(resolved)].join('\n'),estimated};
 }
+// A movement belongs to the first validated CSP that presented the same
+// documented decision. An effective date in a later quarter does not create
+// a new decision. Compare the actual transition before suppressing a row:
+// the same agent can genuinely receive a second award on the same effective date.
+function samePreviouslyReportedMovement(prior:Group,current:Group){
+ const older=prior.items[0],later=current.items[0];
+ if(!older||!later||older.doc.date>=later.doc.date||!older.e.effective||
+   prior.base!==current.base)return false;
+ const a=toRow(prior),b=toRow(current);
+ const refs=(g:Group)=>[...new Set(g.items.map(x=>norm(x.e.reference)).filter(Boolean))];
+ const leftRefs=refs(prior),rightRefs=refs(current);
+ if(leftRefs.length&&rightRefs.length&&!leftRefs.some(x=>rightRefs.includes(x)))return false;
+ const referenceMatch=leftRefs.some(x=>rightRefs.includes(x));
+ if(a.kind==='nomination'||a.kind==='mutation'){
+  const olderJobs=prior.items.map(x=>norm(x.e.job)).filter(Boolean);
+  const laterJobs=current.items.map(x=>norm(x.e.job)).filter(Boolean);
+  if(olderJobs.length&&laterJobs.length&&!olderJobs.some(x=>laterJobs.includes(x)))return false;
+  if(a.kind==='mutation'&&a.agency!=='—'&&b.agency!=='—'&&norm(a.agency)!==norm(b.agency))return false;
+ }
+ const gains=(g:Group,key:'nrSteps'|'gfDelta')=>g.items.map(x=>x.e[key]).filter(filled);
+ for(const key of ['nrSteps','gfDelta'] as const){
+  const earlier=gains(prior,key),now=gains(current,key);
+  if(earlier.length&&now.length&&!earlier.some(x=>now.includes(x)))return false;
+ }
+ const value=(v:string)=>/^\d+\*?$/.test(v)?Number.parseInt(v,10):undefined;
+ const fields=['gfBefore','gfAfter','nrBefore','nrAfter'] as const;
+ const matches=new Set<string>();
+ for(const field of fields){
+  const x=value(a[field]),y=value(b[field]);
+  if(x!==undefined&&y!==undefined){
+   if(x!==y)return false;
+   matches.add(field);
+  }
+ }
+ const sameNR=matches.has('nrBefore')&&matches.has('nrAfter');
+ const sameGF=matches.has('gfBefore')&&matches.has('gfAfter');
+ const sameNRResult=matches.has('nrAfter');
+ const sameGFResult=matches.has('gfAfter');
+ // NR-changing movements require a proven matching progression, or a
+ // shared reference plus consistent numeric evidence. A bare NR quoted in a
+ // later RD may be the starting point of a *new* award: never infer a duplicate.
+ if(['avancement','mesure','posthume'].includes(a.kind))
+  return sameNR||(referenceMatch&&(matches.has('nrBefore')||sameNRResult));
+ if(a.kind==='reclassement')
+  return (sameGF&&(sameNR||sameNRResult))||
+   (referenceMatch&&(sameGFResult||sameNR));
+ // Admission / titularisation / nomination / mutation: enough matching
+ // GF/NR values, or a shared position reference with a confirmed value.
+ return (sameNR&&(matches.has('gfBefore')||sameGFResult||referenceMatch))||
+  (sameGF&&sameNRResult)||
+  (referenceMatch&&(sameGFResult||sameNRResult)&&matches.size>=2);
+}
+const isValidatedMovement=(doc:QuarterlyDocument,e:QuarterlyEvent)=>
+ e.selected===true&&!e.candidacy&&doc.status==='validated'&&
+ (!doc.perEventValidation||e.approved===true)&&
+ !e.nonRetained&&!e.nonRetainedByRD&&!e.acknowledgedByDocument&&!e.acknowledgedByRD&&
+ !!kindLabels[e.kind];
+const groupMovements=(items:Item[])=>{
+ const groups:Group[]=[];
+ for(const item of items){
+  const base=norm(item.e.agentId||item.e.name)+'|'+item.e.kind+'|'+item.e.effective;
+  let g=groups.find(x=>x.base===base&&compatible(x,item));
+  if(!g){g={base,items:[]};groups.push(g);}
+  g.items.push(item);
+ }
+ return groups;
+};
 export function calculateQuarterlyReport(documents:QuarterlyDocument[],year:number,quarter:number):QuarterlyReport{
  const {start,end}=quarterBounds(year,quarter);
  const docs=documents.filter(d=>isCadresDocument(d.name)&&d.date>=start&&d.date<end)
@@ -210,7 +282,7 @@ export function calculateQuarterlyReport(documents:QuarterlyDocument[],year:numb
      reason:typeof e.nonRetainedByRD==='object'&&e.nonRetainedByRD!==null&&(e.nonRetainedByRD as {reason?:string}).reason==='unfilled-post'?'Poste non pourvu':'Non retenu'});
     continue;
    }
-   if(doc.status!=='validated'||doc.perEventValidation===true&&e.approved!==true||e.nonRetained||e.nonRetainedByRD||e.acknowledgedByDocument||e.acknowledgedByRD||!kindLabels[e.kind])continue;
+   if(!isValidatedMovement(doc,e))continue;
    const base=norm(e.agentId||e.name)+'|'+e.kind+'|'+e.effective;
    const item={doc,ref,e};
    let g=groups.find(x=>x.base===base&&compatible(x,item));
@@ -230,7 +302,26 @@ export function calculateQuarterlyReport(documents:QuarterlyDocument[],year:numb
     .map(e=>({doc:d,ref:sources[i].ref,e})):[]);
   if(candidates.length===1&&!group.items.some(x=>x.doc.id===candidates[0].doc.id))group.items.push(candidates[0]);
  }
- const rows=groups.map(toRow).sort((a,b)=>a.meeting.localeCompare(b.meeting)||
+ // Compare with validated decisions from preceding CSPs, including CSPs of
+ // earlier quarters. This is a read-only export filter, never an agent update.
+ // Also avoid repeating one decision in two meetings of this same quarter.
+ const olderDocs=documents.filter(d=>isCadresDocument(d.name)&&d.date<start&&d.status==='validated')
+  .sort((a,b)=>a.date.localeCompare(b.date)||a.name.localeCompare(b.name,'fr'));
+ const historical=groupMovements(olderDocs.flatMap(d=>(d.events||[])
+  .filter(e=>isValidatedMovement(d,e)).map(e=>({doc:d,ref:'ARCHIVE',e}))));
+ const previouslyReported:PreviouslyReportedMovement[]=[];
+ const retained:Group[]=[];
+ for(const group of groups){
+  const matching=[...historical,...retained].find(old=>samePreviouslyReportedMovement(old,group));
+  if(!matching){retained.push(group);continue;}
+  const original=matching.items[0].doc,duplicate=group.items[0].doc;
+  previouslyReported.push({
+   name:group.items[0].e.name,kind:group.items[0].e.kind,
+   effective:group.items[0].e.effective,meeting:duplicate.date,
+   originalMeeting:original.date,originalDocument:original.name
+  });
+ }
+ const rows=retained.map(toRow).sort((a,b)=>a.meeting.localeCompare(b.meeting)||
   kindOrder.indexOf(a.kind)-kindOrder.indexOf(b.kind)||a.name.localeCompare(b.name,'fr')||a.effective.localeCompare(b.effective));
  const pending=docs.filter(d=>d.status!=='validated'&&!completedAutomatically(d));
  const pendingDocuments=pending.length;
@@ -246,5 +337,5 @@ export function calculateQuarterlyReport(documents:QuarterlyDocument[],year:numb
  if(checkCount)alerts.push(checkCount+' mouvement(s) signalé(s) : NR provisoire, divergence documentaire, anomalie de lecture ou note à relire. Voir la liste complète des contrôles documentaires ; tous ne sont pas des NR provisoires.');
  if(rows.some(r=>r.estimated))alerts.push('Un astérisque (*) signale un NR après calculé à partir du nombre de NR attribués.');
  if(!docs.length)alerts.push('Aucun document CSP cadres enregistré pour ce trimestre.');
- return {year,quarter,sources,rows,candidates:[...candidates.values()].sort((a,b)=>a.meeting.localeCompare(b.meeting)||a.name.localeCompare(b.name,'fr')),alerts,pendingDocuments,meetingDates:meetings};
+ return {year,quarter,sources,rows,candidates:[...candidates.values()].sort((a,b)=>a.meeting.localeCompare(b.meeting)||a.name.localeCompare(b.name,'fr')),previouslyReported,alerts,pendingDocuments,meetingDates:meetings};
 }
