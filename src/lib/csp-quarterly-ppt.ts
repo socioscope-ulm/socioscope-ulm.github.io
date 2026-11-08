@@ -234,7 +234,9 @@ export async function downloadQuarterlyPpt(report:QuarterlyReport,includeCandida
  // This makes generation errors visible and avoids relying on the library's download heuristic.
  const bytes=await ppt.write({outputType:'blob',compression:true});
  const mime='application/vnd.openxmlformats-officedocument.presentationml.presentation';
- const blob=bytes instanceof Blob?bytes:new Blob([bytes as BlobPart],{type:mime});
+ // Rewrap even an existing Blob: the PPTX library may label it application/zip.
+ // Android must receive the official PowerPoint MIME type to avoid ZIP extraction.
+ const blob=new Blob([bytes as BlobPart],{type:mime});
  if(blob.size<2500)throw Error('Le fichier PowerPoint produit est incomplet. Aucun téléchargement lancé.');
  const link=URL.createObjectURL(blob);
  try{
