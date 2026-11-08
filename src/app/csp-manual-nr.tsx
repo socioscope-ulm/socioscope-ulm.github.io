@@ -1,5 +1,6 @@
 'use client';
 import {useEffect,useState} from 'react';
+import {ChevronRight,PenLine} from 'lucide-react';
 import {manualNRReasons} from '../lib/csp-manual-nr';
 import type {ManualNRPayload,ManualNRReason} from '../lib/csp-manual-nr';
 const day=(v:string)=>v?new Intl.DateTimeFormat('fr-FR',{dateStyle:'medium',timeZone:'UTC'}).format(new Date(v+'T12:00:00Z')):'—';
@@ -31,8 +32,10 @@ export default function CspManualNR({onSaved}:{onSaved:()=>void}){
    setEntry({...initial});setConfirmed(false);setRefresh(x=>x+1);onSaved();
   }catch(e){setError((e as Error).message);}finally{setLoading(false);}
  };
- return <section className="panel" aria-label="Avancement NR manuel">
-  <div className="panel-heading"><div><h2>Avancement NR manuel</h2>
+ return <details className="document-folder csp-subsection" aria-label="Avancement NR manuel">
+  <summary><ChevronRight size={16} className="folder-chevron"/><PenLine size={20}/><strong>Avancement NR manuel</strong><span className="badge">Saisie exceptionnelle</span></summary>
+  <div className="document-folder-content"><section className="panel">
+  <div className="panel-heading"><div><h2>Enregistrer un avancement manuel</h2>
    <p>Enregistrer un avancement au choix ou une régularisation lorsque le bordereau CSP n’est pas disponible. Fonction générique pour tous les agents, réservée à l’administrateur.</p></div></div>
   <p className="filter-note">L’avancement manuel est identifié séparément d’un ODJ/RD. Il est soumis au contrôle chronologique : aucun gain n’est enregistré si la situation précédente n’est pas confirmée. Un NR gagné correspond à +5 sur sa valeur.</p>
   <div className="csp-editor">
@@ -55,5 +58,6 @@ export default function CspManualNR({onSaved}:{onSaved:()=>void}){
     {rows.map(row=><tr key={row.id}><td>{row.name}</td><td>{day(row.effective)}{row.arrivalConfirmed&&<small>Arrivée provisoire ULM : {day(row.arrivalEffective||'')}</small>}</td><td>GF {row.gf} · NR {row.nrBefore} → {row.nrBefore+5}</td><td>{manualNRReasons[row.reason]}<small>{row.comment}</small></td><td>{day(row.created.slice(0,10))}<small>{row.actor}</small></td></tr>)}
    </tbody></table></div>:<p>Aucun avancement manuel enregistré.</p>}
   </details>
- </section>;
+ </section></div>
+ </details>;
 }
