@@ -14,9 +14,7 @@ export default function CspQuarterlyReport({revision=0}:{revision?:number}){
  const [busy,setBusy]=useState(false);
  const [error,setError]=useState('');
  const [report,setReport]=useState<QuarterlyReport|null>(null);
-// L'aperçu est un tableau commun : conserver le GF si une rubrique l'impose.
-  const visibleColumns=getMovementColumns(selectedColumns,report?.rows.some(r=>r.kind==='admission'||r.kind==='titularisation')?'admission':undefined);
- 
+
  const [loadRevision,setLoadRevision]=useState(0);
  useEffect(()=>{setReport(null);setError('');},[year,quarter,revision]);
  const grouped=useMemo(()=>Object.entries(kindLabels).map(([kind,label])=>({
@@ -84,7 +82,7 @@ export default function CspQuarterlyReport({revision=0}:{revision?:number}){
    <div className="analysis-options">{optionalMovementColumns.map(c=><label key={c.id} className="check-label">
     <input type="checkbox" checked={selectedColumns.includes(c.id)} onChange={e=>setSelectedColumns(previous=>e.target.checked?[...previous,c.id]:previous.filter(id=>id!==c.id))}/>{c.label}
    </label>)}</div>
-   <p className="filter-note">Le GF avant / après reste obligatoire pour les admissions au stage et les titularisations, même si la case est décochée. Les autres motifs suivent votre sélection. Dans l’aperçu commun, la colonne GF reste affichée dès qu’un de ces deux motifs est présent.</p>
+   <p className="filter-note">Pour les admissions au stage et les titularisations, le GF avant / après reste obligatoire et la colonne « NR + » n’est jamais affichée, même si elle est sélectionnée. Pour les autres motifs, les colonnes suivent votre sélection. L’aperçu et le PowerPoint respectent ces règles, rubrique par rubrique.</p>
   </fieldset>
   {error&&<p className="notice" role="alert">{error}</p>}
   {!report&&!busy&&<p className="filter-note">Sélectionner une période, puis préparer le rapport. Les données ne sont chargées que sur demande pour limiter la consommation Supabase.</p>}
@@ -112,9 +110,16 @@ export default function CspQuarterlyReport({revision=0}:{revision?:number}){
    {!!grouped.length&&<div className="table-scroll"><table><thead><tr><th>Rubrique</th><th>Mouvements</th></tr></thead>
     <tbody>{grouped.map(x=><tr key={x.kind}><td>{x.label}</td><td>{x.count}</td></tr>)}</tbody></table></div>}
    {!!report.rows.length&&<details><summary>Aperçu des mouvements ({report.rows.length})</summary>
-    <div className="table-scroll"><table><thead><tr>{visibleColumns.map(c=><th key={c.id}>{c.label}</th>)}</tr></thead>
-     <tbody>{report.rows.slice(0,80).map((r,i)=><tr key={r.id+i}>{visibleColumns.map(c=><td key={c.id} style={{whiteSpace:'pre-line'}}>{c.value(r)}</td>)}</tr>)}</tbody>
-    </table></div>{report.rows.length>80&&<p>Affichage limité aux 80 premières lignes. Le PowerPoint contient toutes les lignes.</p>}
+    {grouped.map(group=>{
+     const cols=getMovementColumns(selectedColumns,group.kind);
+     const movements=report.rows.filter(r=>r.kind===group.kind);
+     return <div key={group.kind} style={{marginBottom:16}}>
+      <h3>{group.label} ({movements.length})</h3>
+      <div className="table-scroll"><table><thead><tr>{cols.map(c=><th key={c.id}>{c.label}</th>)}</tr></thead>
+       <tbody>{movements.slice(0,80).map((r,i)=><tr key={r.id+i}>{cols.map(c=><td key={c.id} style={{whiteSpace:'pre-line'}}>{c.value(r)}</td>)}</tr>)}</tbody>
+      </table></div>{movements.length>80&&<p>Affichage limité aux 80 premières lignes de cette rubrique. Le PowerPoint contient toutes les lignes.</p>}
+     </div>;
+    })}
    </details>}
    <div className="analysis-options">
     <button className="btn primary" disabled={busy||!report.sources.length} onClick={()=>void exportPpt()}>
