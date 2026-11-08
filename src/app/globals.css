@@ -117,3 +117,19 @@
  .csp-workspace .csp-subsection>summary strong{font-size:12px}
  .csp-workspace .csp-subsection>summary .badge{font-size:9px;max-width:100%;white-space:normal}
 }
+
+
+/* Shared import spaces: individual, social, RUP, salary grids and annual bonuses. */
+.import-workspace{margin-top:18px}
+.import-workspace .import-subsection>.document-folder-content{min-width:0}
+.import-workspace .import-subsection .panel{max-width:100%;min-width:0}
+.import-workspace .import-subsection .upload-panel{max-width:100%;min-width:0}
+.import-workspace .import-subsection .source-card{min-width:0;flex-wrap:wrap}
+.import-workspace .import-subsection .source-card>.btn{max-width:100%}
+@media(max-width:760px){
+ .import-workspace .import-subsection .upload-panel{flex-direction:column;align-items:stretch;gap:12px;padding:16px}
+ .import-workspace .import-subsection .upload-panel>label{margin-left:0;align-self:flex-start}
+ .import-workspace .import-subsection .source-card{padding:12px;gap:10px}
+ .import-workspace .import-subsection .source-card>div:nth-child(2){flex-basis:calc(100% - 65px)}
+ .import-workspace .import-subsection .source-card>.btn{white-space:normal}
+}
