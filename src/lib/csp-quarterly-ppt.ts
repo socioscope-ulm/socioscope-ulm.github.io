@@ -203,6 +203,26 @@ export async function downloadQuarterlyPpt(report:QuarterlyReport,includeCandida
    s.addText(part,{x:.59,y:1.95,w:12.03,h:4.85,fontFace:'Arial',fontSize:13,color:P.text,margin:0,valign:'top',breakLine:false});
   }
  }
+ // Audit trail for movements suppressed because an earlier CSP already
+ // presented the same decision. The suppressed movements are not exported as
+ // new movements, but their rationale remains readable in the PowerPoint.
+ if(report.previouslyReported?.length){
+  for(const [pageIndex,part] of blocks(report.previouslyReported,3).entries()){
+   s=newPage(ppt,'CONTROLES DOCUMENTAIRES · EXCLUSIONS'+(report.previouslyReported.length>3?' ('+(pageIndex+1)+')':''),foot);
+   part.forEach((item,i)=>{
+    const y=1.18+i*1.83;
+    const label=item.name+' · '+(kindLabels[item.kind]||item.kind)+' · Effet '+date(item.effective);
+    const reason=item.effectOutsideOriginalQuarter
+     ?'Déjà présenté en CSP antérieure ; date d’effet sur un autre trimestre.'
+     :'Déjà présenté en CSP antérieure ; même décision.';
+    s.addText(label,{x:.60,y,w:11.95,h:.37,fontFace:'Arial',fontSize:12.2,bold:true,color:P.deep,margin:0});
+    s.addText('CSP actuelle : '+date(item.meeting)+' · CSP initiale : '+date(item.originalMeeting)+'\n'+reason,
+     {x:.60,y:y+.41,w:11.95,h:.48,fontFace:'Arial',fontSize:10.2,color:P.text,margin:0,breakLine:false});
+    s.addText('Actuel : '+item.currentDocument+'\nOrigine : '+item.originalDocument,
+     {x:.60,y:y+.95,w:11.95,h:.75,fontFace:'Arial',fontSize:9,color:P.muted,margin:0,valign:'top',breakLine:false});
+   });
+  }
+ }
  const sources=blocks(report.sources,6);
  for(let i=0;i<sources.length;i++){
   s=newPage(ppt,'DOCUMENTS DE REFERENCE ('+(i+1)+'/'+sources.length+')',foot);
