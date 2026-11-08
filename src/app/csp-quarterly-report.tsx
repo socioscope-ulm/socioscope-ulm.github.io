@@ -114,22 +114,25 @@ export default function CspQuarterlyReport({revision=0}:{revision?:number}){
    </div>
    {report.alerts.length>0&&<div className="notice"><b>Points de vigilance</b>
     <ul>{report.alerts.map((msg,i)=><li key={i}>{msg}</li>)}</ul></div>}
-   {!!report.previouslyReported.length&&<details className="document-folder" style={{margin:'10px 0'}}>
-    <summary><ChevronRight size={16} className="folder-chevron"/><FileText size={16}/><strong>Mouvements déjà présentés dans une CSP antérieure</strong><span className="badge">{report.previouslyReported.length} non répété(s)</span></summary>
+   <details className="document-folder" style={{margin:'10px 0'}}>
+    <summary><ChevronRight size={16} className="folder-chevron"/><FileText size={16}/><strong>Contrôles documentaires</strong><span className="badge">{report.rows.filter(r=>r.notes).length} alerte(s) · {report.previouslyReported.length} exclusion(s)</span></summary>
     <div className="document-folder-content">
-     <p className="filter-note">Ces décisions ne sont pas reproduites une deuxième fois dans le PowerPoint. Les validations d’origine sont conservées.</p>
-     <div className="table-scroll"><table><thead><tr><th>Agent</th><th>Mouvement</th><th>Séance actuelle</th><th>Première séance</th><th>Document d’origine</th></tr></thead><tbody>
-      {report.previouslyReported.map((item,i)=><tr key={i}><td>{item.name}</td><td>{kindLabels[item.kind]}</td><td>{item.meeting}</td><td>{item.originalMeeting}</td><td>{item.originalDocument}</td></tr>)}
-     </tbody></table></div>
+     <details style={{marginBottom:12}}>
+      <summary><strong>Anomalies et réserves documentaires ({report.rows.filter(r=>r.notes).length})</strong></summary>
+      <p className="filter-note">Les mouvements signalés restent validés. La réserve peut concerner le NR, une divergence, une lecture incomplète ou une note à relire.</p>
+      {report.rows.some(r=>r.notes)?<div className="table-scroll"><table><thead><tr><th>Nom / prénom</th><th>Mouvement</th><th>CSP / effet</th><th>GF avant / après</th><th>NR avant / après</th><th>Motif et document source</th></tr></thead>
+       <tbody>{report.rows.filter(r=>r.notes).map((r,i)=><tr key={r.id+i}><td>{r.name}</td><td>{kindLabels[r.kind]}</td><td>{r.meeting}<br/>{r.effective}</td><td>{r.gfBefore} / {r.gfAfter}</td><td>{r.nrBefore} / {r.nrAfter}</td><td style={{whiteSpace:'pre-line'}}>{r.notes}</td></tr>)}</tbody>
+      </table></div>:<p className="filter-note">Aucune anomalie documentaire détectée sur les mouvements retenus dans ce compte rendu.</p>}
+     </details>
+     <details>
+      <summary><strong>Exclusions — mouvements déjà présentés ({report.previouslyReported.length})</strong></summary>
+      <p className="filter-note">Ces décisions ne sont pas reprises dans le CR. Cette trace est conservée dans les contrôles du rapport, sans annuler ni modifier les validations des CSP.</p>
+      {report.previouslyReported.length?<div className="table-scroll"><table><thead><tr><th>Agent / mouvement</th><th>Date d’effet</th><th>Séance actuelle</th><th>Première séance</th><th>Motif d’exclusion</th><th>Documents CSP actuel / d’origine</th></tr></thead><tbody>
+       {report.previouslyReported.map((item,i)=><tr key={i}><td>{item.name}<div className="filter-note">{kindLabels[item.kind]||item.kind}</div></td><td>{item.effective||'—'}</td><td>{item.meeting}</td><td>{item.originalMeeting}</td><td>{item.effectOutsideOriginalQuarter?'Déjà présenté lors d’une CSP antérieure ; date d’effet sur un autre trimestre.':'Déjà présenté lors d’une CSP antérieure ; même décision.'}</td><td><b>Actuel :</b> {item.currentDocument}<div><b>Origine :</b> {item.originalDocument}</div></td></tr>)}
+      </tbody></table></div>:<p className="filter-note">Aucune exclusion pour mouvement déjà présenté dans une CSP antérieure.</p>}
+     </details>
     </div>
-   </details>}
-   {!!report.rows.filter(r=>r.notes).length&&<details open>
-    <summary>Contrôles documentaires : {report.rows.filter(r=>r.notes).length} mouvement(s) signalé(s)</summary>
-    <p className="filter-note">Les mouvements ci-dessous sont validés. Le motif précise si la réserve concerne le NR, une divergence, la lecture ou une note à relire. La liste est complète, indépendamment des colonnes choisies pour les tableaux.</p>
-    <div className="table-scroll"><table><thead><tr><th>Nom / prénom</th><th>Mouvement</th><th>CSP / effet</th><th>GF avant / après</th><th>NR avant / après</th><th>Motif et document source</th></tr></thead>
-     <tbody>{report.rows.filter(r=>r.notes).map((r,i)=><tr key={r.id+i}><td>{r.name}</td><td>{kindLabels[r.kind]}</td><td>{r.meeting}<br/>{r.effective}</td><td>{r.gfBefore} / {r.gfAfter}</td><td>{r.nrBefore} / {r.nrAfter}</td><td style={{whiteSpace:'pre-line'}}>{r.notes}</td></tr>)}</tbody>
-    </table></div>
-   </details>}
+   </details>
    {!!report.rows.filter(r=>r.resolvedNotes).length&&<details>
     <summary>Anciennes notes résolues ({report.rows.filter(r=>r.resolvedNotes).length} mouvement(s))</summary>
     <p className="filter-note">Ces anciennes demandes de renseignement ne sont plus comptées comme motifs de contrôle. Un mouvement peut conserver une autre réserve, détaillée ci-dessus.</p>
