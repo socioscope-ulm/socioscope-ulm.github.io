@@ -31,10 +31,15 @@ export default function CspQuarterlyReport({revision=0}:{revision?:number}){
    const metas=(body.imports||[] as ImportMeta[])
     .filter((m:ImportMeta)=>isCadresDocument(m.name)&&m.date>=first&&m.date<next)
     .sort((a:ImportMeta,b:ImportMeta)=>a.date.localeCompare(b.date)||a.name.localeCompare(b.name,'fr'));
+   const older=(body.imports||[] as ImportMeta[])
+    .filter((m:ImportMeta)=>isCadresDocument(m.name)&&m.date<first&&m.status==='validated')
+    .sort((a:ImportMeta,b:ImportMeta)=>a.date.localeCompare(b.date)||a.name.localeCompare(b.name,'fr'));
    if(metas.length>45)throw Error('Trop de documents pour ce trimestre : traitement interrompu par sécurité.');
+   if(older.length>150)throw Error('Historique CSP trop volumineux pour contrôler les mouvements déjà publiés.');
    const docs:QuarterlyDocument[]=[];
-   // Sequential reads avoid a burst of expensive CSP queries on the Edge Function.
-   for(const meta of metas){
+   // Read older validated decisions exclusively for report deduplication.
+   // Sequential queries avoid spikes in Supabase usage.
+   for(const meta of [...older,...metas]){
     const response=await fetch('/api/csp?id='+encodeURIComponent(meta.id),{cache:'no-store'});
     const detail=await response.json();
     if(!response.ok)throw Error(detail.error||'Impossible de lire '+meta.name);
@@ -62,6 +67,20 @@ export default function CspQuarterlyReport({revision=0}:{revision?:number}){
   <summary><ChevronRight size={16} className="folder-chevron"/><FileText size={20}/><strong>Comptes rendus trimestriels CSP cadres</strong><span className="badge">Afficher le générateur</span></summary>
   <div className="document-folder-content">
    <p style={{marginBottom:14}}>Générer un PowerPoint de la CSP cadres (Métiers de la PI et de la DOAAT), avec une ligne par mouvement et de vrais tableaux modifiables. Aucune incidence sur les validations CSP.</p>
+   <details className="document-folder" style={{margin:'0 0 14px'}}>
+    <summary><ChevronRight size={16} className="folder-chevron"/><FileText size={18}/><strong>Règles de création du compte rendu</strong><span className="badge">En savoir plus</span></summary>
+    <div className="document-folder-content">
+     <ul style={{paddingLeft:20,display:'grid',gap:8}}>
+      <li><b>Périmètre :</b> seules les séances CSP cadres du trimestre choisi apparaissent ; la date d’effet est affichée séparément, même si elle appartient à un autre trimestre.</li>
+      <li><b>Une seule présentation par décision :</b> un mouvement déjà présenté dans une CSP antérieure n’est pas repris comme un nouveau mouvement. Le rapprochement utilise l’agent, le motif, la date d’effet, les références et les valeurs GF/NR. Deux véritables évolutions restent distinctes.</li>
+      <li><b>ODJ et RD :</b> un mouvement confirmé ne compte qu’une fois, même si le RD présente le NR final dans une autre colonne.</li>
+      <li><b>GF constant :</b> un RD qui confirme une nomination à GF constant peut valider les valeurs GF/NR de l’ODJ correspondant.</li>
+      <li><b>Admissions au stage et titularisations :</b> le GF avant/après reste visible et le NR+ est masqué.</li>
+      <li><b>Contrôles :</b> les écarts réellement incohérents restent signalés ; un NR calculé est marqué d’un astérisque.</li>
+      <li><b>Intégrité :</b> aucun document validé, aucune donnée individuelle ni aucun mouvement CSP n’est modifié par cet export.</li>
+     </ul>
+    </div>
+   </details>
   <div className="analysis-options">
    <label>Année<select aria-label="Année du compte rendu" value={year} onChange={e=>setYear(Number(e.target.value))}>
     {Array.from({length:Math.max(new Date().getFullYear()+5,year)-2024+1},(_,i)=>2024+i).map(y=><option key={y} value={y}>{y}</option>)}
@@ -95,6 +114,15 @@ export default function CspQuarterlyReport({revision=0}:{revision?:number}){
    </div>
    {report.alerts.length>0&&<div className="notice"><b>Points de vigilance</b>
     <ul>{report.alerts.map((msg,i)=><li key={i}>{msg}</li>)}</ul></div>}
+   {!!report.previouslyReported.length&&<details className="document-folder" style={{margin:'10px 0'}}>
+    <summary><ChevronRight size={16} className="folder-chevron"/><FileText size={16}/><strong>Mouvements déjà présentés dans une CSP antérieure</strong><span className="badge">{report.previouslyReported.length} non répété(s)</span></summary>
+    <div className="document-folder-content">
+     <p className="filter-note">Ces décisions ne sont pas reproduites une deuxième fois dans le PowerPoint. Les validations d’origine sont conservées.</p>
+     <div className="table-scroll"><table><thead><tr><th>Agent</th><th>Mouvement</th><th>Séance actuelle</th><th>Première séance</th><th>Document d’origine</th></tr></thead><tbody>
+      {report.previouslyReported.map((item,i)=><tr key={i}><td>{item.name}</td><td>{kindLabels[item.kind]}</td><td>{item.meeting}</td><td>{item.originalMeeting}</td><td>{item.originalDocument}</td></tr>)}
+     </tbody></table></div>
+    </div>
+   </details>}
    {!!report.rows.filter(r=>r.notes).length&&<details open>
     <summary>Contrôles documentaires : {report.rows.filter(r=>r.notes).length} mouvement(s) signalé(s)</summary>
     <p className="filter-note">Les mouvements ci-dessous sont validés. Le motif précise si la réserve concerne le NR, une divergence, la lecture ou une note à relire. La liste est complète, indépendamment des colonnes choisies pour les tableaux.</p>
@@ -128,7 +156,7 @@ export default function CspQuarterlyReport({revision=0}:{revision?:number}){
     <span className="filter-note"><FileText size={15}/> Une ligne par mouvement, tableaux éditables, sources ODJ/RD et alertes.</span>
    </div>
   </>}
-  <p className="filter-note">Périmètre : CSP cadres uniquement. Dates de séance dans le trimestre ; dates d’effet conservées. Les documents non validés ne créent pas de mouvements définitifs. Aucun import ni mise à jour de données lors de cet export.</p>
+  <p className="filter-note">Périmètre : CSP cadres uniquement. Les mouvements déjà présentés lors d’une CSP antérieure ne sont pas répétés. Les décisions non validées ne créent aucun mouvement définitif. Aucun import ni mise à jour de données lors de cet export.</p>
   </div>
  </details>;
 }
