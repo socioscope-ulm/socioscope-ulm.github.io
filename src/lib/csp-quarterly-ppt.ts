@@ -1,7 +1,7 @@
 import type {QuarterlyReport,QuarterlyRow} from './csp-quarterly-report';
 import {kindLabels,kindOrder} from './csp-quarterly-report';
 import {CSP_CHARTER_BG_DATA} from './csp-quarterly-background';
-import {CSP_MAIN_CGT_DATA} from './csp-quarterly-brand-assets';
+import {applyQuarterlyCover} from './csp-quarterly-cover';
 import {CSP_LOGO_ULM_DATA} from './csp-quarterly-ulm-logo';
 
 const P={bg:'F7F1D8',red:'D7221C',deep:'A61C1C',cream:'FBF8E9',peach:'F3D1BA',text:'202020',muted:'615F57',line:'BD8B7E'};
@@ -20,35 +20,12 @@ type Presentation={layout:string;author:string;title:string;subject:string;lang:
 /** Insérer les visuels comme objets de diapositive et non comme objets de masque :
  * ils deviennent sélectionnables et déplaçables dans PowerPoint.
  */
-function addULMLogo(slide:any,cover=false){
- slide.addImage({data:CSP_LOGO_ULM_DATA,...(cover
-  ?{x:11.53,y:6.38,w:1.48,h:.67}
-  :{x:11.58,y:.16,w:1.37,h:.62})});
+function addULMLogo(slide:any){
+ slide.addImage({data:CSP_LOGO_ULM_DATA,x:11.58,y:.16,w:1.37,h:.62});
 }
-function addCoverHand(slide:any){
- slide.addImage({data:CSP_MAIN_CGT_DATA,x:.12,y:1.08,w:5.15,h:5.45});
-}
-function coverPage(ppt:Presentation,report:QuarterlyReport){
- const s=ppt.addSlide({masterName:'CSP_CGT_COUVERTURE'});s.background={color:P.bg};
- addCoverHand(s);
- addULMLogo(s,true);
- s.addText('COMMISSION SECONDAIRE\nDU PERSONNEL',{x:5.25,y:1.42,w:7.55,h:1.32,
-  fontFace:'Arial',fontSize:32,bold:true,color:P.text,margin:0,breakLine:false});
- s.addText('COLLÈGE CADRES · ULM',{x:5.25,y:3.12,w:7.2,h:.50,
-  fontFace:'Arial',fontSize:22,bold:true,color:P.text,margin:0});
- s.addText('T'+report.quarter+' · '+quarterLabel(report.year,report.quarter),{x:5.25,y:3.70,w:7.2,h:.45,
-  fontFace:'Arial',fontSize:22,color:P.deep,margin:0});
- s.addText('CSP des Métiers de la PI et de la DOAAT',{x:5.25,y:4.20,w:7.25,h:.37,
-  fontFace:'Arial',fontSize:13,color:P.text,margin:0});
- // Zone modifiable directement en double-cliquant sur son texte dans PowerPoint.
- s.addText('Ajouter ici un texte ou un message CGT (modifiable dans PowerPoint)',{
-  x:5.25,y:4.90,w:6.97,h:1.12,fontFace:'Arial',fontSize:13,color:'424242',
-  margin:.10,breakLine:false,valign:'mid',
-  line:{color:'B9231C',transparency:55,width:.55},
-  fill:{color:'FFFFFF',transparency:80}
- });
- if(s.addNotes)s.addNotes('Couverture CGT ULM. Les titres et la zone de texte libre sont modifiables. La main et le fond proviennent de la charte FNME-CGT CEF (avril 2025).');
- return s;
+function coverPage(ppt:Presentation){
+ // The original editable cover objects are inserted after PPTX serialization.
+ return ppt.addSlide({masterName:'CSP_CGT_COUVERTURE'});
 }
 function newPage(ppt:Presentation,title:string,footer:string){
  const s=ppt.addSlide({masterName:'CSP_CGT_BEIGE'});s.background={color:P.bg};
@@ -170,7 +147,7 @@ export async function downloadQuarterlyPpt(report:QuarterlyReport,includeCandida
  ppt.defineSlideMaster({title:'CSP_CGT_COUVERTURE',background:{color:P.bg},
   objects:[{image:{data:CSP_CHARTER_BG_DATA,x:0,y:0,w:40/3,h:7.5}}]});
  const foot='CGT ULM  /  CSP CADRES  /  T'+report.quarter+' '+report.year;
- coverPage(ppt,report);
+ coverPage(ppt);
  let s=newPage(ppt,'PERIMETRE ET METHODE',foot);
  const lines=[
   'Période : '+quarterLabel(report.year,report.quarter)+', classement par date de séance.',
@@ -232,7 +209,8 @@ export async function downloadQuarterlyPpt(report:QuarterlyReport,includeCandida
  const file='CR_CSP_Cadres_T'+report.quarter+'_'+report.year+'_Tableaux_modifiables.pptx';
  // Create the complete binary before starting the browser download.
  // This makes generation errors visible and avoids relying on the library's download heuristic.
- const bytes=await ppt.write({outputType:'blob',compression:true});
+ const generated=await ppt.write({outputType:'blob',compression:true});
+ const bytes=await applyQuarterlyCover(generated,report.year,report.quarter);
  const mime='application/vnd.openxmlformats-officedocument.presentationml.presentation';
  // Rewrap even an existing Blob: the PPTX library may label it application/zip.
  // Android must receive the official PowerPoint MIME type to avoid ZIP extraction.

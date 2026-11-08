@@ -12,7 +12,8 @@
     "recharts": "3.8.0",
     "xlsx": "0.18.5",
     "pdfjs-dist": "5.4.624",
-    "pptxgenjs": "4.0.0"
+    "pptxgenjs": "4.0.0",
+    "jszip": "3.10.1"
   },
   "devDependencies": {
     "vite": "8.0.13",
