@@ -57,6 +57,13 @@ export function quarterBounds(year:number,quarter:number){
 }
 type Item={doc:QuarterlyDocument;ref:string;e:QuarterlyEvent};
 type Group={base:string;items:Item[]};
+// Le libellé du RD vaut confirmation d'une nomination à GF/NR constants,
+// uniquement en présence du bordereau ODJ correspondant.
+const gfConstant=(e:QuarterlyEvent)=>/\bGF\s+CONSTANT(?:E|S)?\b/i.test(norm(e.note));
+const sameNomination=(a:QuarterlyEvent,b:QuarterlyEvent)=>a.kind==='nomination'&&b.kind==='nomination'&&
+ norm(a.agentId||a.name)===norm(b.agentId||b.name)&&a.effective===b.effective&&
+ (!a.reference||!b.reference||norm(a.reference)===norm(b.reference))&&
+ (!a.job||!b.job||norm(a.job)===norm(b.job));
 function compatible(g:Group,item:Item){
  const e=item.e;
  if(g.items.some(i=>i.doc.id===item.doc.id))return false;
@@ -76,7 +83,18 @@ function compatible(g:Group,item:Item){
 function toRow(g:Group):QuarterlyRow{
  const priority=[...g.items].sort((a,b)=>evidence(b.e)-evidence(a.e)||Number(b.doc.documentType==='rd')-Number(a.doc.documentType==='rd'));
  const first=priority[0].e;
+ const confirmation=g.items.find(x=>x.doc.documentType==='rd'&&gfConstant(x.e));
+ const odjEvidence=confirmation?g.items.find(x=>x.doc.documentType==='cr'&&sameNomination(x.e,confirmation.e)&&
+  filled(numeric(x.e,'gfBefore'))&&filled(numeric(x.e,'nrBefore'))):undefined;
+ const constantValue=(k:'gfBefore'|'gfAfter'|'nrBefore'|'nrAfter')=>{
+  if(!odjEvidence||!confirmation)return undefined;
+  const before=k.endsWith('Before');
+  const fromOdj=numeric(odjEvidence.e,k);
+  const initial=numeric(odjEvidence.e,k.startsWith('gf')?'gfBefore':'nrBefore');
+  return before?(fromOdj??initial):(initial??fromOdj);
+ };
  const pick=(k:'gfBefore'|'gfAfter'|'nrBefore'|'nrAfter')=>{
+  const confirmed=constantValue(k);if(confirmed!==undefined)return confirmed;
   for(const x of priority){const n=numeric(x.e,k);if(n!==undefined)return n;}return undefined;
  };
  const beforeGF=pick('gfBefore'),afterGF=pick('gfAfter');
@@ -94,19 +112,20 @@ function toRow(g:Group):QuarterlyRow{
  const labels={gfBefore:'GF avant',gfAfter:'GF après',nrBefore:'NR avant',nrAfter:'NR après'};
  for(const k of ['gfBefore','gfAfter','nrBefore','nrAfter'] as const){
   const nums=[...new Set(g.items.map(x=>numeric(x.e,k)).filter(filled))];
-  if(nums.length>1)checks.push('Divergence '+labels[k]+' : '+g.items.filter(x=>numeric(x.e,k)!==undefined).map(x=>numeric(x.e,k)+' dans '+location(x)).join(' / '));
+  if(nums.length>1&&!odjEvidence)checks.push('Divergence '+labels[k]+' : '+g.items.filter(x=>numeric(x.e,k)!==undefined).map(x=>numeric(x.e,k)+' dans '+location(x)).join(' / '));
  }
  for(const x of g.items){
   const where=location(x);
-  if(x.e.recordedAfter?.nrProvisional)checks.push('NR après provisoire ('+fmt(numeric(x.e,'nrAfter'))+') : valeur conservée sans confirmation explicite du NR. Le mouvement est validé. Source : '+where);
+  if(x.e.recordedAfter?.nrProvisional&&!odjEvidence)checks.push('NR après provisoire ('+fmt(numeric(x.e,'nrAfter'))+') : valeur conservée sans confirmation explicite du NR. Le mouvement est validé. Source : '+where);
   let note=String(x.e.note||'');
   // Remove only the known obsolete instruction, never the rest of a warning.
   const generic=/v[eé]rifier les situations avant\/apr[eè]s\s*;\s*le NR apr[eè]s doit [eê]tre renseign[eé]\.?/i;
-  if(x.e.kind==='nomination'&&generic.test(note)&&numeric(x.e,'nrAfter')!==undefined&&!x.e.recordedAfter?.nrProvisional){
+  if(x.e.kind==='nomination'&&generic.test(note)&&(numeric(x.e,'nrAfter')!==undefined&&!x.e.recordedAfter?.nrProvisional||!!odjEvidence)){
    note=note.replace(generic,'').trim();
-   resolved.push('Ancienne demande de renseignement du NR : NR après désormais renseigné ('+numeric(x.e,'nrAfter')+'). Source : '+where);
+   resolved.push('Ancienne demande de renseignement du NR : NR après désormais renseigné ('+(odjEvidence?constantValue('nrAfter'):numeric(x.e,'nrAfter'))+'). Source : '+where);
   }
   if(x.e.extractionIssue)checks.push('Anomalie de lecture : '+x.e.extractionIssue+'. Source : '+where);
+  if(odjEvidence&&/GF\s+constant/i.test(note))note=note.replace(/GF\s+constant(?:e|s)?/ig,'').trim();
   if(/v[eé]rifier|non reconnu|incoh[eé]ren|manquan|[eé]cart/i.test(note))checks.push('Note à relire (ne signifie pas que le NR est provisoire) : '+note+'. Source : '+where);
  }
  const date=g.items[0].doc.date;
@@ -148,6 +167,18 @@ export function calculateQuarterlyReport(documents:QuarterlyDocument[],year:numb
    if(!g){g={base,items:[]};groups.push(g);}
    g.items.push(item);
   }
+ }
+ // Compléter uniquement pour le calcul du CR les nominations confirmées « GF constant ».
+ // Les événements ODJ acquittés par le RD ne sont pas des mouvements supplémentaires.
+ for(const group of groups){
+  const rd=group.items.find(x=>x.doc.documentType==='rd'&&gfConstant(x.e)&&x.e.kind==='nomination');
+  if(!rd)continue;
+  const candidates=docs.flatMap((d,i)=>d.documentType==='cr'&&d.date===rd.doc.date&&
+   (d.status==='validated'||d.status==='review'&&d.automaticallyValidated===true)?
+   (d.events||[]).filter(e=>e.selected&&sameNomination(e,rd.e)&&
+    (d.status==='validated'&&(!d.perEventValidation||e.approved===true)||!!e.acknowledgedByRD||!!e.acknowledgedByDocument))
+    .map(e=>({doc:d,ref:sources[i].ref,e})):[]);
+  if(candidates.length===1&&!group.items.some(x=>x.doc.id===candidates[0].doc.id))group.items.push(candidates[0]);
  }
  const rows=groups.map(toRow).sort((a,b)=>a.meeting.localeCompare(b.meeting)||
   kindOrder.indexOf(a.kind)-kindOrder.indexOf(b.kind)||a.name.localeCompare(b.name,'fr')||a.effective.localeCompare(b.effective));
