@@ -70,9 +70,6 @@ function movementHeight(e:QuarterlyRow,columns:ReturnType<typeof getMovementColu
  * Retourne le nombre total de mouvements insérés (test d'exhaustivité).
  */
 function addCompactMovements(ppt:Presentation,report:QuarterlyReport,foot:string,selected?:readonly OptionalMovementColumn[]){
- const columns=getMovementColumns(selected);
- const movementCols=columns.map(c=>c.width);
- const movementHeaders=columns.map(c=>c.header);
  let slide:any=null;
  let y=1.20,sectionsOnPage=0,movementsOnPage:QuarterlyRow[]=[];
  let count=0;
@@ -84,6 +81,9 @@ function addCompactMovements(ppt:Presentation,report:QuarterlyReport,foot:string
  for(const kind of kindOrder){
   const values=report.rows.filter(r=>r.kind===kind);
   if(!values.length)continue;
+  const columns=getMovementColumns(selected,kind);
+  const movementCols=columns.map(c=>c.width);
+  const movementHeaders=columns.map(c=>c.header);
   let offset=0;
   const title=kindTitles[kind]||kindLabels[kind].toUpperCase();
   while(offset<values.length){
