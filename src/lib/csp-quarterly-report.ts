@@ -24,7 +24,7 @@ export type QuarterlyRow = {
 export type QuarterlyCandidate = {id:string;name:string;meeting:string;agency:string;job:string;reference:string;reason:string;source:string};
 export type PreviouslyReportedMovement = {
  name:string;kind:string;effective:string;meeting:string;originalMeeting:string;
- originalDocument:string;
+ originalDocument:string;currentDocument:string;effectOutsideOriginalQuarter:boolean;
 };
 export type QuarterlyReport = {
  year:number;quarter:number;sources:QuarterlySource[];
@@ -244,6 +244,8 @@ function samePreviouslyReportedMovement(prior:Group,current:Group){
   (sameGF&&sameNRResult)||
   (referenceMatch&&(sameGFResult||sameNRResult)&&matches.size>=2);
 }
+const quarterKey=(v:string)=>/^\d{4}-\d{2}-\d{2}$/.test(v)
+ ?v.slice(0,4)+'-T'+Math.ceil(Number(v.slice(5,7))/3):'';
 const isValidatedMovement=(doc:QuarterlyDocument,e:QuarterlyEvent)=>
  e.selected===true&&!e.candidacy&&doc.status==='validated'&&
  (!doc.perEventValidation||e.approved===true)&&
@@ -318,7 +320,10 @@ export function calculateQuarterlyReport(documents:QuarterlyDocument[],year:numb
   previouslyReported.push({
    name:group.items[0].e.name,kind:group.items[0].e.kind,
    effective:group.items[0].e.effective,meeting:duplicate.date,
-   originalMeeting:original.date,originalDocument:original.name
+   originalMeeting:original.date,originalDocument:original.name,
+   currentDocument:duplicate.name,
+   effectOutsideOriginalQuarter:!!quarterKey(group.items[0].e.effective)&&
+    quarterKey(group.items[0].e.effective)!==quarterKey(original.date)
   });
  }
  const rows=retained.map(toRow).sort((a,b)=>a.meeting.localeCompare(b.meeting)||
