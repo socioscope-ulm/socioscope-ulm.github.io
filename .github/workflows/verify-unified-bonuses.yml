@@ -1,0 +1,38 @@
+name: Verify unified annual bonuses
+on:
+  pull_request:
+    paths:
+      - 'src/lib/bonus-tables.ts'
+      - 'src/lib/payroll-store.ts'
+      - 'src/lib/payroll-reference.ts'
+      - 'src/lib/agent-payroll.ts'
+      - 'src/app/bonus-tables.tsx'
+      - 'src/app/annual-bonuses-chart.tsx'
+      - 'src/app/pay-simulator.tsx'
+      - 'src/app/api/payroll/**'
+      - 'src/app/api/agents/route.ts'
+      - 'server/**'
+      - 'tests/**'
+      - '.github/workflows/verify-unified-bonuses.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --no-audit --no-fund
+      - run: node --experimental-strip-types --test tests/bonus-tables.test.ts tests/payroll-filters.test.ts tests/individual-payroll.test.ts
+      - run: npm run build
+      - run: sh .github/scripts/package-autonomous-api.sh
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Type check API
+        working-directory: supabase/functions/socioscope-api
+        run: deno check --config deno.json index.ts

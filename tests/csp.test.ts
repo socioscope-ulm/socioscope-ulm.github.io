@@ -59,7 +59,7 @@ test('ambiguous names require explicit NNI and missing agents cannot become arri
 });
 test('updated payroll and exports share GF, NR, college, sex filters and agency residence; annual payroll is unchanged',()=>{
  const e=event({kind:'nomination',gfDelta:3,nrAfter:220,agency:'AMTE',job:'Cadre'});const p=projectCsp(base,[imported([e])],'2026-06-01');
- const config={rates:{'1.24':{'200':Array(12).fill(20000)},'1.245':{'220':Array(12).fill(24000)}},bonuses:{'9':100,'12':200},gridDate:'2026-01-01',bonusReferenceYear:2025};
+ const config={rates:{'1.24':{'200':Array(12).fill(20000)},'1.245':{'220':Array(12).fill(24000)}},bonusRows:{'9':{rpc:null,rpem:100,pvpa:null},'12':{rpc:200,rpem:null,pvpa:34700}},gridDate:'2026-01-01',bonusReferenceYear:2025};
  const annual=agentPayroll(p.data,'annual','agency',config,{sex:'femmes'})!,actual=agentPayroll(p.data,CSP_SOURCE,'agency',config,{sex:'femmes',college:'cadres'})!;
  assert.equal(annual.rows[0].nr,200);assert.equal(actual.rows.length,1);assert.equal(actual.rows[0].gf,12);assert.equal(actual.rows[0].nr,220);assert.equal(actual.rows[0].residence,'1.245');assert.equal(actual.rows[0].monthlyCents,24000);
 });

@@ -2,7 +2,7 @@
 import {useEffect,useMemo,useState} from 'react';
 import type {PayrollReference} from '../lib/payroll-reference';
 import {selectReference} from '../lib/payroll-reference';
-import {PVPA_2025_BY_GF_CENTS} from '../lib/agent-payroll';
+import {bonusForGF,annualBonusLabel} from '../lib/bonus-tables';
 
 const euros=(c:number|null)=>c===null?'Non calculable':new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR'}).format(c/100);
 const numeric=(v:unknown)=>Number.isFinite(Number(v))?Number(v):0;
@@ -11,6 +11,7 @@ export default function PaySimulator({revision=0}:{revision?:number}){
  const [error,setError]=useState('');
  const [gridId,setGridId]=useState('');
  const [bonusId,setBonusId]=useState('');
+ const [activeBonusId,setActiveBonusId]=useState('');
  const [residence,setResidence]=useState('1.245');
  const [gf,setGf]=useState('12');
  const [nr,setNr]=useState('200');
@@ -29,11 +30,11 @@ export default function PaySimulator({revision=0}:{revision?:number}){
  const [afe,setAfe]=useState(false);
  const [familial,setFamilial]=useState(false);
  useEffect(()=>{const c=new AbortController();fetch('/api/prime-settings',{signal:c.signal,cache:'no-store'}).then(async r=>{const d=await r.json();if(!r.ok)throw Error(d.error||'Paramètres des primes indisponibles');setPrimeDefaults(d.settings);setPrimeValues(d.settings);}).catch(e=>{if(e.name!=='AbortError')setError(e.message);});return()=>c.abort();},[revision]);
- useEffect(()=>{const c=new AbortController();fetch('/api/payroll',{signal:c.signal,cache:'no-store'}).then(async r=>{if(!r.ok)throw Error('Références salariales indisponibles ('+r.status+').');return r.json();}).then(d=>setRefs(d.references||[])).catch(e=>{if(e.name!=='AbortError')setError(e.message);});return()=>c.abort();},[revision]);
+ useEffect(()=>{const c=new AbortController();fetch('/api/payroll',{signal:c.signal,cache:'no-store'}).then(async r=>{if(!r.ok)throw Error('Références salariales indisponibles ('+r.status+').');return r.json();}).then(d=>{setRefs(d.references||[]);setActiveBonusId(d.activeBonusId||'');}).catch(e=>{if(e.name!=='AbortError')setError(e.message);});return()=>c.abort();},[revision]);
  const grids=useMemo(()=>refs.filter(r=>r.kind==='grid'&&r.status==='validated').sort((a,b)=>b.date.localeCompare(a.date)),[refs]);
- const bonuses=useMemo(()=>refs.filter(r=>r.kind==='bonuses'&&r.status==='validated').sort((a,b)=>b.date.localeCompare(a.date)),[refs]);
+ const bonuses=useMemo(()=>refs.filter(r=>r.kind==='bonus-detail'&&r.status==='validated').sort((a,b)=>b.date.localeCompare(a.date)),[refs]);
  const grid=selectReference(refs,'grid',gridId)||grids[0];
- const bonus=selectReference(refs,'bonuses',bonusId)||bonuses[0];
+ const bonus=selectReference(refs,'bonus-detail',bonusId||activeBonusId)||bonuses[0];
  const rates=(grid?.payload?.rates||{}) as Record<string,Record<string,(number|null)[]>>;
  const residences=Object.keys(rates).sort((a,b)=>numeric(a)-numeric(b));
  const effectiveResidence=rates[residence]?residence:residences[0]||'';
@@ -43,8 +44,9 @@ export default function PaySimulator({revision=0}:{revision?:number}){
  const value=levels[level-1];
  const base=typeof value==='number'&&Number.isFinite(value)?value:null;
  const cadreEligible=Number(gf)>=12;
- const rpcAnnual=rpc&&bonus?.payload?.bonuses?.[gf]!=null?Number(bonus.payload.bonuses[gf]):0;
- const pvpaAnnual=cadreEligible&&pvpa&&Number(grid?.date.slice(0,4))>=2025?PVPA_2025_BY_GF_CENTS[gf]||0:0;
+ const selectedBonus=bonusForGF(bonus?.payload?.rows||{},Number(gf));
+ const rpcAnnual=rpc?(selectedBonus.rpcRpem??0):0;
+ const pvpaAnnual=cadreEligible&&pvpa?(selectedBonus.pvpa??0):0;
  const engagementMonthly=base!==null&&cadreEligible&&engagement?Math.round(base*primeValues.engagementRate/100):0;
  const autonomieMonthly=base!==null&&cadreEligible&&autonomie?Math.round(base*primeValues.autonomieRate/100):0;
  const asctAnnual=asct?Math.round(primeValues.asctMonthly*100)*12:0;
@@ -67,7 +69,7 @@ export default function PaySimulator({revision=0}:{revision?:number}){
   <div className="panel"><h2>Simulateur de paie</h2><p>Simulation indicative à partir des grilles et primes validées dans les documents Socioscope. Tous les paramètres sont modifiables ; aucune fiche individuelle n'est modifiée.</p>{error&&<p role="alert">{error}</p>}
    <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(190px,1fr))',gap:16}}>
     {input('Grille de rémunération',<select value={grid?.id||''} onChange={e=>{setGridId(e.target.value);setNr('');}}>{grids.map(r=><option key={r.id} value={r.id}>{r.name} · {r.date}</option>)}</select>)}
-    {input('Grille des primes · RPC / RPEM / PVPA',<select value={bonus?.id||''} onChange={e=>setBonusId(e.target.value)}>{bonuses.map(r=><option key={r.id} value={r.id}>RPC / RPEM / PVPA · {r.date}</option>)}</select>)}
+    {input('Grille des primes · RPC / RPEM / PVPA',<select value={bonus?.id||''} onChange={e=>setBonusId(e.target.value)}>{bonuses.map(r=><option key={r.id} value={r.id}>{annualBonusLabel(r.payload.paymentYear,r.payload.objectiveYear)}</option>)}</select>)}
     {input('Majoration résidentielle',<select value={effectiveResidence} onChange={e=>{setResidence(e.target.value);setNr('');}}>{residences.map(r=><option key={r} value={r}>{((Number(r)-1)*100).toLocaleString('fr-FR',{maximumFractionDigits:2})} %</option>)}</select>)}
     {input('Groupe fonctionnel (GF)',<select value={gf} onChange={e=>setGf(e.target.value)}>{Array.from({length:19},(_,i)=>String(i+1)).map(v=><option key={v} value={v}>GF {v}</option>)}</select>)}
     {input('Niveau de rémunération (NR)',<select value={effectiveNr} onChange={e=>setNr(e.target.value)}>{nrs.map(v=><option key={v} value={v}>NR {v}</option>)}</select>)}
@@ -77,7 +79,7 @@ export default function PaySimulator({revision=0}:{revision?:number}){
     {input('Taux de prélèvement à la source personnalisé (PAS, %)',<><input type="number" min={0} max={60} step={0.1} value={tax} onChange={e=>setTax(Math.min(60,Math.max(0,numeric(e.target.value))))}/><small style={{fontWeight:400,color:'#596e68'}}>Taux indicatifs : 0 %, 2 %, 5 %, 8 %, 10 %, 12,1 %, 12,3 %, 15 %, 20 %, 25 %, 30 %.</small></>)}
     {input('Autres primes brutes annuelles (€)',numberInput(extra,setExtra,0,1000000,.01))}
    </div>
-   <div style={{display:'flex',flexWrap:'wrap',gap:18,marginTop:18}}><label><input type="checkbox" checked={rpc} onChange={e=>setRpc(e.target.checked)}/> Inclure RPC / RPEM</label><label><input type="checkbox" disabled={!cadreEligible} checked={cadreEligible&&pvpa} onChange={e=>setPvpa(e.target.checked)}/> Inclure PVPA (référence 2025)</label><label><input type="checkbox" disabled={!cadreEligible} checked={cadreEligible&&engagement} onChange={e=>setEngagement(e.target.checked)}/> Prime d’engagement · {primeValues.engagementRate.toLocaleString('fr-FR')} % (cadres)</label><label><input type="checkbox" disabled={!cadreEligible} checked={cadreEligible&&autonomie} onChange={e=>setAutonomie(e.target.checked)}/> Prime d’autonomie · {primeValues.autonomieRate.toLocaleString('fr-FR')} % (cadres)</label></div>
+   <div style={{display:'flex',flexWrap:'wrap',gap:18,marginTop:18}}><label><input type="checkbox" checked={rpc} onChange={e=>setRpc(e.target.checked)}/> Inclure RPC / RPEM</label><label><input type="checkbox" disabled={!cadreEligible} checked={cadreEligible&&pvpa} onChange={e=>setPvpa(e.target.checked)}/> Inclure PVPA (référence sélectionnée)</label><label><input type="checkbox" disabled={!cadreEligible} checked={cadreEligible&&engagement} onChange={e=>setEngagement(e.target.checked)}/> Prime d’engagement · {primeValues.engagementRate.toLocaleString('fr-FR')} % (cadres)</label><label><input type="checkbox" disabled={!cadreEligible} checked={cadreEligible&&autonomie} onChange={e=>setAutonomie(e.target.checked)}/> Prime d’autonomie · {primeValues.autonomieRate.toLocaleString('fr-FR')} % (cadres)</label></div>
    {!cadreEligible&&<p className="muted" role="status">PVPA, engagement et autonomie : primes réservées aux GF 12 et plus. Leur sélection est désactivée pour ce GF.</p>}
    <div style={{display:'grid',gap:12,marginTop:18}}><h3>Primes complémentaires · 12 mois</h3><p className="muted">Ces trois primes sont facultatives, ouvertes à tous les GF dans ce simulateur uniquement. Cochez une prime pour l'ajouter, puis personnalisez son montant mensuel si nécessaire.</p>
    <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(200px,1fr))',gap:12}}>
@@ -113,7 +115,7 @@ export default function PaySimulator({revision=0}:{revision?:number}){
     </div>
    </div>
    <p className="muted">Les montants mensuels avec primes sont des moyennes sur 12 mois. Les montants sans primes excluent toutes les primes sélectionnables et les autres primes annuelles ; l'annualisation du salaire de base reste réglable. Le PAS et les cotisations estimées s'appliquent aux deux scénarios.</p>
-   <div className="panel"><h3>Détail annuel</h3><p>Base : {euros(base)} × {months} mensualités = {euros(base*months)}. RPC/RPEM : {euros(rpcAnnual)} ; PVPA : {euros(pvpaAnnual)} ; engagement : {euros(engagementAnnual)} ; autonomie : {euros(autonomieAnnual)} ; ASCT : {euros(asctAnnual)} ; AFE : {euros(afeAnnual)} ; sursalaire familial : {euros(familialAnnual)} ; autres primes : {euros(Math.round(extra*100))}.</p><p>Frais professionnels et remboursements : <strong>0 € inclus</strong> dans le brut ou le net simulé. PAS sélectionné : <strong>{tax.toLocaleString('fr-FR')} %</strong>. Le taux s'applique ici au net estimé avant impôt à titre simplifié ; le net fiscal exact peut différer.</p><p>Sources : {grid?.name} ({grid?.date}) ; {bonus?.name||'aucune grille de primes'} ({bonus?.date||'sans date'}). La PVPA utilise la moyenne 2025 intégrée aux calculs de masse salariale, lorsqu'elle est applicable. Pour les GF 12 à 19, les primes fixes engagement/autonomie sont calculées selon les taux personnalisables sur le brut mensuel de base, puis versées sur 12 mois indépendamment de l'annualisation sélectionnée. ASCT, AFE et sursalaire familial sont des primes facultatives sur 12 mois, réservées à cette simulation. Leur calcul ne dépend d'aucune grille de primes annuelle.</p><p><strong>Important :</strong> le net est une estimation calculée à partir de taux modifiables, sans prise en compte détaillée des cotisations, plafonds, avantages, absences ou de la situation fiscale individuelle. Le net après impôt applique un taux simplifié au net estimé et ne remplace pas le calcul réglementaire du prélèvement à la source. Les primes peuvent être versées à des dates différentes de la moyenne affichée.</p></div>
+   <div className="panel"><h3>Détail annuel</h3><p>Base : {euros(base)} × {months} mensualités = {euros(base*months)}. RPC/RPEM : {euros(rpcAnnual)} ; PVPA : {euros(pvpaAnnual)} ; engagement : {euros(engagementAnnual)} ; autonomie : {euros(autonomieAnnual)} ; ASCT : {euros(asctAnnual)} ; AFE : {euros(afeAnnual)} ; sursalaire familial : {euros(familialAnnual)} ; autres primes : {euros(Math.round(extra*100))}.</p><p>Frais professionnels et remboursements : <strong>0 € inclus</strong> dans le brut ou le net simulé. PAS sélectionné : <strong>{tax.toLocaleString('fr-FR')} %</strong>. Le taux s'applique ici au net estimé avant impôt à titre simplifié ; le net fiscal exact peut différer.</p><p>Sources : {grid?.name} ({grid?.date}) ; {bonus?.name||'aucune grille de primes'} ({bonus?.date||'sans date'}). La PVPA et la RPC/RPEM proviennent de la même référence annuelle validée. Pour les GF 12 à 19, les primes fixes engagement/autonomie sont calculées selon les taux personnalisables sur le brut mensuel de base, puis versées sur 12 mois indépendamment de l'annualisation sélectionnée. ASCT, AFE et sursalaire familial sont des primes facultatives sur 12 mois, réservées à cette simulation. Leur calcul ne dépend d'aucune grille de primes annuelle.</p><p><strong>Important :</strong> le net est une estimation calculée à partir de taux modifiables, sans prise en compte détaillée des cotisations, plafonds, avantages, absences ou de la situation fiscale individuelle. Le net après impôt applique un taux simplifié au net estimé et ne remplace pas le calcul réglementaire du prélèvement à la source. Les primes peuvent être versées à des dates différentes de la moyenne affichée.</p></div>
   </>}
  </section>;
 }
