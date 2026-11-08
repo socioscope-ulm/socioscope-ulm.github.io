@@ -123,3 +123,14 @@ test('Un autre poste ne doit jamais être confirmé par erreur',()=>{
  ],2026,1);
  assert.match(r.rows[0].notes,/NR après provisoire/);
 });
+
+test('Une divergence réelle entre ODJ et RD reste signalée malgré GF constant',()=>{
+ const odjEvent=ev({reference:'POSTE 1',recordedBefore:{gf:13,nr:230},recordedAfter:{gf:13,nr:230},acknowledgedByRD:{id:'rd1'}});
+ const rdEvent=ev({reference:'POSTE 1',recordedBefore:{gf:13,nr:235},recordedAfter:{gf:13,nr:235},note:'GF constant'});
+ const r=calculateQuarterlyReport([
+  doc([odjEvent],{status:'review',automaticallyValidated:true}),
+  doc([rdEvent],{id:'rd1',documentType:'rd'})
+ ],2026,1);
+ assert.equal(r.rows.length,1);
+ assert.match(r.rows[0].notes,/Divergence NR avant/);
+});
