@@ -1,0 +1,71 @@
+name: Synchronisation annuelle INSEE
+on:
+  schedule:
+    # Contrôles après la fin de l'année : janvier à avril, à trois dates fixes.
+    - cron: '23 8 5,15,25 1-4 *'
+  workflow_dispatch:
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+concurrency:
+  group: socioscope-pages
+  cancel-in-progress: false
+jobs:
+  collect-and-publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Tester les contrôles de la source INSEE
+        run: python -m unittest discover -s tests -p test_insee_sync.py
+      - name: Vérifier la nouvelle année annuelle officielle INSEE
+        run: python scripts/sync_insee.py
+      - name: Détecter une nouvelle année complète
+        id: changed
+        run: |
+          if git diff --quiet -- public/insee-annual-inflation.json; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "Pas de nouvelle année à intégrer."
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "Nouvelle année INSEE à publier."
+          fi
+      - name: Enregistrer la donnée annuelle vérifiée
+        if: steps.changed.outputs.changed == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add public/insee-annual-inflation.json
+          git commit -m "Ajouter inflation annuelle INSEE officielle"
+          git push
+      # Les commits effectués avec GITHUB_TOKEN ne déclenchent pas un nouveau push workflow.
+      # Publier le site dans le même job garantit que les analyses utilisent le nouvel indice.
+      - uses: actions/setup-node@v4
+        if: steps.changed.outputs.changed == 'true'
+        with:
+          node-version: '22'
+      - name: Installer les dépendances
+        if: steps.changed.outputs.changed == 'true'
+        run: npm install --no-audit --no-fund
+      - name: Vérifier les analyses utilisant INSEE
+        if: steps.changed.outputs.changed == 'true'
+        run: node --experimental-strip-types --test tests/insee-annual.test.ts tests/salary-comparison.test.ts
+      - name: Générer le site incluant la nouvelle année
+        if: steps.changed.outputs.changed == 'true'
+        run: npm run build
+      - uses: actions/configure-pages@v5
+        if: steps.changed.outputs.changed == 'true'
+      - uses: actions/upload-pages-artifact@v3
+        if: steps.changed.outputs.changed == 'true'
+        with:
+          path: docs
+      - uses: actions/deploy-pages@v4
+        if: steps.changed.outputs.changed == 'true'
+        id: deployment
