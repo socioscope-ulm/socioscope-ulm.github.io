@@ -203,6 +203,15 @@ export async function downloadQuarterlyPpt(report:QuarterlyReport,includeCandida
    s.addText(part,{x:.59,y:1.95,w:12.03,h:4.85,fontFace:'Arial',fontSize:13,color:P.text,margin:0,valign:'top',breakLine:false});
   }
  }
+ // Always include the documentary audit of excluded movements, even when
+ // there are zero exclusions, so the reader can confirm the check was performed.
+ // This does not modify any CSP decision or agent projection.
+ if(!report.previouslyReported?.length){
+  s=newPage(ppt,'CONTROLES DOCUMENTAIRES · EXCLUSIONS',foot);
+  bodyText(s,'Exclusions : 0 mouvement.',1.50,15,.40);
+  bodyText(s,'Aucune décision déjà présentée lors d’une CSP antérieure n’a été détectée pour ce trimestre.',2.14,11.5,.75);
+  bodyText(s,'Ce contrôle est distinct des anomalies documentaires et ne modifie aucune situation individuelle.',3.10,10.5,.60);
+ }
  // Audit trail for movements suppressed because an earlier CSP already
  // presented the same decision. The suppressed movements are not exported as
  // new movements, but their rationale remains readable in the PowerPoint.
