@@ -8,6 +8,9 @@ on:
       - 'src/lib/csp-manual-nr.ts'
       - 'src/lib/csp-salary-reference.ts'
       - 'src/lib/csp-alerts.ts'
+      - 'src/app/api/payroll/import/route.ts'
+      - 'src/lib/bonus-tables.ts'
+      - 'server/references.ts'
       - 'src/app/api/agents/route.ts'
       - 'src/lib/agents-store.ts'
       - 'server/result-cache.ts'
@@ -36,7 +39,7 @@ jobs:
       - name: Run CSP regression tests before any API deployment
         run: |
           npm install --no-audit --no-fund
-          node --experimental-strip-types --test tests/csp.test.ts tests/csp-cr-extract.test.ts tests/csp-mutation-arrival.test.ts tests/csp-manual-nr.test.ts
+          node --experimental-strip-types --test tests/csp.test.ts tests/csp-cr-extract.test.ts tests/csp-mutation-arrival.test.ts tests/csp-manual-nr.test.ts tests/bonus-tables.test.ts
       - name: Assemble the complete API source and import map
         run: sh .github/scripts/package-autonomous-api.sh
       - uses: denoland/setup-deno@v2

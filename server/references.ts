@@ -17,7 +17,7 @@ export function builtinReferences():Promise<PayrollReference[]> {
    throw Error('Références salariales protégées indisponibles : reconstruction interrompue.');
   return [...historical as PayrollReference[],
    {id:'grid-2026',kind:'grid',name:'Grille IEG au 01/01/2026',date:'2026-01-01',status:'validated',created:'',payload:{rates:rates as Rates}},
-   {id:'bonuses-2025',kind:'bonuses',name:'RPC / RPEM annuelles 2025 par GF',date:'2025-01-01',status:'validated',created:'',payload:{bonuses:bonuses as Bonuses}}
+   {id:'bonuses-2025',kind:'bonuses',name:'Primes versées en 2025 · objectifs 2025 (RPC/RPEM par GF)',date:'2025-01-01',status:'validated',created:'',payload:{bonuses:bonuses as Bonuses}}
   ] as PayrollReference[];
  })();
 }
