@@ -98,7 +98,7 @@ export default function CspQuarterlyReport({revision=0}:{revision?:number}){
   <fieldset disabled={busy} style={{margin:'16px 0',padding:16,border:'1px solid #ddd',borderRadius:8}}>
    <legend>Colonnes des tableaux de mouvements</legend>
    <p className="filter-note">Toujours présentes : Nom / prénom, Agence / poste et CSP / effet.</p>
-   <div className="analysis-options">{optionalMovementColumns.map(c=><label key={c.id} className="check-label">
+   <div className="analysis-options csp-column-options">{optionalMovementColumns.map(c=><label key={c.id} className="check-label">
     <input type="checkbox" checked={selectedColumns.includes(c.id)} onChange={e=>setSelectedColumns(previous=>e.target.checked?[...previous,c.id]:previous.filter(id=>id!==c.id))}/>{c.label}
    </label>)}</div>
    <p className="filter-note">Pour les admissions au stage et les titularisations, le GF avant / après reste obligatoire et la colonne « NR + » n’est jamais affichée, même si elle est sélectionnée. Pour les autres motifs, les colonnes suivent votre sélection. L’aperçu et le PowerPoint respectent ces règles, rubrique par rubrique.</p>
