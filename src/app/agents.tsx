@@ -365,7 +365,9 @@ function profileHistoricalRows(profile:any){
   if(!matches)observed.push({type:'observed',key:'observed:'+previous.source.id+':'+current.source.id,date:current.source.date,before:a,after:b,from:previous.source.name||previous.source.label,to:current.source.name||current.source.label});
  }
  const rank=(r:any)=>r.type==='archive'?0:r.type==='csp'?1:2;
- return [...old,...csp,...observed].sort((a,b)=>b.date.localeCompare(a.date)||rank(a)-rank(b)||a.key.localeCompare(b.key));
+ return [...old,...csp,...observed].sort((a,b)=>b.date.localeCompare(a.date)||rank(a)-rank(b)||
+  (a.type==='csp'&&b.type==='csp'?a.event.order-b.event.order:a.key.localeCompare(b.key)));
+
 }
 
 function AgentProfile({isAdmin,profile,preferred,sources,onBack,onDecision,gridRef,bonusRef,residence,decisionNotice,asOf}:any){const [rupChoice,setRupChoice]=useState('');const [rupReason,setRupReason]=useState('');const [rupSaving,setRupSaving]=useState(false);const [chosen,setChosen]=useState(profile.snapshots.some((s:any)=>s.source.id===preferred)?preferred:profile.snapshots[0]?.source.id||'');const [detail,setDetail]=useState(false);const [calculationDate,setCalculationDate]=useState('');const [benchmark,setBenchmark]=useState<any>(null);const snap=profile.snapshots.find((s:any)=>s.source.id===chosen)||profile.snapshots[0];const r=snap?.situation||{};const sr=snap?.source;const rows=profile.records.filter((x:any)=>x.source===chosen);const points=profile.snapshots.filter((s:any)=>s.source.primary||s.source.status==='validated').slice().reverse().map((s:any)=>({date:s.source.date,label:s.source.label,nr:s.situation?.nr??null,gf:s.situation?.gf??null}));const source=(id:string)=>sources.find((s:any)=>s.id===id);const calculationAsOf=calculationDate||(sr?.date||'');const career=careerSeniority(profile.records,sources,calculationAsOf,chosen);
