@@ -160,3 +160,14 @@
  .analysis-options.csp-column-options{gap:12px 16px}
  .analysis-options.csp-column-options>label{white-space:normal}
 }
+
+/* Five individual situation cards; the fifth opens career details. */
+.agent-profile-kpis{grid-template-columns:repeat(5,minmax(0,1fr))}
+.agent-profile-kpis .career-kpi-link{display:block;color:inherit;text-decoration:none;cursor:pointer}
+.agent-profile-kpis .career-kpi-link:hover,.agent-profile-kpis .career-kpi-link:focus-visible{border-color:#557b46;box-shadow:0 0 0 2px #557b4622;outline:none}
+.agent-profile-kpis .career-kpi-link .kpi-note{line-height:1.4}
+#career-recalculated{scroll-margin-top:85px}
+#career-recalculated>details>summary{cursor:pointer;font-weight:700}
+#career-recalculated .agent-career-extra{border-top:1px solid var(--border);margin-top:20px;padding-top:20px}
+@media(max-width:1250px){.agent-profile-kpis{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:760px){.agent-profile-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
