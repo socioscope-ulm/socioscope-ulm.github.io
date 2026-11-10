@@ -326,15 +326,39 @@ function profileSituationRows(snapshots:any[],decisions:any[]):ProfileHistoryRow
 
 // Read-only timeline: old archival events, validated CSP decisions and observed
 // differences between yearly files. A photograph cannot prove a salary motive.
+
 function profileHistoricalRows(profile:any){
- const old=(profile.events||[]).map((e:any,i:number)=>({
-  type:'archive' as const,key:'archive:'+i,date:e.date||'',event:e
+ const numeral=(v:unknown):number|undefined=>typeof v==='number'&&Number.isFinite(v)?v:undefined;
+ // Merge complementary renditions of the same archived event. A conflict in
+ // explicitly documented NR/GF values means two records remain distinguishable.
+ const archived=new Map<string,any[]>();
+ for(const e of profile.events||[]){
+  const norm=String(e.motif||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
+  const key=JSON.stringify([e.date||'',e.end||'',e.kind||'',norm]);
+  const rows=archived.get(key)||[];
+  const raw=(x:any)=>x.nrRaw===undefined||x.nrRaw===null?'':String(x.nrRaw).trim();
+  const compatible=(a:any,b:any)=>[
+   ['gf',a.gf,b.gf],['nrRaw',raw(a),raw(b)],['numberNR',a.numberNR,b.numberNR],
+   ['contextNR',a.contextNR,b.contextNR]
+  ].every(([k,x,y])=>x===undefined||y===undefined||x===''||y===''||x===y);
+  const existing=rows.find(x=>compatible(x,e));
+  if(existing){
+   for(const field of ['gf','nrRaw','numberNR','contextNR','duration','end','openEnd']){
+    if((existing[field]===undefined||existing[field]===null||existing[field]==='')&&e[field]!==undefined)existing[field]=e[field];
+   }
+   for(const ref of e.evidence||[]){
+    if(!existing.evidence.some((r:any)=>JSON.stringify([r.source,r.sheet,r.row,r.column])===JSON.stringify([ref.source,ref.sheet,ref.row,ref.column])))existing.evidence.push(ref);
+   }
+  }else rows.push({...e,evidence:[...(e.evidence||[])]});
+  archived.set(key,rows);
+ }
+ const old=[...archived.values()].flat().map((e:any,i:number)=>({
+  type:'archive' as const,key:'archive:'+i,date:e.date||'',event:e,
+  salary:{gfBefore:undefined as number|undefined,gfAfter:numeral(e.gf),nrBefore:undefined as number|undefined,nrAfter:undefined as number|undefined,confidence:''}
  }));
  const csp=profileSituationRows([],profile.cspDecisions||[])
   .filter((r):r is CspProfileRow=>r.type==='csp')
   .map(r=>({type:'csp' as const,key:'csp:'+r.key,date:r.date,event:r}));
- // One validated reference photograph per day, preferring a primary source.
- // Do not treat virtual CSP snapshots as external documentary evidence.
  const photos=new Map<string,any>();
  for(const s of profile.snapshots||[]){
   if(!s.source?.date||s.source.kind?.startsWith('csp')||s.source.status==='review'||
@@ -343,31 +367,58 @@ function profileHistoricalRows(profile:any){
   if(!earlier||(!earlier.source.primary&&s.source.primary))photos.set(s.source.date,s);
  }
  const chronological=[...photos.values()].sort((a,b)=>a.source.date.localeCompare(b.source.date));
+ // Only infer an archival event's salary from two photographed endpoints
+ // when it is the sole eligible movement and the entire delta agrees.
+ for(let i=1;i<chronological.length;i++){
+  const previous=chronological[i-1],current=chronological[i],a=previous.situation,b=current.situation;
+  if(!a||!b||![a.gf,a.nr,b.gf,b.nr].every(Number.isInteger))continue;
+  const inside=old.filter(r=>r.date>previous.source.date&&r.date<=current.source.date);
+  const cspInside=csp.filter(r=>r.date>previous.source.date&&r.date<=current.source.date);
+  if(inside.length!==1||cspInside.length)continue;
+  const row=inside[0],e=row.event,steps=numeral(e.numberNR);
+  const deltaNR=b.nr-a.nr,deltaGF=b.gf-a.gf;
+  if(deltaNR<0||deltaGF<0||!Number.isInteger(steps)||steps<0||deltaNR!==steps*5)continue;
+  const reclassement=/reclassement/i.test(e.kind+' '+e.motif);
+  if(reclassement?deltaGF<1||deltaNR!==deltaGF*10:deltaGF!==0)continue;
+  if(e.gf!==undefined&&e.gf!==a.gf&&e.gf!==b.gf)continue;
+  row.salary={gfBefore:a.gf,gfAfter:b.gf,nrBefore:a.nr,nrAfter:b.nr,
+   confidence:'Reconstitution vérifiée : écart GF/NR entre deux photographies correspondant exactement au mouvement documenté'};
+ }
+ // A source NR can be an indication of CONTEXT rather than an acquired
+ // salary value. Never subtract NR awards from this field by assumption.
+ for(const row of old){
+  const e=row.event;
+  if(row.salary.nrAfter!==undefined)continue;
+  const candidate=numeral(e.contextNR);
+  const raw=typeof e.nrRaw==='string'&&/^\d{1,3}$/.test(e.nrRaw.trim())?Number(e.nrRaw.trim()):undefined;
+  const context=candidate??raw;
+  if(context!==undefined){
+   row.salary.confidence='NR '+context+' mentionné dans le fichier source : valeur de contexte, sans preuve suffisante pour déterminer les NR avant/après';
+  }else row.salary.confidence='GF/NR non déductibles des références disponibles : aucune valeur inventée';
+ }
  const observed:{type:'observed';key:string;date:string;before:any;after:any;from:string;to:string}[]=[];
  for(let i=1;i<chronological.length;i++){
   const previous=chronological[i-1],current=chronological[i],a=previous.situation,b=current.situation;
   if(!a||!b||!Number.isInteger(a.gf)||!Number.isInteger(a.nr)||!Number.isInteger(b.gf)||!Number.isInteger(b.nr)||a.gf===b.gf&&a.nr===b.nr)continue;
   const between=csp.filter(r=>r.date>previous.source.date&&r.date<=current.source.date);
-  // If the chain of fully evidenced CSP decisions already explains the two
-  // photographs, the photograph is a confirmation, not a second movement.
-  const validChain=between.length>0&&between.every(r=>
-   r.event.before.gf!==undefined&&r.event.before.nr!==undefined&&
-   r.event.after.gf!==undefined&&r.event.after.nr!==undefined);
-  let matches=validChain;
-  if(validChain){
-   let gf=a.gf,nr=a.nr;
-   for(const row of between){
-    if(gf!==row.event.before.gf||nr!==row.event.before.nr){matches=false;break;}
-    gf=row.event.after.gf!;nr=row.event.after.nr!;
-   }
-   matches=matches&&gf===b.gf&&nr===b.nr;
+  const archival=old.filter(r=>r.date>previous.source.date&&r.date<=current.source.date&&
+   r.salary.nrBefore!==undefined&&r.salary.nrAfter!==undefined&&r.salary.gfBefore!==undefined&&r.salary.gfAfter!==undefined);
+  const chain=[...between.map(r=>({date:r.date,order:r.event.order,
+   before:r.event.before,after:r.event.after})),...archival.map(r=>({date:r.date,order:0,
+   before:{gf:r.salary.gfBefore,nr:r.salary.nrBefore},after:{gf:r.salary.gfAfter,nr:r.salary.nrAfter}}))]
+   .sort((a,b)=>a.date.localeCompare(b.date)||a.order-b.order);
+  let matches=chain.length>0;let gf=a.gf,nr=a.nr;
+  for(const r of chain){
+   if(r.before.gf===undefined||r.before.nr===undefined||r.after.gf===undefined||r.after.nr===undefined||
+    r.before.gf!==gf||r.before.nr!==nr){matches=false;break;}
+   gf=r.after.gf;nr=r.after.nr;
   }
-  if(!matches)observed.push({type:'observed',key:'observed:'+previous.source.id+':'+current.source.id,date:current.source.date,before:a,after:b,from:previous.source.name||previous.source.label,to:current.source.name||current.source.label});
+  if(matches&&gf===b.gf&&nr===b.nr)continue;
+  observed.push({type:'observed',key:'observed:'+previous.source.id+':'+current.source.id,date:current.source.date,before:a,after:b,from:previous.source.name||previous.source.label,to:current.source.name||current.source.label});
  }
  const rank=(r:any)=>r.type==='archive'?0:r.type==='csp'?1:2;
  return [...old,...csp,...observed].sort((a,b)=>b.date.localeCompare(a.date)||rank(a)-rank(b)||
   (a.type==='csp'&&b.type==='csp'?a.event.order-b.event.order:a.key.localeCompare(b.key)));
-
 }
 
 function AgentProfile({isAdmin,profile,preferred,sources,onBack,onDecision,gridRef,bonusRef,residence,decisionNotice,asOf}:any){const [rupChoice,setRupChoice]=useState('');const [rupReason,setRupReason]=useState('');const [rupSaving,setRupSaving]=useState(false);const [chosen,setChosen]=useState(profile.snapshots.some((s:any)=>s.source.id===preferred)?preferred:profile.snapshots[0]?.source.id||'');const [detail,setDetail]=useState(false);const [calculationDate,setCalculationDate]=useState('');const [benchmark,setBenchmark]=useState<any>(null);const snap=profile.snapshots.find((s:any)=>s.source.id===chosen)||profile.snapshots[0];const r=snap?.situation||{};const sr=snap?.source;const rows=profile.records.filter((x:any)=>x.source===chosen);const points=profile.snapshots.filter((s:any)=>s.source.primary||s.source.status==='validated').slice().reverse().map((s:any)=>({date:s.source.date,label:s.source.label,nr:s.situation?.nr??null,gf:s.situation?.gf??null}));const source=(id:string)=>sources.find((s:any)=>s.id===id);const calculationAsOf=calculationDate||(sr?.date||'');const career=careerSeniority(profile.records,sources,calculationAsOf,chosen);
@@ -440,7 +491,7 @@ return <><button className="text-btn" onClick={onBack}><ArrowLeft size={16}/>Ret
 <div className="table-scroll"><table><thead><tr><th>Photographie</th><th>Ancienneté IEG publiée</th><th>Ancienneté recalculée</th><th>Base retenue pour le calcul / source</th><th>Autres dates d’entrée dans les RUP</th><th>Contrôle</th></tr></thead><tbody>{annualCareer.map((s:any)=><tr key={s.source.id}><td>{date(s.date)}<small>{s.source.name}</small></td><td>{s.published!==undefined?fmt(s.published)+' ans':'Non renseignée'}</td><td><b>{s.completedYears!==null?s.completedYears+' ans':'Non calculable'}</b>{s.years!==null&&<small>{fmt(s.years)} années</small>}</td><td>{s.start?date(s.start):'Non renseigné'}<small>{s.method}</small><small>{source(s.origin)?.name||''}</small></td><td>{rupDates.filter((d:string)=>d!==s.start).length?rupDates.filter((d:string)=>d!==s.start).map((d:string)=><small key={d}>{date(d)} · {rupDateDocuments(d).join(', ')}</small>):'Aucune autre date connue'}</td><td>{s.unexpected?<span className="badge amber">Rupture à vérifier</span>:s.years===null?'Non calculable':'—'}</td></tr>)}</tbody></table></div>
 <p className="filter-note">Contrôle indicatif basé sur les durées écoulées entre photographies. Pour une correction réelle, il faut sélectionner une date IEG attestée dans un RUP. Le tableau n’ajoute jamais automatiquement une année. La base de calcul peut rester constante sur plusieurs photographies ; les dates alternatives proviennent des RUP originaux.</p></section>
 <section className="panel"><div className="panel-heading"><div><h2>Situations enregistrées</h2><p>Photographies et mouvements CSP validés, classés par date d’effet. Deux décisions le même jour restent deux étapes distinctes ; les références ODJ/RD concordantes ne créent pas de doublon. Aucun changement aux données de carrière.</p></div></div><div className="table-scroll"><table><thead><tr><th>Photographie / mouvement</th><th>GF après</th><th>NR après</th><th>Années GF</th><th>Années NR</th><th>Ancienneté IEG</th><th>Lignes / documents</th></tr></thead><tbody>{profileSituationRows(profile.snapshots,profile.cspDecisions||[]).map((row:ProfileHistoryRow)=>row.type==='photo'?<tr key={row.key}><td><button className="text-btn" onClick={()=>setChosen(row.snapshot.source.id)}>{row.snapshot.source.label}</button><small>Anciennetés au {date(row.snapshot.source.seniorityDate)}</small></td><td>{fmt(row.snapshot.situation?.gf)}</td><td>{fmt(row.snapshot.situation?.nr)}</td><td>{fmt(row.snapshot.situation?.gfYears)}</td><td>{fmt(row.snapshot.situation?.nrYears)}</td><td>{fmt(row.snapshot.situation?.iegYears)}</td><td>{row.snapshot.situation?.situations}</td></tr>:<tr key={'csp:'+row.key}><td><b>{cspKinds[row.kind as keyof typeof cspKinds]||row.kind}</b><small>Décision CSP validée · effet au {date(row.date)}</small><small>Avant : GF {fmt(row.before.gf)} / NR {fmt(row.before.nr)} → après : GF {fmt(row.after.gf)} / NR {fmt(row.after.nr)}</small></td><td>{fmt(row.after.gf)}</td><td>{fmt(row.after.nr)}</td><td>—</td><td>—</td><td>—</td><td><details><summary>{row.documents.length} document(s)</summary>{row.documents.map(d=><small key={d.id}>{d.name}{d.page!==undefined?' · page '+d.page:''}</small>)}</details></td></tr>)}</tbody></table></div></section>
-<section className="panel"><div className="panel-heading"><div><h2>Événements historiques ({profileHistoricalRows(profile).length})</h2><p>Chronologie des événements des fichiers historiques, des décisions CSP validées et des écarts entre photographies annuelles. Seuls les documents qui précisent un motif permettent de l’attribuer ; une évolution constatée entre deux fichiers n'est pas une décision CSP supplémentaire.</p></div></div><div className="table-scroll"><table><thead><tr><th>Date / période</th><th>Motif / nature</th><th>GF historique / après</th><th>NR historique / après</th><th>Nombre de NR déclaré</th><th>Sources</th></tr></thead><tbody>{profileHistoricalRows(profile).map((item:any)=>item.type==='archive'?<tr key={item.key}><td>{date(item.event.date)}{item.event.openEnd&&<small>Situation ouverte dans la source</small>}{item.event.end&&<small>Fin : {date(item.event.end)}</small>}</td><td>{item.event.motif}<small>{item.event.kind} · fichier historique</small></td><td>{fmt(item.event.gf)}</td><td>{fmt(item.event.nrRaw)}{item.event.legacyNR&&<small>Ancien format · conversion à vérifier</small>}</td><td>{fmt(item.event.numberNR)}</td><td><details><summary>{item.event.evidence.length} références</summary>{item.event.evidence.map((ev:any,j:number)=><small key={j}>{source(ev.source)?.name} · {ev.sheet} · ligne {ev.row}{ev.column?' · colonne '+ev.column:''}</small>)}</details></td></tr>:item.type==='csp'?<tr key={item.key}><td>{date(item.date)}<small>Date d’effet</small></td><td><b>{cspKinds[item.event.kind as keyof typeof cspKinds]||item.event.kind}</b><small>Décision CSP validée</small></td><td>{fmt(item.event.after.gf)}<small>Avant : {fmt(item.event.before.gf)}</small></td><td>{fmt(item.event.after.nr)}<small>Avant : {fmt(item.event.before.nr)}</small></td><td>{item.event.after.nr!==undefined&&item.event.before.nr!==undefined&&item.event.after.nr>item.event.before.nr&&(item.event.after.nr-item.event.before.nr)%5===0?'+'+(item.event.after.nr-item.event.before.nr)/5:'—'}</td><td><details><summary>{item.event.documents.length} document(s)</summary>{item.event.documents.map((d:any)=><small key={d.id}>{d.name}{d.page!==undefined?' · page '+d.page:''}</small>)}</details></td></tr>:<tr key={item.key}><td>{date(item.date)}<small>Constaté à la photographie</small></td><td><b>Évolution constatée entre photographies</b><small>Motif non déterminé par ces deux fichiers · aucune attribution supplémentaire de GF/NR</small></td><td>{fmt(item.after.gf)}<small>Avant : {fmt(item.before.gf)}</small></td><td>{fmt(item.after.nr)}<small>Avant : {fmt(item.before.nr)}</small></td><td>—</td><td><details><summary>2 fichiers de référence</summary><small>Avant : {item.from}</small><small>Après : {item.to}</small></details></td></tr>)}</tbody></table>{!profileHistoricalRows(profile).length&&<div className="empty">Aucun événement historique documenté ou changement entre photographies pour cette identité.</div>}</div></section>
+<section className="panel"><div className="panel-heading"><div><h2>Événements historiques ({profileHistoricalRows(profile).length})</h2><p>Événements d’origine regroupés par date et motif, décisions CSP validées et écarts résiduels entre photographies. Les GF/NR avant/après ne sont reconstitués que si les valeurs et la progression sont vérifiables ; les NR de contexte des anciens fichiers ne sont jamais assimilés à des NR acquis.</p></div></div><div className="table-scroll"><table><thead><tr><th>Date / période</th><th>Motif / nature</th><th>GF historique / après</th><th>NR historique / après</th><th>Nombre de NR déclaré</th><th>Sources</th></tr></thead><tbody>{profileHistoricalRows(profile).map((item:any)=>item.type==='archive'?<tr key={item.key}><td>{date(item.event.date)}{item.event.openEnd&&<small>Situation ouverte dans la source</small>}{item.event.end&&<small>Fin : {date(item.event.end)}</small>}</td><td>{item.event.motif}<small>{item.event.kind} · fichier historique</small></td><td>{item.salary.gfBefore!==undefined?<>GF {item.salary.gfBefore} → {item.salary.gfAfter}</>:item.salary.gfAfter!==undefined?<>GF {item.salary.gfAfter}<small>Valeur historique attestée, GF avant non établi</small></>:<span>À établir</span>}</td><td>{item.salary.nrBefore!==undefined?<>NR {item.salary.nrBefore} → {item.salary.nrAfter}</>:<><span>À établir</span>{item.event.nrRaw!==undefined&&item.event.nrRaw!==null&&String(item.event.nrRaw).trim()!==''&&<small>NR source : {item.event.nrRaw}{item.event.legacyNR?' (ancien format)':' (contexte, non attribué)'} </small>}</>}<small>{item.salary.confidence}</small></td><td>{item.event.numberNR!==undefined?fmt(item.event.numberNR):'—'}</td><td><details><summary>{item.event.evidence.length} références</summary>{item.event.evidence.map((ev:any,j:number)=><small key={j}>{source(ev.source)?.name} · {ev.sheet} · ligne {ev.row}{ev.column?' · colonne '+ev.column:''}</small>)}</details></td></tr>:item.type==='csp'?<tr key={item.key}><td>{date(item.date)}<small>Date d’effet</small></td><td><b>{cspKinds[item.event.kind as keyof typeof cspKinds]||item.event.kind}</b><small>Décision CSP validée</small></td><td>{fmt(item.event.after.gf)}<small>Avant : {fmt(item.event.before.gf)}</small></td><td>{fmt(item.event.after.nr)}<small>Avant : {fmt(item.event.before.nr)}</small></td><td>{item.event.after.nr!==undefined&&item.event.before.nr!==undefined&&item.event.after.nr>item.event.before.nr&&(item.event.after.nr-item.event.before.nr)%5===0?'+'+(item.event.after.nr-item.event.before.nr)/5:'—'}</td><td><details><summary>{item.event.documents.length} document(s)</summary>{item.event.documents.map((d:any)=><small key={d.id}>{d.name}{d.page!==undefined?' · page '+d.page:''}</small>)}</details></td></tr>:<tr key={item.key}><td>{date(item.date)}<small>Constaté à la photographie</small></td><td><b>Évolution constatée entre photographies</b><small>Motif non déterminé par ces deux fichiers · aucune attribution supplémentaire de GF/NR</small></td><td>{fmt(item.after.gf)}<small>Avant : {fmt(item.before.gf)}</small></td><td>{fmt(item.after.nr)}<small>Avant : {fmt(item.before.nr)}</small></td><td>—</td><td><details><summary>2 fichiers de référence</summary><small>Avant : {item.from}</small><small>Après : {item.to}</small></details></td></tr>)}</tbody></table>{!profileHistoricalRows(profile).length&&<div className="empty">Aucun événement historique documenté ou changement entre photographies pour cette identité.</div>}</div></section>
 <CspAgentHistory records={profile.cspDecisions||[]}/>
 {profile.decisions.length>0&&<section className="panel"><h2>Décisions et rapprochements</h2>{profile.decisions.map((d:any)=><p key={d.id}>{d.kind==='link'?'Rapprochement validé':d.kind==='departure'?'Départ confirmé':d.kind==='absence'?'Absence à vérifier':d.kind==='return'?'Présence confirmée':d.kind==='career_rup'?'Correction ancienneté RUP':d.kind==='career_auto'?'Retour au calcul automatique':d.kind} · {source(d.source)?.label||rupDocuments.get(d.source)||'Fiche'} · {d.kind==='career_rup'||d.kind==='career_auto'?(()=>{try{const x=JSON.parse(d.note||'{}');return (x.date?'Date '+date(x.date)+' · ligne '+x.row+' · ':'')+x.reason+' · '+new Date(d.created).toLocaleString('fr-FR');}catch{return 'Décision archivée';}})():decisionNote(d.note)}{isAdmin&&d.kind==='link'&&<button className="text-btn" onClick={()=>onDecision({kind:'unlink',agent:d.agent,source:d.source})}>Annuler ce rapprochement</button>}</p>)}</section>}</>;
 }
