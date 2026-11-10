@@ -206,6 +206,53 @@ function retrospectiveReference(current:AgentRecord|undefined,e:CspEvent,proofs:
  for(const field of ['gf','nr','college','gfDate','nrDate','gfYears','nrYears'] as const)if(salary[field]!==undefined)(before as any)[field]=salary[field];
  return {before,proof};
 }
+// Retroactive awards may cite the post-salary values of a later validated
+// reclassement. Translate the award back to its effective date and carry its
+// NR gain forward through that exact reclassement, without rewriting either PDF.
+function cspRetroEvidence(events:CspEvent[]):Map<string,CspEvent[]>{
+ const byAgent=new Map<string,CspEvent[]>();
+ for(const e of events){
+  if(!e.approved||!e.selected||e.candidacy||!e.agentId||cspExtractionIssue(e))continue;
+  const rows=byAgent.get(e.agentId)||[];
+  if(!rows.some(p=>cspKey(p)===cspKey(e)&&
+    JSON.stringify([p.gfBefore,p.nrBefore,p.gfAfter,p.nrAfter])===JSON.stringify([e.gfBefore,e.nrBefore,e.gfAfter,e.nrAfter])))rows.push(e);
+  byAgent.set(e.agentId,rows);
+ }
+ return byAgent;
+}
+function cspRetroAdjusted(current:AgentRecord|undefined,e:CspEvent,evidence:CspEvent[],bridges:Map<string,number>):{
+ event:CspEvent;bridge?:string;offset?:number;proofDate?:string;rebased?:boolean
+}{
+ const unchanged={event:e};
+ if(!current||!e.agentId||e.candidacy||!e.selected||
+   (['gf','nr'] as const).some(k=>!Number.isInteger(current[k])||((current as any).conflicts||[]).includes(k)))return unchanged;
+ if(e.kind==='reclassement'){
+  const offset=bridges.get(cspKey(e)),delta=e.gfDelta;
+  if(!offset||!Number.isInteger(delta)||delta!<1||e.gfBefore!==current.gf||
+    e.nrBefore===undefined||e.nrBefore+offset!==current.nr||
+    e.gfAfter!==e.gfBefore+delta!||e.nrAfter!==e.nrBefore+delta!*10)return unchanged;
+  return {event:{...e,gfBefore:current.gf,nrBefore:current.nr,
+    gfAfter:current.gf!+delta!,nrAfter:current.nr!+delta!*10},rebased:true};
+ }
+ if(!['avancement','mesure'].includes(e.kind)||e.projectionFrom||e.gfDelta||cspExtractionIssue(e)||
+   !Number.isInteger(e.gfBefore)||!Number.isInteger(e.nrBefore))return unchanged;
+ const count=cspNRSteps(e);
+ if(!Number.isInteger(count)||count!<1||e.nrAfter!==e.nrBefore!+count!*5||
+   (e.gfAfter!==undefined&&e.gfAfter!==e.gfBefore)||
+   current.gf===e.gfBefore&&current.nr===e.nrBefore)return unchanged;
+ const matching=evidence.filter(p=>p.kind==='reclassement'&&p.effective>e.effective&&
+   p.gfBefore===current.gf&&p.nrBefore===current.nr&&p.gfAfter===e.gfBefore&&p.nrAfter===e.nrBefore&&
+   Number.isInteger(p.gfDelta)&&p.gfDelta!>0&&p.gfAfter===p.gfBefore!+p.gfDelta!&&
+   p.nrAfter===p.nrBefore!+p.gfDelta!*10);
+ if(matching.length!==1)return unchanged;
+ const proof=matching[0],bridge=cspKey(proof);
+ if(bridges.has(bridge)||evidence.some(p=>p!==proof&&p.effective>e.effective&&
+   p.effective<=proof.effective&&p.kind!=='titularisation'))return unchanged;
+ return {event:{...e,gfBefore:current.gf,nrBefore:current.nr,
+   gfAfter:e.gfAfter===undefined?undefined:current.gf,nrAfter:current.nr!+count!*5},
+   bridge,offset:count!*5,proofDate:proof.effective};
+}
+
 export function prepareCsp(data:AgentData,events:CspEvent[],prior:CspImport[]=[],meetingDate=parisToday(),salaryChecks?:CspSalaryChecks):CspPreview[]{
  prior=resolvePendingAdmissions(data,prior);
  const base=latestAnnual(data);if(!base)return events.map(e=>({...e,state:'blocked',problem:'Aucune photographie annuelle de référence.'}));
@@ -223,7 +270,9 @@ export function prepareCsp(data:AgentData,events:CspEvent[],prior:CspImport[]=[]
  });
  const existing=[...prior].sort((a,b)=>(a.created||'').localeCompare(b.created||'')).filter(i=>i.status==='validated').flatMap(i=>i.events.filter(e=>e.selected&&!e.candidacy).map(reclassementEvent));const known=new Map(existing.map(e=>[cspKey(e),e]));
  const state=new Map(snapshot(data,base.id).map(r=>[r.agentId,r as AgentRecord]));
- const linked=[...existing,...resolved];for(let i=0;i<resolved.length;i++)resolved[i]=cspBridgeGFOnly(resolved[i],linked);
+ const retroShifts=new Map<string,number>();
+  const retroEvidence=cspRetroEvidence([...existing,...resolved.filter(e=>e.approved)]);
+  const linked=[...existing,...resolved];for(let i=0;i<resolved.length;i++)resolved[i]=cspBridgeGFOnly(resolved[i],linked);
  const retrospective=retrospectiveProofs([...prior,{id:'current-approved',name:'Décisions déjà validées de ce document',date:meetingDate,status:'validated',events:resolved.filter(e=>e.approved)}],base.date);
  const combined=[...existing.map(e=>({event:e,prior:true})),...resolved.map(e=>({event:e,prior:false}))].sort((a,b)=>
   (a.event.projectionFrom||a.event.effective).localeCompare(b.event.projectionFrom||b.event.effective)||
@@ -233,7 +282,10 @@ export function prepareCsp(data:AgentData,events:CspEvent[],prior:CspImport[]=[]
   cspSameDayOrder(a.event,b.event)||Number(b.prior)-Number(a.prior));
  const results=new Map<string,CspPreview>();const seen=new Set<string>();const salaryHistory=new Map<string,AgentRecord[]>();
  for(const {event:e,prior:isPrior} of combined){
-  const key=cspKey(e);if(isPrior){if(e.effective>base.date&&!seen.has(key)){seen.add(key);const reference=retrospectiveReference(state.get(e.agentId!),e,retrospective,base.date);const current=reference.before;const historical=e.kind==='posthume'?cspHistoricalRecord(data,e.agentId!,e.effective):undefined;const posthume=posthumousReference(current,e,historical);const before=salaryReferenceRow(posthume.before,e);const a=applyEvent(before,e,salaryHistory.get(e.agentId!));if(!posthume.historicalOnly)rememberSalary(salaryHistory,before,a.row,e);if(a.row&&!posthume.historicalOnly)state.set(e.agentId!,a.row);}continue;}
+  const key=cspKey(e);if(isPrior){if(e.effective>base.date&&!seen.has(key)){seen.add(key);const reference=retrospectiveReference(state.get(e.agentId!),e,retrospective,base.date);const current=reference.before;const historical=e.kind==='posthume'?cspHistoricalRecord(data,e.agentId!,e.effective):undefined;const posthume=posthumousReference(current,e,historical);const before=salaryReferenceRow(posthume.before,e);const adjusted=cspRetroAdjusted(before,e,retroEvidence.get(e.agentId!)||[],retroShifts);
+     const a=applyEvent(before,adjusted.event,salaryHistory.get(e.agentId!));
+     if(a.row&&!a.problem&&adjusted.bridge)retroShifts.set(adjusted.bridge,adjusted.offset!);
+     if(!posthume.historicalOnly)rememberSalary(salaryHistory,before,a.row,e);if(a.row&&!posthume.historicalOnly)state.set(e.agentId!,a.row);}continue;}
   const reference=retrospectiveReference(state.get(e.agentId!),e,retrospective,base.date);const current=reference.before;const historical=e.kind==='posthume'?cspHistoricalRecord(data,e.agentId!,e.effective):undefined;const posthume=posthumousReference(current,e,historical);const historicalPosthume=posthume.historicalOnly;const before=salaryReferenceRow(posthume.before,e);const out:CspPreview={...e,before:before?summary(before):e.nominationReference?{gf:e.nominationReference.gf,nr:e.nominationReference.nr}:undefined,state:'ready',problem:''};
   if(e.candidacy&&cspNonRetained(e)){out.state='not-retained';out.problem=e.nonRetainedByRD?.reason==='unfilled-post'?'Traité automatiquement : le RD entièrement validé « '+e.nonRetainedByRD.name+' » ne comporte aucune nomination pour ce poste. Candidature non retenue, poste non pourvu ; aucun effet sur la situation RH.':e.nonRetainedByRD?'Traité automatiquement : le RD « '+e.nonRetainedByRD.name+' » désigne un ou plusieurs autres candidats pour ce poste. Aucun effet sur la situation RH.':'Candidature clôturée sans nomination : aucun effet sur la situation de l’agent. Conservée dans le bordereau.';}
   else if(!e.selected){out.state='excluded';out.problem='Écarté de cet import.';}
@@ -243,7 +295,10 @@ export function prepareCsp(data:AgentData,events:CspEvent[],prior:CspImport[]=[]
   else if(salaryChecks?.problems.has(e.id)){out.state='blocked';out.problem=salaryChecks.problems.get(e.id)!;}
   else if(known.has(key)||seen.has(key)){const old=known.get(key);const conflict=old&&['gfAfter','nrAfter'].some(k=>{const prior=(old as any)[k]??(old.recordedAfter as any)?.[k==='gfAfter'?'gf':'nr'];return (e as any)[k]!==undefined&&prior!==undefined&&(e as any)[k]!==prior;});out.state=conflict?'blocked':'duplicate';out.problem=conflict?'Une autre version de cette décision indique une situation après différente. Corriger le relevé existant.':'Décision identique déjà présente : aucun cumul.';}
   else if(e.effective<=base.date){out.state=['admission','posthume','mutation'].includes(e.kind)||e.gfDelta===0?'ready':'covered';out.problem='Antérieure ou égale à la photographie : conservée dans l’historique, sans réapplication.';}
-  else {const applied=applyEvent(before,e,salaryHistory.get(e.agentId!));rememberSalary(salaryHistory,before,applied.row,e);if(applied.problem){out.state='blocked';out.problem=applied.problem;}else{out.after=summary(applied.row!);if(!historicalPosthume&&(e.kind!=='posthume'||state.has(e.agentId!)))state.set(e.agentId!,applied.row!);seen.add(key);if(e.effective>parisToday()){out.state='scheduled';out.problem='S’appliquera à sa date d’effet.';}else if(isPendingAdmission(e))out.problem=(e.kind==='admission'?'Admission':'Nomination')+' confirmée sans NNI : identité provisoire en attente du RUP.'+(applied.row?.nr===undefined?' NR inconnu : rémunération non calculable.':'');else if(e.kind==='posthume')out.problem='Avancement à titre posthume : '+(cspNRSteps(e)??((applied.row!.nr!-before!.nr!)/5))+' NR (soit +'+(applied.row!.nr!-before!.nr!)+'), sur la référence NR '+before?.nr+'.'+(historicalPosthume?' Enregistré dans l’historique sans ajout au NR actuel.':'');else if(e.reclassementReference)out.problem='Reclassement préparé automatiquement depuis les valeurs avant/après de l’ODJ « '+e.reclassementReference.cr.name+' », page '+e.reclassementReference.cr.page+'. +1 GF = +2 NR ; validation encore nécessaire.';else if(e.nominationReference)out.problem='GF/NR de départ repris de la candidature ODJ « '+e.nominationReference.cr.name+' », page '+e.nominationReference.cr.page+'. Nomination confirmée par le RD.'+(e.nominationReference.arrivalConfirmed?' Présence confirmée par le RUP au '+e.nominationReference.rup!.date+'.':'')+(nominationNRSteps(e,before)?' Nomination interne : +2 NR (soit +10).':'');else if(reference.proof)out.problem='Situation de départ confirmée par la décision rétroactive déjà validée dans « '+reference.proof.document.name+' », page '+reference.proof.event.page+'. L’avancement est appliqué à sa date d’effet, sans rejouer le reclassement ni modifier le fichier annuel.';else if(nominationNRSteps(e,before))out.problem='Nomination interne : +'+e.gfDelta+' GF et +2 NR (soit +10), calculés à partir de la situation connue.';else if(e.kind==='mutation')out.problem=e.mutationSalaryConfirmed?'Mutation d’office : les quatre valeurs GF/NR du bordereau ont été confirmées manuellement. La situation « après » est vérifiée à la date d’effet, sous réserve de mouvements salariaux déjà validés ; vérifier le résultat avant validation.':e.newAgent?'Mutation interunités : arrivée dans l’ULM confirmée au '+e.effective+'. Aucun gain de GF ni de NR.'+(applied.row?.nr===undefined?' NR d’entrée inconnu : rémunération non calculable.':''):'Mutation d’office interne : GF et NR conservés.';else if(e.salaryReference)out.problem='Référence GF/NR établie par l’ODJ (page '+e.salaryReference.cr.page+')'+(e.salaryReference.rd?', mesure confirmée par le RD (page '+e.salaryReference.rd.page+')':'')+', identité confirmée par le RUP. Une seule application.';else if(applied.row?.nrProvisional)out.problem='GF constant : NR non précisé dans le RD, dernière valeur connue conservée.';}}
+  else {const adjusted=cspRetroAdjusted(before,e,retroEvidence.get(e.agentId!)||[],retroShifts);
+    const applied=applyEvent(before,adjusted.event,salaryHistory.get(e.agentId!));
+    if(applied.row&&!applied.problem&&adjusted.bridge)retroShifts.set(adjusted.bridge,adjusted.offset!);
+    rememberSalary(salaryHistory,before,applied.row,e);if(applied.problem){out.state='blocked';out.problem=applied.problem;}else{out.after=summary(applied.row!);if(!historicalPosthume&&(e.kind!=='posthume'||state.has(e.agentId!)))state.set(e.agentId!,applied.row!);seen.add(key);if(e.effective>parisToday()){out.state='scheduled';out.problem='S’appliquera à sa date d’effet.';}else if(isPendingAdmission(e))out.problem=(e.kind==='admission'?'Admission':'Nomination')+' confirmée sans NNI : identité provisoire en attente du RUP.'+(applied.row?.nr===undefined?' NR inconnu : rémunération non calculable.':'');else if(e.kind==='posthume')out.problem='Avancement à titre posthume : '+(cspNRSteps(e)??((applied.row!.nr!-before!.nr!)/5))+' NR (soit +'+(applied.row!.nr!-before!.nr!)+'), sur la référence NR '+before?.nr+'.'+(historicalPosthume?' Enregistré dans l’historique sans ajout au NR actuel.':'');else if(e.reclassementReference)out.problem='Reclassement préparé automatiquement depuis les valeurs avant/après de l’ODJ « '+e.reclassementReference.cr.name+' », page '+e.reclassementReference.cr.page+'. +1 GF = +2 NR ; validation encore nécessaire.';else if(e.nominationReference)out.problem='GF/NR de départ repris de la candidature ODJ « '+e.nominationReference.cr.name+' », page '+e.nominationReference.cr.page+'. Nomination confirmée par le RD.'+(e.nominationReference.arrivalConfirmed?' Présence confirmée par le RUP au '+e.nominationReference.rup!.date+'.':'')+(nominationNRSteps(e,before)?' Nomination interne : +2 NR (soit +10).':'');else if(adjusted.bridge)out.problem='Avancement rétroactif : les valeurs GF/NR imprimées correspondent au reclassement validé du '+adjusted.proofDate+'. Les +'+cspNRSteps(e)+' NR sont appliqués au '+e.effective+' sur la situation réelle (GF '+before?.gf+' / NR '+before?.nr+'), puis reportés sur le reclassement, sans modifier les bordereaux.';else if(reference.proof)out.problem='Situation de départ confirmée par la décision rétroactive déjà validée dans « '+reference.proof.document.name+' », page '+reference.proof.event.page+'. L’avancement est appliqué à sa date d’effet, sans rejouer le reclassement ni modifier le fichier annuel.';else if(nominationNRSteps(e,before))out.problem='Nomination interne : +'+e.gfDelta+' GF et +2 NR (soit +10), calculés à partir de la situation connue.';else if(e.kind==='mutation')out.problem=e.mutationSalaryConfirmed?'Mutation d’office : les quatre valeurs GF/NR du bordereau ont été confirmées manuellement. La situation « après » est vérifiée à la date d’effet, sous réserve de mouvements salariaux déjà validés ; vérifier le résultat avant validation.':e.newAgent?'Mutation interunités : arrivée dans l’ULM confirmée au '+e.effective+'. Aucun gain de GF ni de NR.'+(applied.row?.nr===undefined?' NR d’entrée inconnu : rémunération non calculable.':''):'Mutation d’office interne : GF et NR conservés.';else if(e.salaryReference)out.problem='Référence GF/NR établie par l’ODJ (page '+e.salaryReference.cr.page+')'+(e.salaryReference.rd?', mesure confirmée par le RD (page '+e.salaryReference.rd.page+')':'')+', identité confirmée par le RUP. Une seule application.';else if(applied.row?.nrProvisional)out.problem='GF constant : NR non précisé dans le RD, dernière valeur connue conservée.';}}
   results.set(e.id,out);
  }
  // The projected set is intentionally not returned: preview contains changed fields only.
@@ -260,7 +315,9 @@ export function projectCsp(data:AgentData,imports:CspImport[],asOf=parisToday(),
  const absorbedNR=new Set<string>();
  const retrospective=retrospectiveProofs(active,base.date);
  const candidates=[...active].sort((a,b)=>(a.created||'').localeCompare(b.created||'')).flatMap((i,order)=>i.events.filter(e=>e.selected&&!e.candidacy).map((e,index)=>reclassementEvent({...e,importId:i.id,order,index})));
- const activeById=new Map(active.map(i=>[i.id,i]));
+ const retroShifts=new Map<string,number>();
+  const retroEvidence=cspRetroEvidence(candidates.filter(e=>!e.reclassementReference||reclassementReferenceSupported(e,imports)));
+  const activeById=new Map(active.map(i=>[i.id,i]));
  // A fully confirmed RD before/after chain takes precedence over an older
  // version of the exact same ODJ decision. Never rewrite source decisions.
  const provenRD=(e:typeof candidates[number])=>{
@@ -308,7 +365,8 @@ export function projectCsp(data:AgentData,imports:CspImport[],asOf=parisToday(),
     bridgeRank(a)-bridgeRank(b):0)||
    (overlaps(a,b)?-1:overlaps(b,a)?1:0)||
    cspSameDayOrder(a,b)||a.order-b.order||a.index-b.index);
- for(const e of events){if((e.projectionFrom||e.effective)<=base.date||(e.projectionFrom||e.effective)>asOf)continue;const key=cspKey(e);if(seen.has(key))continue;seen.add(key);const present=state.has(e.agentId!);if(e.reclassementReference&&!reclassementReferenceSupported(e,imports)){issues.push({event:e,problem:'Référence ODJ/RD du reclassement désactivée ou modifiée : vérifier la décision.'});continue;}if(e.nominationReference&&!nominationReferenceSupported(e,imports)){issues.push({event:e,problem:'Référence ODJ/RD de la nomination désactivée ou modifiée : vérifier la décision.'});continue;}if(e.salaryReference&&!salaryReferenceSupported(e,imports)){issues.push({event:e,problem:'Référence ODJ/RD de la mesure salariale désactivée ou modifiée : vérifier la décision.'});continue;}const reference=retrospectiveReference(state.get(e.agentId!),e,retrospective,base.date);const current=reference.before;const historical=e.kind==='posthume'?cspHistoricalRecord(data,e.agentId!,e.effective):undefined;const posthume=posthumousReference(current,e,historical);const before=salaryReferenceRow(posthume.before,e);let result=applyEvent(before,e,salaryHistory.get(e.agentId!));let appliedEvent=e;
+ for(const e of events){if((e.projectionFrom||e.effective)<=base.date||(e.projectionFrom||e.effective)>asOf)continue;const key=cspKey(e);if(seen.has(key))continue;seen.add(key);const present=state.has(e.agentId!);if(e.reclassementReference&&!reclassementReferenceSupported(e,imports)){issues.push({event:e,problem:'Référence ODJ/RD du reclassement désactivée ou modifiée : vérifier la décision.'});continue;}if(e.nominationReference&&!nominationReferenceSupported(e,imports)){issues.push({event:e,problem:'Référence ODJ/RD de la nomination désactivée ou modifiée : vérifier la décision.'});continue;}if(e.salaryReference&&!salaryReferenceSupported(e,imports)){issues.push({event:e,problem:'Référence ODJ/RD de la mesure salariale désactivée ou modifiée : vérifier la décision.'});continue;}const reference=retrospectiveReference(state.get(e.agentId!),e,retrospective,base.date);const current=reference.before;const historical=e.kind==='posthume'?cspHistoricalRecord(data,e.agentId!,e.effective):undefined;const posthume=posthumousReference(current,e,historical);const before=salaryReferenceRow(posthume.before,e);const adjusted=e.approved===true||e.kind==='reclassement'?cspRetroAdjusted(before,e,retroEvidence.get(e.agentId!)||[],retroShifts):{event:e};
+  let result=applyEvent(before,adjusted.event,salaryHistory.get(e.agentId!));let appliedEvent=adjusted.event;
  // A validated RD can supply the confirmed salary chain for a conflicting ODJ
  // of the SAME decision. Use it only if the original replay fails and the
  // RD's full before/after reference replays successfully from current state.
@@ -326,7 +384,8 @@ export function projectCsp(data:AgentData,imports:CspImport[],asOf=parisToday(),
    if(replay.row&&!replay.problem){result=replay;appliedEvent=confirmed;}
   }
  }
- if(!posthume.historicalOnly)rememberSalary(salaryHistory,before,result.row,appliedEvent);if(result.row){
+ if(result.row&&!result.problem&&adjusted.event===appliedEvent&&adjusted.bridge)retroShifts.set(adjusted.bridge,adjusted.offset!);
+  if(!posthume.historicalOnly)rememberSalary(salaryHistory,before,result.row,appliedEvent);if(result.row){
   // Only a successfully replayed, approved RD with an exact before/after
   // reference can prove the 2-NR gain was already counted. The annual source
   // and the original decisions are never altered.
