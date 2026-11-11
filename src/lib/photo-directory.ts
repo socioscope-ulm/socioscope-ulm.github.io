@@ -1,4 +1,4 @@
-import {normalizeNNI} from './agents';
+import {normalizeNNI} from './agents.ts';
 import type {PhotoAgent} from './photo-match';
 
 export type PhotoDirectoryRow={agentId?:string;name?:string;agency?:string};
