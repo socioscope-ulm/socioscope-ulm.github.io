@@ -1,9 +1,8 @@
 import {db,bucket,storageFetch} from './storage';
-import {agentData} from '../src/lib/agents-store';
-import {loadSeeds} from './seeds';
+import {photoCatalog} from './photo-catalog';
 import {matchPhotoName,type PhotoAgent} from '../src/lib/photo-match';
 import {commitPhotoAssignment} from '../src/lib/photo-assignment';
-async function catalog(){await loadSeeds(['agents-seed','rup-seed']);const {data}=await agentData(true);const byId=new Map<string,PhotoAgent>();for(const r of data.records)if(r.agentId&&r.name)byId.set(r.agentId,{id:r.agentId,name:r.name,agency:r.agency});return [...byId.values()].sort((a,b)=>a.name.localeCompare(b.name,'fr'));}
+const catalog=photoCatalog;
 export async function photoRoute(req:Request,path:string,admin:boolean){
  const p=new URL(req.url).searchParams;const json=(b:any,s=200)=>Response.json(b,{status:s});
  if(path==='/api/photos/image'&&req.method==='GET'){
