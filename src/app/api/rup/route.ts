@@ -1,12 +1,17 @@
+import {collectRupDateConflicts} from '../../../lib/rup-date-conflicts';
+import {snapshot} from '../../../lib/agents';
+import {CSP_SOURCE,parisToday} from '../../../lib/csp';
+import type {RupCorrection} from '../../../lib/rup';
 import {normalizeRupCalendar} from '../../../lib/rup-calendar';
 import {accessError} from '../../../lib/access';
 import {agentAuth,agentData,agentError} from '../../../lib/agents-store';
 import {resources} from '../../../lib/store';
 import {rupCSV,rupStats} from '../../../lib/rup';
 import {normalizeAgentSex} from '../../../lib/agents';
-import {rupSeedText} from '../../../../server/seeds';
+import {rupSeedText,loadSeeds} from '../../../../server/seeds';
 export async function GET(request:Request){try{
  await agentAuth(request);
+ const params=new URL(request.url).searchParams;const conflictsView=params.get('view')==='date-conflicts';if(conflictsView)await agentAuth(request,true);
  // La liste de RUP doit rester legere : ne jamais charger les fiches agents,
  // les historiques de carriere ni recalculer la masse salariale.
  const {db,bucket}=resources();
@@ -25,6 +30,20 @@ export async function GET(request:Request){try{
    rup.records.push(...await object.json<any[]>());
  }
  rup=normalizeRupCalendar(rup);
+ if(conflictsView){
+  // Load the population only on explicit opening of the conflict list. The
+  // ordinary RUP overview remains independent of all career/payroll calculations.
+  await loadSeeds(['agents-seed']);
+  const {data,decisions}=await agentData(true,undefined,parisToday(),false);
+  const sources=data.sources.filter(s=>s.id!==CSP_SOURCE&&s.kind!=='csp-event'&&s.status!=='review'&&(s.primary||s.status==='validated')).sort((a,b)=>b.date.localeCompare(a.date)||Number(b.primary)-Number(a.primary));
+  const selected=params.get('source')||sources.find(s=>s.primary)?.id||sources[0]?.id;
+  const source=sources.find(s=>s.id===selected);if(!source)return Response.json({error:'Photographie inconnue.'},{status:404});
+  const corrections:Record<string,RupCorrection>={};
+  for(const d of decisions){if(d.kind==='career_auto')delete corrections[d.agent];else if(d.kind==='career_rup'){try{const v=JSON.parse(d.note||'{}');corrections[d.agent]={...v,source:d.source};}catch{}}}
+  const agents=snapshot(data,source.id),situations=collectRupDateConflicts(rup,agents,corrections);
+  return Response.json({situations,total:situations.length,population:agents.length,source:{id:source.id,label:source.label,date:source.date},sources:sources.map(s=>({id:s.id,label:s.label,date:s.date}))},{headers:{'Cache-Control':'no-store'}});
+ }
+
  const disabledSources=excluded.map(id=>{const historical=archivedSources.find(x=>x.id===id);const imported=imports.results.find(x=>x.id===id);return historical?{id,name:historical.name,date:historical.date,count:historical.count}:imported?{id,name:imported.name,date:imported.date,count:imported.count}:{id,name:id,date:'',count:0};});
  const annual=new Map<number,{year:number;files:number;agents:Set<string>;sexes:Map<string,Set<string>>}>();
  for(const src of rup.sources){

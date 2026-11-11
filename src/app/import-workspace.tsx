@@ -23,12 +23,12 @@ export default function ImportWorkspace({kind,children}:{kind:ImportKind;childre
  </section>;
 }
 
-export function ImportSubsection({title,badge,children,defaultOpen=false,reveal=false}:{
- title:string;badge?:string;children:ReactNode;defaultOpen?:boolean;reveal?:boolean;
+export function ImportSubsection({title,badge,children,defaultOpen=false,reveal=false,onOpen}:{
+ title:string;badge?:string;children:ReactNode;defaultOpen?:boolean;reveal?:boolean;onOpen?:()=>void;
 }){
  const ref=useRef<HTMLDetailsElement>(null);
  useEffect(()=>{if(reveal&&ref.current)ref.current.open=true;},[reveal]);
- return <details ref={ref} className="document-folder csp-subsection import-subsection" defaultOpen={defaultOpen||reveal}>
+ return <details ref={ref} onToggle={e=>{if(e.currentTarget.open)onOpen?.();}} className="document-folder csp-subsection import-subsection" defaultOpen={defaultOpen||reveal}>
   <summary><ChevronRight size={16} className="folder-chevron"/><FolderOpen size={20}/><strong>{title}</strong>{badge&&<span className="badge">{badge}</span>}</summary>
   <div className="document-folder-content">{children}</div>
  </details>;
