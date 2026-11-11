@@ -365,6 +365,11 @@ export function projectCsp(data:AgentData,imports:CspImport[],asOf=parisToday(),
     bridgeRank(a)-bridgeRank(b):0)||
    (overlaps(a,b)?-1:overlaps(b,a)?1:0)||
    cspSameDayOrder(a,b)||a.order-b.order||a.index-b.index);
+ // Index decisions for identical documentary movements once. Searching all
+ // CSP events on every replay becomes expensive as the import history grows.
+ const eventsByKey=new Map<string,typeof events>();
+ for(const event of events){const key=cspKey(event),group=eventsByKey.get(key);if(group)group.push(event);else eventsByKey.set(key,[event]);}
+ const rdIds=new Set(active.filter(doc=>doc.documentType==='rd').map(doc=>doc.id));
  for(const e of events){if((e.projectionFrom||e.effective)<=base.date||(e.projectionFrom||e.effective)>asOf)continue;const key=cspKey(e);if(seen.has(key))continue;seen.add(key);const present=state.has(e.agentId!);if(e.reclassementReference&&!reclassementReferenceSupported(e,imports)){issues.push({event:e,problem:'Référence ODJ/RD du reclassement désactivée ou modifiée : vérifier la décision.'});continue;}if(e.nominationReference&&!nominationReferenceSupported(e,imports)){issues.push({event:e,problem:'Référence ODJ/RD de la nomination désactivée ou modifiée : vérifier la décision.'});continue;}if(e.salaryReference&&!salaryReferenceSupported(e,imports)){issues.push({event:e,problem:'Référence ODJ/RD de la mesure salariale désactivée ou modifiée : vérifier la décision.'});continue;}const reference=retrospectiveReference(state.get(e.agentId!),e,retrospective,base.date);const current=reference.before;const historical=e.kind==='posthume'?cspHistoricalRecord(data,e.agentId!,e.effective):undefined;const posthume=posthumousReference(current,e,historical);const before=salaryReferenceRow(posthume.before,e);const adjusted=e.approved===true||e.kind==='reclassement'?cspRetroAdjusted(before,e,retroEvidence.get(e.agentId!)||[],retroShifts):{event:e};
   let result=applyEvent(before,adjusted.event,salaryHistory.get(e.agentId!));let appliedEvent=adjusted.event;
  // A validated RD can supply the confirmed salary chain for a conflicting ODJ
@@ -372,11 +377,11 @@ export function projectCsp(data:AgentData,imports:CspImport[],asOf=parisToday(),
  // RD's full before/after reference replays successfully from current state.
  // Neither source document nor its validation status is ever rewritten.
  if(result.problem&&['reclassement','avancement'].includes(e.kind)){
-  const rd=events.find(candidate=>candidate!==e&&candidate.agentId===e.agentId&&
-   cspKey(candidate)===key&&candidate.approved===true&&
+  const rd=(eventsByKey.get(key)||[]).find(candidate=>candidate!==e&&candidate.agentId===e.agentId&&
+   candidate.approved===true&&
    candidate.recordedBefore?.gf!==undefined&&candidate.recordedBefore?.nr!==undefined&&
    candidate.recordedAfter?.gf!==undefined&&candidate.recordedAfter?.nr!==undefined&&
-   active.some(doc=>doc.id===candidate.importId&&doc.documentType==='rd'));
+   rdIds.has(candidate.importId));
   if(rd){
    const confirmed:CspEvent={...rd,gfBefore:rd.recordedBefore!.gf,nrBefore:rd.recordedBefore!.nr,
     gfAfter:rd.recordedAfter!.gf,nrAfter:rd.recordedAfter!.nr};
@@ -390,7 +395,7 @@ export function projectCsp(data:AgentData,imports:CspImport[],asOf=parisToday(),
   // reference can prove the 2-NR gain was already counted. The annual source
   // and the original decisions are never altered.
   if(appliedEvent.kind==='reclassement'&&appliedEvent.approved===true&&
-   active.some(doc=>doc.id===appliedEvent.importId&&doc.documentType==='rd')&&
+   rdIds.has(appliedEvent.importId)&&
    before?.gf!==undefined&&before.nr!==undefined&&
    appliedEvent.recordedBefore?.gf===before.gf&&appliedEvent.recordedBefore?.nr===before.nr&&
    appliedEvent.recordedAfter?.gf===result.row.gf&&appliedEvent.recordedAfter?.nr===result.row.nr&&
