@@ -1,3 +1,4 @@
+import {normalizeRupCalendar} from '../../../lib/rup-calendar';
 import {accessError} from '../../../lib/access';
 import {agentAuth,agentData,agentError} from '../../../lib/agents-store';
 import {resources} from '../../../lib/store';
@@ -9,7 +10,7 @@ export async function GET(request:Request){try{
  // La liste de RUP doit rester legere : ne jamais charger les fiches agents,
  // les historiques de carriere ni recalculer la masse salariale.
  const {db,bucket}=resources();
- const rup=JSON.parse(rupSeedText) as {sources:any[];records:any[]};
+ let rup=JSON.parse(rupSeedText) as {sources:any[];records:any[]};
  const archivedSources=[...rup.sources];
  const excluded=(await db.prepare('SELECT source_id FROM rup_source_exclusions').all<{source_id:string}>()).results.map(x=>x.source_id);
  const excludedIds=new Set(excluded);
@@ -20,9 +21,10 @@ export async function GET(request:Request){try{
    if(detail.kind!=='rup'||m.status!=='validated'||excludedIds.has(m.id))continue;
    const object=await bucket.get('agents/'+m.id+'/records.json');
    if(!object)continue;
-   rup.sources.push({id:m.id,name:m.name,hash:m.hash,date:m.date,count:m.count,status:m.status});
+   rup.sources.push({id:m.id,name:m.name,hash:m.hash,date:m.date,count:m.count,status:m.status,calendarDateVersion:detail.calendarDateVersion});
    rup.records.push(...await object.json<any[]>());
  }
+ rup=normalizeRupCalendar(rup);
  const disabledSources=excluded.map(id=>{const historical=archivedSources.find(x=>x.id===id);const imported=imports.results.find(x=>x.id===id);return historical?{id,name:historical.name,date:historical.date,count:historical.count}:imported?{id,name:imported.name,date:imported.date,count:imported.count}:{id,name:id,date:'',count:0};});
  const annual=new Map<number,{year:number;files:number;agents:Set<string>;sexes:Map<string,Set<string>>}>();
  for(const src of rup.sources){
@@ -87,7 +89,7 @@ export async function POST(request:Request){const denied=accessError(request,tru
  const overlap=[...incoming].filter(k=>prior.has(k)).length;
  if(overlap>0)throw Object.assign(Error('Un RUP existe déjà pour cette date : '+overlap+' agent(s)/contrat(s) commun(s). Import bloqué pour éviter les doublons.'),{status:409});
  const id='rup-imp-'+crypto.randomUUID();await bucket.put('agents/'+id+'/records.json',JSON.stringify(records.map((r:any)=>({...r,source:id}))));await bucket.put('agents/'+id+'/original',rupCSV(records.map((r:any)=>({...r,source:id}))),{httpMetadata:{contentType:'text/csv;charset=utf-8'}});
- await db.prepare('INSERT INTO agent_imports (id,name,hash,date,created,status,count,complete,detail) VALUES (?,?,?,?,?,?,?,?,?)').bind(id,filename,hash,date,new Date().toISOString(),'validated',records.length,0,JSON.stringify({kind:'rup',sanitized:true})).run();
+ await db.prepare('INSERT INTO agent_imports (id,name,hash,date,created,status,count,complete,detail) VALUES (?,?,?,?,?,?,?,?,?)').bind(id,filename,hash,date,new Date().toISOString(),'validated',records.length,0,JSON.stringify({kind:'rup',sanitized:true,...(records.every((r:any)=>r.calendarDateVersion===2)?{calendarDateVersion:2}:{})})).run();
  return Response.json({id,count:records.length});
  }catch(e){return agentError(e);}}
 

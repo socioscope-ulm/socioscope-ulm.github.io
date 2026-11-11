@@ -1,3 +1,4 @@
+import {normalizeRupCalendar} from './rup-calendar';
 import {isPendingAdmission,resolvePendingAdmissions} from './csp-pending-admission';
 import {cspNameKey,findCspRupIdentities} from './csp-rup';
 import type {CspEvent} from './csp';
@@ -17,7 +18,8 @@ let decoded:AgentData|undefined;
 export function agentBase(){return decoded ||=unpackAgentSeed(JSON.parse(packedText));}
 export async function agentAuth(request:Request,write=false){const denied=accessError(request,write);if(denied){const body=await denied.json() as {error:string};throw Object.assign(Error(body.error),{status:denied.status});}}
 export const agentError=(e:any)=>Response.json({error:e?.message||'Opération impossible.'},{status:e?.status||500,headers:{'Cache-Control':'no-store'}});
-export async function agentData(skipCareerEnrichment=false,focusAgentId?:string,asOf=parisToday(),includeCsp=true){const base=agentBase();const {db,bucket}=resources();const result=await db.prepare('SELECT * FROM agent_imports ORDER BY date,created').all<any>();const rup:RupData=includeCsp?JSON.parse(rupSeedText):{sources:[],records:[]};const disabled=includeCsp?(await db.prepare('SELECT source_id FROM rup_source_exclusions').all<{source_id:string}>()).results:[];const disabledIds=new Set(disabled.map(x=>x.source_id));rup.sources=rup.sources.filter(x=>!disabledIds.has(x.id));rup.records=rup.records.filter(x=>!disabledIds.has(x.source));const data:AgentData={...base,records:[...base.records],sources:[...base.sources],events:base.events};const cspImports:CspImport[]=[];for(const m of result.results){const detail=JSON.parse(m.detail||'{}');if(detail.kind==='csp'){cspImports.push({id:m.id,name:m.name,date:m.date,status:m.status,created:m.created,documentType:detail.documentType==='cr'?'cr':'rd',evidenceEvents:detail.events||[],events:activeCspEvents(detail)});continue;}if(detail.kind==='rup'){if(includeCsp&&m.status==='validated'&&!disabledIds.has(m.id)){const object=await bucket.get('agents/'+m.id+'/records.json');if(object){rup.sources.push({id:m.id,name:m.name,hash:m.hash,date:m.date,count:m.count,status:m.status});rup.records.push(...await object.json<any[]>());}}continue;}data.sources.push({id:m.id,name:m.name,hash:m.hash,date:m.date,label:m.date+' · '+m.name,sheet:'Import validé',primary:!!m.complete,...JSON.parse(m.detail||'{}'),confidence:'date choisie lors de l’import',seniorityDate:m.date,rows:m.count,agents:m.count,status:m.status});if(m.status==='validated'){const object=await bucket.get('agents/'+m.id+'/records.json');if(object){const rows=await object.json<AgentRecord[]>();data.records.push(...rows);}}}
+export async function agentData(skipCareerEnrichment=false,focusAgentId?:string,asOf=parisToday(),includeCsp=true){const base=agentBase();const {db,bucket}=resources();const result=await db.prepare('SELECT * FROM agent_imports ORDER BY date,created').all<any>();const rup:RupData=includeCsp?JSON.parse(rupSeedText):{sources:[],records:[]};const disabled=includeCsp?(await db.prepare('SELECT source_id FROM rup_source_exclusions').all<{source_id:string}>()).results:[];const disabledIds=new Set(disabled.map(x=>x.source_id));rup.sources=rup.sources.filter(x=>!disabledIds.has(x.id));rup.records=rup.records.filter(x=>!disabledIds.has(x.source));const data:AgentData={...base,records:[...base.records],sources:[...base.sources],events:base.events};const cspImports:CspImport[]=[];for(const m of result.results){const detail=JSON.parse(m.detail||'{}');if(detail.kind==='csp'){cspImports.push({id:m.id,name:m.name,date:m.date,status:m.status,created:m.created,documentType:detail.documentType==='cr'?'cr':'rd',evidenceEvents:detail.events||[],events:activeCspEvents(detail)});continue;}if(detail.kind==='rup'){if(includeCsp&&m.status==='validated'&&!disabledIds.has(m.id)){const object=await bucket.get('agents/'+m.id+'/records.json');if(object){rup.sources.push({id:m.id,name:m.name,hash:m.hash,date:m.date,count:m.count,status:m.status,calendarDateVersion:detail.calendarDateVersion});rup.records.push(...await object.json<any[]>());}}continue;}data.sources.push({id:m.id,name:m.name,hash:m.hash,date:m.date,label:m.date+' · '+m.name,sheet:'Import validé',primary:!!m.complete,...JSON.parse(m.detail||'{}'),confidence:'date choisie lors de l’import',seniorityDate:m.date,rows:m.count,agents:m.count,status:m.status});if(m.status==='validated'){const object=await bucket.get('agents/'+m.id+'/records.json');if(object){const rows=await object.json<AgentRecord[]>();data.records.push(...rows);}}}
+Object.assign(rup,normalizeRupCalendar(rup));
 const decisions=(await db.prepare('SELECT * FROM agent_decisions ORDER BY created,id').all<any>()).results;
  for(const d of decisions)if(d.kind==='manual_nr'){
   try{const v=JSON.parse(d.note||'{}');if(validateManualNR(v)&&d.agent===v.agentId)cspImports.push(manualNRImport({...v,id:d.id,created:d.created,actor:String(v.actor||'administrateur')}));}catch{}
@@ -69,7 +71,21 @@ if(b.kind==='career_rup'||b.kind==='career_auto'){
   }
   const row=Number.isInteger(b.row)?b.row:null;
   const contract=String(b.contract||'').trim();
-  const verified=matching.find(r=>r.entreeIEG===b.date&&(row===null?String(r.contrat||'').trim()===contract:r.row===row));
+  let verified=matching.find(r=>r.entreeIEG===b.date&&(row===null?String(r.contrat||'').trim()===contract:r.row===row));
+  if(!verified){
+   // The profile may offer a calendar-corrected date. Verify the same
+   // source-wide evidence again before accepting that administrative choice.
+   const active=JSON.parse(rupSeedText) as RupData;
+   const disabled=new Set((await db.prepare('SELECT source_id FROM rup_source_exclusions').all<{source_id:string}>()).results.map(x=>x.source_id));
+   active.sources=active.sources.filter(s=>!disabled.has(s.id));active.records=active.records.filter(r=>!disabled.has(r.source));
+   const imports=(await db.prepare("SELECT id,name,date,status,detail FROM agent_imports WHERE status='validated'").all<any>()).results;
+   for(const item of imports){
+    const detail=JSON.parse(item.detail||'{}');if(detail.kind!=='rup'||disabled.has(item.id))continue;
+    const object=await bucket.get('agents/'+item.id+'/records.json');if(!object)continue;
+    active.sources.push({id:item.id,name:item.name,date:item.date,status:item.status,hash:'',count:0,calendarDateVersion:detail.calendarDateVersion});active.records.push(...await object.json<any[]>());
+   }
+   verified=normalizeRupCalendar(active).records.find(r=>r.source===b.source&&r.nni===nni&&r.entreeIEG===b.date&&(row===null?String(r.contrat||'').trim()===contract:r.row===row));
+  }
   if(!verified)throw Object.assign(Error('La date et la ligne choisies ne correspondent pas aux données du RUP actif pour cet agent.'),{status:400});
   source=b.source;
   note=JSON.stringify({date:verified.entreeIEG,row:Number.isInteger(verified.row)?verified.row:null,contract:String(verified.contrat||'').trim(),reason,actor:request.headers.get('oai-authenticated-user-email')||''});
