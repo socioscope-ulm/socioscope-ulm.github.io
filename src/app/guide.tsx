@@ -19,13 +19,11 @@ export async function downloadGuide(){
  if(blob.type&&!blob.type.includes('pdf'))throw Error('Le guide reçu ne correspond pas à un PDF.');
  downloadBlob(blob);
 }
-export function GuideDownload({compact=false}:{compact?:boolean}){
+export function GuideDownload(){
  const [busy,setBusy]=useState(false),[error,setError]=useState('');
  const save=async()=>{setBusy(true);setError('');try{await downloadGuide();}catch(e){setError(descriptionOf(e));}finally{setBusy(false);}};
- return <span className={compact?'guide-control compact':'guide-control'}>
-  <button className="guide-download" type="button" disabled={busy} title="Télécharger le guide d’utilisation (PDF)" aria-label="Télécharger le guide d’utilisation de Socioscope ULM" onClick={()=>void save()}>
-   <BookOpen size={compact?17:16} aria-hidden="true"/>{!compact&&<span>Guide</span>}
-  </button>
+ return <span className="guide-control">
+  <button className="guide-download" type="button" disabled={busy} title="Télécharger le guide d’utilisation (PDF)" aria-label="Télécharger le guide d’utilisation de Socioscope ULM" onClick={()=>void save()}>Guide d’utilisation</button>
   {error&&<span className="guide-download-error" role="alert">{error}<button type="button" aria-label="Fermer le message" onClick={()=>setError('')}>×</button></span>}
  </span>;
 }
@@ -55,7 +53,7 @@ export function GuideAdministration(){
   <div className="document-folder-content">
    <section className="panel">
     <h2>Guide d’utilisation de Socioscope ULM</h2>
-    <p className="filter-note">Le document importé ici alimente le bouton « Guide » situé à côté du nom de Socioscope. Il est téléchargeable par tous les comptes autorisés ; seul l’administrateur peut le remplacer.</p>
+    <p className="filter-note">Le document importé ici alimente le bouton « Guide d’utilisation » situé en premier dans le bandeau vert supérieur, juste avant les actions de compte. Il est téléchargeable par tous les comptes autorisés ; seul l’administrateur peut le remplacer.</p>
     {status?.available?<p className="guide-current"><FileText size={19}/><span><b>Guide actuellement publié</b><small>{date} · {Math.round(status.size/1024)} Ko · PDF</small></span><button className="btn" type="button" onClick={()=>void downloadGuide().catch(e=>setError(descriptionOf(e)))}><Download size={15}/>Télécharger</button></p>:<p className="filter-note">Aucun guide encore publié. Importez le PDF pour activer le téléchargement dans les pages utilisateurs.</p>}
     <label className="btn primary file-input"><Upload size={16}/>{busy?'Publication…':status?.available?'Remplacer le guide':'Importer le guide PDF'}<input ref={input} type="file" accept=".pdf,application/pdf" disabled={busy} onChange={e=>{void upload(e.target.files?.[0]);e.target.value='';}}/></label>
     <p className="filter-note">PDF uniquement · 8 Mo maximum. Un nouvel import remplace la version précédente sans affecter les autres documents ni les analyses.</p>
