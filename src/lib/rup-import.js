@@ -1,3 +1,4 @@
+import {excelCalendarDate} from './excel-calendar-date.js';
 /* Import RUP pour Socioscope ULM. Aucun champ d'adresse personnelle n'est conservé. */
 const normalize = value => String(value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 const field = (obj, ...aliases) => {
@@ -5,22 +6,9 @@ const field = (obj, ...aliases) => {
   for (const name of aliases) { const v=index.get(normalize(name)); if(v!==undefined && v!==null && String(v).trim()!=='') return v; }
   return null;
 };
-function dateISO(value) {
-  if (value instanceof Date && !isNaN(value)) return `${value.getFullYear()}-${String(value.getMonth()+1).padStart(2,'0')}-${String(value.getDate()).padStart(2,'0')}`;
-  if (typeof value === 'number' && value > 10000 && value < 100000) {
-    const date=new Date(Date.UTC(1899,11,30)+Math.floor(value)*86400000);
-    return date.toISOString().slice(0,10);
-  }
-  const s=String(value??'').trim();
-  let m=s.match(/^(\d{4})-(\d{2})-(\d{2})/);
-  if(m) return validDate(m[0]) ? m[0] : null;
-  m=s.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{4})/);
-  if(m){const iso=`${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`; return validDate(iso)?iso:null;}
-  return null;
-}
-function validDate(iso){const d=new Date(`${iso}T00:00:00Z`);return !isNaN(d) && d.toISOString().slice(0,10)===iso;}
 function extractYear(name){const m=String(name).match(/20(?:1\d|2\d)/);return m?Number(m[0]):null;}
-function parseRow(row, source, year){
+function parseRow(row, source, year, date1904=false){
+  const dateISO=value=>excelCalendarDate(value,date1904);
   const nni=String(field(row,'NNI')??'').trim().toUpperCase();
   if(!nni) return null;
   // Liste blanche stricte : les autres colonnes du RUP, notamment adresses,
@@ -42,11 +30,11 @@ function parseRow(row, source, year){
     m3e:String(field(row,'Position M3E (code)','Position M3E')??'').trim(),
     lieuTravailCode:String(field(row,'Lieu de travail (code)','Etablissement (Code)')??'').trim(),
     typeContrat:String(field(row,'Type contrat (libellé)','Type de contrat')??'').trim(),
-    annee:year,source
+    annee:year,source,calendarDateVersion:2
   };
 }
 export function readRupWorkbook(buffer, filename, XLSX){
-  const wb=XLSX.read(buffer,{type:'array',cellDates:true});
+  const wb=XLSX.read(buffer,{type:'array',cellDates:false});
   const year=extractYear(filename);
   const records=[];
   for(const sheetName of wb.SheetNames){
@@ -56,7 +44,7 @@ export function readRupWorkbook(buffer, filename, XLSX){
     const headers=raw[headerIndex];
     for(const vals of raw.slice(headerIndex+1)){
       const row=Object.fromEntries(headers.map((h,i)=>[String(h??`col${i}`),vals[i]]));
-      const parsed=parseRow(row,filename,year);if(parsed)records.push({...parsed,row:raw.indexOf(vals)+1,sheet:sheetName});
+      const parsed=parseRow(row,filename,year,!!wb.Workbook?.WBProps?.date1904);if(parsed)records.push({...parsed,row:raw.indexOf(vals)+1,sheet:sheetName});
     }
   }
   if(!records.length)throw new Error(`Aucune ligne RUP exploitable dans ${filename}`);
