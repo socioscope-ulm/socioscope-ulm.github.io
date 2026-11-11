@@ -2,6 +2,7 @@ import {db,bucket,storageFetch} from './storage';
 import {agentData} from '../src/lib/agents-store';
 import {loadSeeds} from './seeds';
 import {matchPhotoName,type PhotoAgent} from '../src/lib/photo-match';
+import {commitPhotoAssignment} from '../src/lib/photo-assignment';
 async function catalog(){await loadSeeds(['agents-seed','rup-seed']);const {data}=await agentData(true);const byId=new Map<string,PhotoAgent>();for(const r of data.records)if(r.agentId&&r.name)byId.set(r.agentId,{id:r.agentId,name:r.name,agency:r.agency});return [...byId.values()].sort((a,b)=>a.name.localeCompare(b.name,'fr'));}
 export async function photoRoute(req:Request,path:string,admin:boolean){
  const p=new URL(req.url).searchParams;const json=(b:any,s=200)=>Response.json(b,{status:s});
@@ -28,9 +29,20 @@ export async function photoRoute(req:Request,path:string,admin:boolean){
  if(req.method==='DELETE'){const deleted=await storageFetch(row.object_key,{method:'DELETE'});if(!deleted.ok&&deleted.status!==404)throw Error('Suppression du fichier impossible');await db.prepare('DELETE FROM agent_photos WHERE id=?::uuid').bind(b.id).run();return json({ok:true});}
  if(req.method==='PATCH'){
   const agent=String(b.agent||'');if(!(await catalog()).some(a=>a.id===agent))return json({error:'Agent inconnu.'},400);
-  const existing=await db.prepare('SELECT id FROM agent_photos WHERE agent_id=? AND id<>?::uuid').bind(agent,b.id).first<any>();
+  const existing=await db.prepare('SELECT id,object_key FROM agent_photos WHERE agent_id=? AND id<>?::uuid').bind(agent,b.id).first<any>();
   if(existing&&b.replace!==true)return json({error:'Cet agent possède déjà une photo. Confirmer le remplacement.'},409);
-  await db.batch([...(existing?[db.prepare('UPDATE agent_photos SET agent_id=NULL,updated_at=now() WHERE id=?::uuid').bind(existing.id)]:[]),db.prepare('UPDATE agent_photos SET agent_id=?,updated_at=now() WHERE id=?::uuid').bind(agent,b.id)]);return json({ok:true});
+  // A confirmed replacement retires the old photo instead of sending it
+  // back into the manual assignment queue. The database swap is atomic.
+  const obsoleteKey=await commitPhotoAssignment(db,b.id,agent,existing);
+  if(obsoleteKey){
+   // Removing an old storage object is best-effort after committing the
+   // database transaction: a storage outage must not undo a valid photo.
+   try{
+    const removed=await storageFetch(obsoleteKey,{method:'DELETE'});
+    if(!removed.ok&&removed.status!==404)console.warn('Old agent photo cleanup failed',removed.status);
+   }catch{console.warn('Old agent photo cleanup unavailable');}
+  }
+  return json({ok:true});
  }
  return json({error:'Méthode non autorisée.'},405);
 }
