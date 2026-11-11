@@ -35,7 +35,7 @@ jobs:
       - run: node --experimental-strip-types --test tests/csp-quarterly-report.test.ts tests/csp-quarterly-columns.test.ts
       - run: node --experimental-strip-types --test tests/insee-annual.test.ts tests/salary-comparison.test.ts
       - run: python3 -m unittest discover -s tests -p test_insee_sync.py
-      - run: node --experimental-strip-types --test tests/bonus-tables.test.ts tests/payroll-filters.test.ts tests/individual-payroll.test.ts tests/individual-bonus-selection.test.ts tests/photo-match.test.ts tests/excel-calendar-date.test.ts tests/rup-date-conflicts.test.ts
+      - run: node --experimental-strip-types --test tests/bonus-tables.test.ts tests/payroll-filters.test.ts tests/individual-payroll.test.ts tests/individual-bonus-selection.test.ts tests/photo-match.test.ts tests/photo-assignment.test.ts tests/excel-calendar-date.test.ts tests/rup-date-conflicts.test.ts
       - run: npm run build
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
