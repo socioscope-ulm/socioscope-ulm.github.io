@@ -1,4 +1,5 @@
 import {photoRoute} from './photos';
+import {guideRoute} from './guide';
 import {createAccountLink} from './invite';
 import {parseDeploymentVersion} from './version';
 import * as cspRoute from '../src/app/api/csp/route';
@@ -58,6 +59,8 @@ export async function handler(req:Request){
  meter=true;
  if(!member.user_id)await db.prepare('UPDATE members SET user_id=? WHERE email=? AND user_id IS NULL').bind(user.id,email).run();
  const u=new URL(req.url);const path=u.pathname.replace(/^\/socioscope-api(?=\/|$)/,'').replace(/^\/functions\/v1\/socioscope-api(?=\/|$)/,'')||'/';
+ // The guide remains available to authenticated viewers even if consultations are suspended.
+ if(path==='/api/guide'||path==='/api/guide/file')return finish(await guideRoute(req,path,member.role==='admin'));
  if(path==='/api/session')return finish(json({email,role:member.role,consultationSuspended:member.role==='admin'?false:(await usage.control()).suspended,...(member.role==='admin'?{serverVersion:currentServerVersion()}:{})}));
  if(path==='/api/usage'){
   if(member.role!=='admin')return finish(json({error:'Administration uniquement.'},403));
