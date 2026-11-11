@@ -1,3 +1,4 @@
+import {photoRoute} from './photos';
 import {createAccountLink} from './invite';
 import {parseDeploymentVersion} from './version';
 import * as cspRoute from '../src/app/api/csp/route';
@@ -96,6 +97,7 @@ export async function handler(req:Request){
  }
 
  if(!['GET','HEAD'].includes(req.method)&&member.role!=='admin')return finish(json({error:'Modification réservée à l’administrateur.'},403));
+ if(['/api/photos','/api/photos/image'].includes(path))return finish(await photoRoute(req,path,member.role==='admin'));
  if(path==='/api/members/link'&&req.method==='POST'){
   if(member.role!=='admin')return finish(json({error:'Administration uniquement.'},403));
   const body=await req.json();const target=String(body.email||'').trim().toLowerCase();

@@ -1,3 +1,4 @@
+import {AgentPhoto} from './agent-photos';
 'use client';
 import {CspHistory,CspAgentHistory} from './csp';
 import {CSP_SOURCE,cspKinds,parisToday} from '../lib/csp';
@@ -453,7 +454,7 @@ const continuityWarnings=annualCareer.filter((s:any)=>s.unexpected);
   try{const ok=await onDecision({kind,agent:profile.id,source:kind==='career_rup'?selectedRup.source:undefined,row:kind==='career_rup'?(Number.isInteger(selectedRup.row)?selectedRup.row:null):undefined,date:kind==='career_rup'?selectedRup.entreeIEG:undefined,contract:kind==='career_rup'?selectedRup.contrat:undefined,note:rupReason.trim()});if(ok){setRupReason('');setRupChoice('');}}
   finally{setRupSaving(false);}
  };useEffect(()=>setCalculationDate(''),[chosen]);useEffect(()=>{setBenchmark(null);const c=new AbortController();api('/api/agents?view=progression&source='+encodeURIComponent(chosen),{signal:c.signal}).then(setBenchmark).catch(()=>{});return()=>c.abort();},[chosen]);
-return <><button className="text-btn" onClick={onBack}><ArrowLeft size={16}/>Retour aux agents</button><section className="panel agent-profile-head"><div><div className="eyebrow">FICHE INDIVIDUELLE · HISTORIQUE CONSERVÉ</div><h2>{r.name||profile.records.at(-1)?.name||profile.id}</h2><p>NNI : {r.nni||'non rapproché'} · {fmt(r.agency)} · {colleges[r.college]||'Collège non renseigné dans cette source'}</p></div><button className="btn" onClick={()=>{
+return <><button className="text-btn" onClick={onBack}><ArrowLeft size={16}/>Retour aux agents</button><section className="panel agent-profile-head"><AgentPhoto key={profile.id} agent={profile.id} isAdmin={isAdmin}/><div className="agent-profile-identity"><div className="eyebrow">FICHE INDIVIDUELLE · HISTORIQUE CONSERVÉ</div><h2>{r.name||profile.records.at(-1)?.name||profile.id}</h2><p>NNI : {r.nni||'non rapproché'} · {fmt(r.agency)} · {colleges[r.college]||'Collège non renseigné dans cette source'}</p></div><button className="btn" onClick={()=>{
  // Historical source arrays are not guaranteed to be ordered by date (2021 may arrive last).
  // Sort only the exported copy, preserving the chronology and every original situation row.
  const orderedRecords=[...profile.records].sort((a:AgentRecord,b:AgentRecord)=>{
