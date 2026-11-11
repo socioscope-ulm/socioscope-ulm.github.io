@@ -174,3 +174,20 @@
 /* Portraits privés et rapprochement des trombinoscopes. */
 .agent-profile-head{flex-direction:row;justify-content:flex-start;align-items:flex-start;gap:20px}.agent-profile-identity{flex:1;min-width:0}.agent-photo{width:108px;flex:0 0 108px;text-align:center}.portrait-frame{width:96px;height:128px;border:1px solid #d5dedb;border-radius:10px;background:#edf2f0;display:flex;align-items:center;justify-content:center;overflow:hidden;color:#879893}.portrait-frame img{width:100%;height:100%;object-fit:contain}.agent-photo .text-btn{font-size:11px;display:block;padding:4px 0;white-space:normal}.photo-assignment{display:flex;gap:20px;padding:20px;background:white;border:1px solid #dce3e0;border-radius:12px;margin:12px 0}.photo-assignment>div:last-child{flex:1;min-width:0}.photo-assignment .portrait-frame{flex-shrink:0}.photo-assignment label{display:block;margin:10px 0}.photo-assignment input,.photo-assignment select{width:100%}.photo-crop{position:relative;max-width:900px;line-height:0}.photo-crop canvas{width:100%;height:auto;touch-action:none;cursor:crosshair}.crop-outline{position:absolute;border:3px solid #c82833;pointer-events:none;background:#c8283320}.photo-crop+label{display:block;margin:12px 0}
 @media(max-width:600px){.agent-profile-head{flex-wrap:wrap;gap:12px}.agent-photo{width:80px;flex-basis:80px}.agent-photo .portrait-frame{width:72px;height:96px}.agent-profile-identity{flex-basis:calc(100% - 100px)}.photo-assignment{gap:12px;padding:12px}.photo-assignment .portrait-frame{width:66px;height:88px}}
+
+/* The user guide is published in Bilans & imports, then shared across all roles. */
+.brand-name-row{display:flex;align-items:center;gap:6px;min-width:0}
+.brand-name-row>strong{font:800 19px/1.15 Manrope,Arial,sans-serif;white-space:nowrap;letter-spacing:-.6px}
+.guide-control{position:relative;display:inline-flex;align-items:center;flex:none}
+.guide-download{display:inline-flex;align-items:center;justify-content:center;gap:5px;background:#fff7f7;color:#b51e35;border:1px solid #efc9ce;border-radius:7px;padding:6px 9px;font-size:11px;font-weight:800;letter-spacing:0;text-decoration:none}
+.guide-download:hover,.guide-download:focus-visible{background:#fce8eb;color:#8f1328}
+.guide-control.compact .guide-download{padding:5px;width:30px;height:30px}
+.guide-download-error{position:absolute;z-index:35;top:calc(100% + 7px);left:0;width:232px;background:#fff;border:1px solid #e6b6b6;border-radius:9px;box-shadow:0 6px 25px #0002;padding:9px 26px 9px 10px;color:#a72e2e;font:600 11px/1.45 'DM Sans',Arial,sans-serif;letter-spacing:0}
+.guide-download-error>button{position:absolute;right:7px;top:5px;background:none;border:0;color:inherit;font-size:18px;line-height:1}
+.guide-mobile{display:none}
+.guide-admin-folder .guide-current{display:flex;align-items:center;gap:12px;margin:15px 0;padding:12px 14px;background:#f7f8f6;border:1px solid #dfe6dd;border-radius:10px;flex-wrap:wrap}
+.guide-admin-folder .guide-current>span{display:flex;flex-direction:column;gap:3px;flex:1;min-width:130px}
+.guide-admin-folder .guide-current small{color:var(--muted)}
+.guide-admin-folder .filter-note{display:block}
+@media(max-width:760px){.guide-mobile{display:inline-flex;margin-left:8px;vertical-align:middle}.topbar-title{display:inline-flex;align-items:center;white-space:normal}.topbar-title .guide-download{width:30px;height:30px}}
+@media(min-width:761px) and (max-width:1000px){.brand-name-row>strong{font-size:17px}.brand-name-row{gap:3px}.guide-control.compact .guide-download{width:27px;height:27px;padding:3px}}
