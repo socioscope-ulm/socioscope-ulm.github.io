@@ -8,6 +8,18 @@ const reasonHeader=(s:string)=>/^MOTIFS?(?:\s|$)/.test(normalized(s));
 const observationHeader=(s:string)=>/^(?:OBSERVATIONS?|COMMENTAIRES?|REMARQUES?)(?:\s|$)/.test(normalized(s));
 const otherHeader=(s:string)=>/\b(?:NOM|PRENOM|UM|DUM|SDUM|GF|NR|DATE|EFFET|EMPLOI|NOUVEAU|ANCIEN|CUMUL|REPORT|AVANCEMENT|NOMBRE|ACCORDE|MOTIF|OBSERVATION|COMMENTAIRE|REMARQUE|LIEU|M3E|LOCALISATION|NR\s*\+)\b/.test(normalized(s));
 
+/** PDF text runs frequently start 10–25pt before the apparent cell border,
+ * although almost all their glyphs are visibly inside the cell. Using only
+ * the run's starting x misses genuine motifs (observed on the May ODJ).
+ * Geometric overlap is safer than taking its start or full-string centre.
+ */
+export function textItemOverlapsColumn(i:CspTextItem,min:number,max:number):boolean{
+ const width=Math.max(i.width,0);
+ if(!i.str.trim()||width<=0||max<=min)return false;
+ const overlap=Math.max(0,Math.min(i.x+width,max)-Math.max(i.x,min));
+ return overlap>=Math.min(width*.45,(max-min)*.4);
+}
+
 function text(items:CspTextItem[]):string{
  const sorted=[...items].sort((a,b)=>Math.abs(a.y-b.y)<2?a.x-b.x:b.y-a.y);
  const result=sorted.map(i=>i.str.trim()).filter(Boolean).join(' ').replace(/\s+/g,' ').trim();
@@ -37,12 +49,7 @@ export function readCspRowAnnotations(page:CspPage,headerY:number,band:CspTextIt
   const right=[...markers].filter(i=>mid(i)>x+13).sort((a,b)=>mid(a)-mid(b))[0];
   const min=left?(mid(left)+x)/2:Math.max(0,h.x-16);
   const max=right?(x+mid(right))/2:page.width;
-  // Anchor by the beginning of a text run: long prose may span most of its
-  // cell and its geometric center may fall beyond the column boundary.
-  const value=text(band.filter(i=>{
-   const start=i.x+Math.min(i.width/2,12);
-   return start>=min&&start<max;
-  }));
+  const value=text(band.filter(i=>textItemOverlapsColumn(i,min,max)));
   if(!value)continue;
   if(reasonHeader(h.str))result.movementReason=value;
   else result.observations=value;
