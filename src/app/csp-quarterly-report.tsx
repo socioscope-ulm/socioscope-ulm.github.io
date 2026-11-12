@@ -3,11 +3,11 @@ import {useEffect,useMemo,useRef,useState} from 'react';
 import {defaultMovementColumns,getMovementColumns,optionalMovementColumns,type OptionalMovementColumn} from '../lib/csp-quarterly-columns';
 import {ChevronRight,Download,RefreshCw,FileText} from 'lucide-react';
 import {calculateQuarterlyReport,isCadresDocument,kindLabels} from '../lib/csp-quarterly-report';
-import {enrichQuarterlyAnnotations} from '../lib/csp-quarterly-annotations';
+import {enrichQuarterlyAnnotations,recoverQuarterlyAnnotationsFromPages} from '../lib/csp-quarterly-annotations';
 import {annotationForCspKind} from '../lib/csp-annotation-rules.ts';
 import type {QuarterlyDocument,QuarterlyReport,QuarterlyEvent} from '../lib/csp-quarterly-report';
 type ImportMeta={id:string;name:string;date:string;status:string;documentType:'cr'|'rd';perEventValidation?:boolean;automaticallyValidated?:boolean};
-type AnnotationCacheEntry={events:QuarterlyEvent[];motifPages:number[];observationPages:number[]};
+type AnnotationCacheEntry={events:QuarterlyEvent[];fallback:QuarterlyEvent[];motifPages:number[];observationPages:number[]};
 const printedMotif=(value:string)=>/^\s*MOTIFS?(?:\s|$)/i.test(value);
 const printedObservation=(value:string)=>/^\s*(?:OBSERVATIONS?|COMMENTAIRES?|REMARQUES?)(?:\s|$)/i.test(value);
 const current=new Date();
@@ -71,12 +71,14 @@ export default function CspQuarterlyReport({revision=0}:{revision?:number}){
        const extraction=await readCspPDF(pdf,()=>{},fresh.documentType);
        cached={
         events:extraction.events as QuarterlyEvent[],
+        // Use exact stored agent name/page when re-extraction changes row IDs.
+        fallback:recoverQuarterlyAnnotationsFromPages(events,extraction.pages),
         motifPages:extraction.pages.filter(p=>p.items.some(i=>printedMotif(i.str))).map(p=>p.page),
         observationPages:extraction.pages.filter(p=>p.items.some(i=>printedObservation(i.str))).map(p=>p.page)
        };
        annotationCache.current.set(fresh.id,cached);
       }
-      events=enrichQuarterlyAnnotations(events,cached.events);
+      events=enrichQuarterlyAnnotations(enrichQuarterlyAnnotations(events,cached.events),cached.fallback);
       // The PDF may contain a real MOTIF header even when pdfjs cannot
       // associate a text fragment with a specific validated row. Never hide
       // such cases silently or confuse a missing text with an empty motif.
