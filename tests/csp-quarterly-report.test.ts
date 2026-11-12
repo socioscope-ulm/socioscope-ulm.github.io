@@ -24,9 +24,9 @@ test('T1 - indique le NR provisoire, pas un écart fictif',()=>{
  assert.match(r.rows[0].notes,/provisoire/i);
  assert.ok(r.alerts.some(x=>x.includes('1 mouvement(s)')));
 });
-test('T1 - identifie les documents en attente, conserve les mouvements validés',()=>{
+test('T1 - un ODJ partiellement confirmé reste signalé sans affecter les mouvements du RD',()=>{
  const r=calculateQuarterlyReport([
-  doc([ev()],{id:'odj-review',status:'review'}),
+  doc([ev(),ev({id:'other',agentId:'OTHER',name:'AUTRE AGENT'})],{id:'odj-review',status:'review'}),
   doc([ev()],{id:'rd-valide',documentType:'rd',name:'RD-CSP Cadres du 30-03-2026.pdf'})
  ],2026,1);
  assert.equal(r.pendingDocuments,1);
@@ -53,10 +53,10 @@ test('ODJ entièrement confirmé par le RD : pas de fausse alerte ni double mouv
  assert.equal(r.sources[0].automaticallyValidated,true);
  assert.equal(odj.status,'review');
 });
-test('ODJ partiel, page non lue ou preuve retirée : conserver l’alerte du serveur',()=>{
+test('Page non lue : conserver l’alerte même si une décision a un RD concordant',()=>{
  for(const automaticallyValidated of [false,undefined]){
   const r=calculateQuarterlyReport([
-   doc([ev()],{status:'review',automaticallyValidated}),
+   doc([ev()],{status:'review',automaticallyValidated,unreadPages:1}),
    doc([ev()],{id:'rd1',documentType:'rd',name:'RD-CSP Cadres.pdf'})
   ],2026,1);
   assert.equal(r.pendingDocuments,1);
@@ -432,4 +432,52 @@ test('Un ODJ en vérification ambigu ou incompatible ne complète jamais le RD',
  const conflict=calculateQuarterlyReport([rd,otherNR],2026,2);
  assert.equal(conflict.rows.length,1);
  assert.equal(conflict.rows[0].observations,'—');
+});
+
+test('ODJ avril : deux décisions RD validées confirment l ODJ dans le CR malgré statut technique review',()=>{
+ const mutation={name:'AGENT S',agentId:'H-001',kind:'mutation',effective:'2026-01-01',
+  gfBefore:17,gfAfter:17,nrBefore:310,nrAfter:310,
+  agency:'AMT VDR',job:'DELEGUE TECHNIQUE'};
+ const titularisation={name:'AGENT P',agentId:'J-002',kind:'titularisation',effective:'2024-12-16',
+  recordedBefore:undefined,recordedAfter:undefined};
+ const odj=doc([ev({...titularisation,id:'p1r0',approved:undefined}),
+   ev({...mutation,id:'p2r0',approved:undefined,observations:'Commentaire imprimé dans l ODJ'})],
+  {id:'odj-avril',name:'ODJ-CSP Cadres du 10-04-2026.pdf',date:'2026-04-10',
+   status:'review',perEventValidation:false,automaticallyValidated:false,unreadPages:0});
+ const rd=doc([
+  ev({...titularisation,id:'rd1',recordedBefore:{gf:12,nr:170}}),
+  ev({...mutation,id:'rd2',gfBefore:undefined,gfAfter:undefined,nrBefore:undefined,nrAfter:undefined,
+   recordedBefore:{gf:17,nr:310},recordedAfter:{gf:17,nr:310}})
+ ],{id:'rd-avril',name:'RD-CSP Cadres du 10-04-2026.pdf',date:'2026-04-10',
+   documentType:'rd',perEventValidation:true,status:'validated'});
+ const snapshot=JSON.stringify([odj,rd]);
+ const report=calculateQuarterlyReport([odj,rd],2026,2);
+ assert.equal(report.sources[0].status,'review','le statut informatique reste intact');
+ assert.equal(report.sources[0].automaticallyValidated,false);
+ assert.equal(report.sources[0].confirmedByRDForReport,true,'confirmation documentaire uniquement');
+ assert.equal(report.pendingDocuments,0);
+ assert.equal(report.rows.length,2,'une ligne par décision confirmée');
+ assert.deepEqual(report.rows.flatMap(row=>row.sources),['D02','D02']);
+ assert.equal(report.rows.find(row=>row.kind==='mutation')?.observations,'Commentaire imprimé dans l ODJ');
+ assert.doesNotMatch(report.alerts.join(' '),/encore en vérification/);
+ assert.equal(JSON.stringify([odj,rd]),snapshot,'aucune décision ou validation modifiée');
+});
+test('Une décision RD absente ou plusieurs RDs concurrents ne valident jamais le statut documentaire du CR',()=>{
+ const a=ev({name:'AGENT A',agentId:'AAA',kind:'mutation',effective:'2026-04-01',
+  gfBefore:17,gfAfter:17,nrBefore:310,nrAfter:310});
+ const odj=doc([a],{id:'odj',date:'2026-04-10',status:'review',automaticallyValidated:false});
+ const valid=doc([{...a,id:'rd'}],{id:'rd1',date:'2026-04-10',documentType:'rd'});
+ const none=calculateQuarterlyReport([odj],2026,2);
+ assert.equal(none.sources[0].confirmedByRDForReport,false);
+ assert.equal(none.pendingDocuments,1);
+ const doubled=calculateQuarterlyReport([odj,valid,{...valid,id:'rd2'}],2026,2);
+ assert.equal(doubled.sources[0].confirmedByRDForReport,false);
+ assert.equal(doubled.pendingDocuments,1);
+ const otherDate=calculateQuarterlyReport([odj,{...valid,date:'2026-04-15'}],2026,2);
+ assert.equal(otherDate.sources[0].confirmedByRDForReport,false);
+ assert.equal(otherDate.pendingDocuments,1);
+ const conflict=calculateQuarterlyReport([odj,
+  {...valid,events:[{...a,id:'rd',gfBefore:18,gfAfter:18,recordedBefore:{gf:18,nr:310},recordedAfter:{gf:18,nr:310}}]}],2026,2);
+ assert.equal(conflict.sources[0].confirmedByRDForReport,false);
+ assert.equal(conflict.pendingDocuments,1);
 });
