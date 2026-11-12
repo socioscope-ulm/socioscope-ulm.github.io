@@ -1,6 +1,6 @@
 import {unheadedAvancements} from './csp-unheaded-avancement.ts';
 import {cspNameHeader} from './csp-table-header.ts';
-import {readCspRowAnnotations} from './csp-row-annotations.ts';
+import {readCspRowAnnotations,textItemOverlapsColumn} from './csp-row-annotations.ts';
 import {normalName} from './agents.ts';
 import {validDate} from './csp.ts';
 import type {CspEvent,CspKind} from './csp.ts';
@@ -50,7 +50,7 @@ export function extractCrPage(pg:CspPage,kind:CspKind,report:CspPageReport):CspE
   // Read annotation cells through those positions as a second independent
   // method; PDFs may split/offset MOTIF headings over multiple lines.
   const annotationCell=(c?:Column)=>text(band.filter(i=>
-   !!c&&i.x+Math.min(i.width/2,12)>=c.left&&i.x+Math.min(i.width/2,12)<c.right));
+   !!c&&textItemOverlapsColumn(i,c.left,c.right)));
   const printedMotif=annotationCell(find(/^MOTIFS?(?: |$)/));
   const printedObservations=annotationCell(find(/^(?:OBSERVATIONS?|COMMENTAIRES?|REMARQUES?)(?: |$)/));
   if(printedMotif)e.movementReason=printedMotif;
