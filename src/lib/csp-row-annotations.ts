@@ -22,7 +22,11 @@ function text(items:CspTextItem[]):string{
  * Never put these strings into the CSP decision's technical note field.
  */
 export function readCspRowAnnotations(page:CspPage,headerY:number,band:CspTextItem[]):CspRowAnnotations{
- const header=page.items.filter(i=>i.str.trim()&&Math.abs(i.y-headerY)<=27);
+ // Printed headings can be on a separate upper line, especially on
+ // salary-measure ODJ tables (e.g. MOTIF above GF/NR and the name header).
+ // A symmetric +/-27pt window missed these headings entirely.
+ // Limit the search to the header zone: never scan the actual person rows.
+ const header=page.items.filter(i=>i.str.trim()&&i.y>=headerY-34&&i.y<=headerY+65);
  const titled=header.filter(i=>reasonHeader(i.str)||observationHeader(i.str));
  if(!titled.length||!band.length)return {};
  const markers=header.filter(i=>otherHeader(i.str));
@@ -35,7 +39,10 @@ export function readCspRowAnnotations(page:CspPage,headerY:number,band:CspTextIt
   const max=right?(x+mid(right))/2:page.width;
   // Anchor by the beginning of a text run: long prose may span most of its
   // cell and its geometric center may fall beyond the column boundary.
-  const value=text(band.filter(i=>i.x+Math.min(i.width/2,12)>=min&&i.x+Math.min(i.width/2,12)<max));
+  const value=text(band.filter(i=>{
+   const start=i.x+Math.min(i.width/2,12);
+   return start>=min&&start<max;
+  }));
   if(!value)continue;
   if(reasonHeader(h.str))result.movementReason=value;
   else result.observations=value;
