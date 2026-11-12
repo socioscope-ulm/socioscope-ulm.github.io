@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {readCspRowAnnotations,textItemOverlapsColumn} from '../src/lib/csp-row-annotations.ts';
 import {extractCspPages} from '../src/lib/csp-extract.ts';
 import {validateCspEvent,cspKey} from '../src/lib/csp.ts';
-import {enrichQuarterlyAnnotations} from '../src/lib/csp-quarterly-annotations.ts';
+import {enrichQuarterlyAnnotations,recoverQuarterlyAnnotationsFromPages} from '../src/lib/csp-quarterly-annotations.ts';
 import type {CspPage,CspTextItem} from '../src/lib/csp-extract.ts';
 
 const cell=(str:string,x:number,y:number,width=42):CspTextItem=>({str,x,y,width,height:10});
@@ -151,4 +151,58 @@ test('ODJ paysage du T2 : le texte du motif déborde légèrement avant le bord 
  assert.equal(e.nrBefore,265);
  assert.equal(e.nrAfter,270);
  assert.equal(e.effective,'2026-04-01');
+});
+
+test('ODJ : retrouver le motif imprimé par le nom exact même si le nouvel analyseur change l identifiant',()=>{
+ const pg:CspPage={page:2,width:841.9,height:595.3,items:[
+  cell('CSP du 07/05/2026',650,540,180),cell('MESURES SALARIALES',40,490,230),
+  cell('NOM PRENOM',66.6,384,63),cell('UM/DUM',215.4,384,37),
+  cell('SDUM/FSDUM',350.8,384,61),cell('GF',470.2,384,12.5),
+  cell('ANCIEN',501.8,389,37),cell('NR',512.6,379,13),
+  cell('NOUVEAU',540.7,389,45),cell('NR',556.8,379,13),
+  cell('MOTIF',652.7,384,28),cell('DATE',764.4,389,27),cell("D'EFFET",757.9,379,37.5),
+  cell('AGENT EXEMPLE',53.8,351,110),cell('14',471.4,351,10.1),
+  cell('265',511.6,351,15),cell('270',555.7,351,15.1),
+  cell('NR encouragement à la mobilité',602.4,351,128.6),cell('01/04/2026',754.2,351,45)
+ ]};
+ const old=[{id:'old-corrected-event',name:'AGENT EXEMPLE',kind:'mesure',page:2,effective:'2026-04-01',
+  selected:true,approved:true,recordedBefore:{gf:14,nr:265},recordedAfter:{gf:14,nr:270}}];
+ const original=JSON.stringify(old);
+ const recovered=recoverQuarterlyAnnotationsFromPages(old,[pg]);
+ assert.equal(recovered[0].movementReason,'NR encouragement à la mobilité');
+ assert.equal(recovered[0].recordedAfter.nr,270);
+ assert.equal(JSON.stringify(old),original);
+});
+test('Commentaires sur plusieurs lignes : colonnes de largeur variable, ne jamais mélanger deux agents',()=>{
+ const pg:CspPage={page:3,width:841.9,height:595.3,items:[
+  cell('CSP du 10/04/2026',650,540,170),cell("MUTATION D'OFFICE",40,495,210),
+  cell('NOM PRENOM',55,420,90),cell('UM/DUM',230,420,40),
+  cell('GF',590,420,15),cell('NR',650,420,15),
+  cell('COMMENTAIRES',752,420,81),
+  cell('AGENT A',53,370,85),cell('17',590,370,12),cell('310',650,370,17),
+  cell('Mutation à effet rétroactif',705,379,127),
+  cell('avec prise de poste en agence',705,362,126),
+  cell('AGENT B',53,305,84),cell('17',590,305,12),cell('315',650,305,17),
+  cell('Observation distincte de B',701,302,135)
+ ]};
+ const original=[
+  {id:'a',name:'AGENT A',kind:'mutation',page:3,effective:'2026-01-01',approved:true,selected:true},
+  {id:'b',name:'AGENT B',kind:'mutation',page:3,effective:'2026-01-01',approved:true,selected:true}
+ ];
+ const extracted=recoverQuarterlyAnnotationsFromPages(original,[pg]);
+ assert.match(extracted[0].observations||'',/Mutation à effet rétroactif/);
+ assert.match(extracted[0].observations||'',/avec prise de poste en agence/);
+ assert.doesNotMatch(extracted[0].observations||'',/distincte/);
+ assert.equal(extracted[1].observations,'Observation distincte de B');
+});
+test('Une association incertaine de noms ne transfère jamais le commentaire à un autre agent',()=>{
+ const pg:CspPage={page:2,width:841.9,height:595.3,items:[
+  cell('NOM PRENOM',55,420,90),cell('UM/DUM',230,420,40),cell('GF',590,420,15),
+  cell('NR',650,420,15),cell('COMMENTAIRES',750,420,81),
+  cell('AGENT A',53,365,86),cell('Texte du A',720,365,70)
+ ]};
+ const [row]=recoverQuarterlyAnnotationsFromPages([
+  {id:'a',name:'AGENT B',kind:'mutation',page:2,effective:'2026-01-01'}
+ ],[pg]);
+ assert.equal(row.observations,undefined);
 });
