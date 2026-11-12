@@ -1,4 +1,4 @@
-import {annotationForCspKind} from './csp-annotation-rules';
+import {annotationForCspKind} from './csp-annotation-rules.ts';
 /** Rapport CSP cadres par date de séance, sans modification des validations. */
 export type QuarterlyEvent = {
  id:string; name:string; agentId?:string; kind:string; effective:string;
