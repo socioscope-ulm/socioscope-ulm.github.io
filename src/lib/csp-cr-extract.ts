@@ -53,8 +53,11 @@ export function extractCrPage(pg:CspPage,kind:CspKind,report:CspPageReport):CspE
    !!c&&textItemOverlapsColumn(i,c.left,c.right)));
   const printedMotif=annotationCell(find(/^MOTIFS?(?: |$)/));
   const printedObservations=annotationCell(find(/^(?:OBSERVATIONS?|COMMENTAIRES?|REMARQUES?)(?: |$)/));
-  if(printedMotif)e.movementReason=printedMotif;
-  if(printedObservations)e.observations=printedObservations;
+  // The header-aware, width-adjusted reader is the primary source.
+  // Do not overwrite a complete sentence with a shorter centre-only reading
+  // from crTable: that was truncating genuine ODJ motifs.
+  if(printedMotif&&!e.movementReason)e.movementReason=printedMotif;
+  if(printedObservations&&!e.observations)e.observations=printedObservations;
   const issues:string[]=[];
   const readNumber=(column:Column|undefined,key:'gfBefore'|'gfAfter'|'nrBefore'|'nrAfter')=>{const n=num(column);if(n!==undefined&&n>=1&&n<=(key.startsWith('gf')?30:999))e[key]=n;else issues.push(`${key.startsWith('gf')?'GF':'NR'} ${key.endsWith('Before')?'avant':'après'} absent ou illisible`);};
   if(kind==='reclassement'){
