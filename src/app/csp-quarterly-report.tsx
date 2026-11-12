@@ -167,6 +167,14 @@ export default function CspQuarterlyReport({revision=0}:{revision?:number}){
      <p>Deux contrôles distincts, toujours visibles ici. Les résultats et la trace des exclusions sont disponibles après « Préparer le compte rendu ».</p>
     </div>
    </div>
+   {report&&report.sources.some(src=>src.confirmedByRDForReport)&&
+    <div className="filter-note" role="status">
+     <b>ODJ confirmés par RD validé pour ce compte rendu :</b>
+     <ul style={{paddingLeft:20,marginTop:6}}>
+      {report.sources.filter(src=>src.confirmedByRDForReport).map(src=>
+       <li key={src.id}>{src.date} — {src.name}. Décisions reconnues dans le RD validé ; aucune modification du statut enregistré.</li>)}
+     </ul>
+    </div>}
    <details key={'anomalies-'+loadRevision} className="document-folder" defaultOpen={!!report&&report.rows.some(r=>!!r.notes)}>
     <summary><ChevronRight size={16} className="folder-chevron"/><FileText size={17}/><strong>1. Anomalies et réserves documentaires</strong><span className="badge">{report?report.rows.filter(r=>r.notes).length+' signalement(s)':'À calculer'}</span></summary>
     <div className="document-folder-content">
