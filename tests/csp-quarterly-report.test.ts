@@ -353,27 +353,47 @@ test('La trace de doublon même trimestre ne signale pas à tort une date d effe
  assert.equal(report.previouslyReported[0].effectOutsideOriginalQuarter,false);
 });
 
-test('Le CR affiche le motif et les observations, sans les confondre avec une anomalie',()=>{
+test('Le CR affiche le motif ODJ des mesures salariales sans le confondre avec une alerte',()=>{
  const event=ev({kind:'mesure',movementReason:'NR encouragement à la mobilité',
-  observations:'Observation de la CSP',note:'',nrSteps:1});
+  observations:'Observation isolée',note:'',nrSteps:1});
  const r=calculateQuarterlyReport([doc([event])],2026,1);
  assert.equal(r.rows.length,1);
  assert.equal(r.rows[0].movementReason,'NR encouragement à la mobilité');
- assert.equal(r.rows[0].observations,'Observation de la CSP');
+ assert.equal(r.rows[0].observations,'—');
  assert.equal(r.rows[0].notes,'');
 });
-test('Conserve les libellés documentaires différents du RD et de l ODJ sur une seule ligne',()=>{
+test('ODJ prioritaire et exclusif : les libellés du RD ne remplacent jamais les motifs de reclassement',()=>{
  const base=ev({kind:'reclassement',gfBefore:12,gfAfter:13,nrBefore:210,nrAfter:220,gfDelta:1,
-  movementReason:'Reclassement annuel',observations:'Ancienne observation'});
+  movementReason:'Reclassement ADP',observations:'Observation de lecture'});
  const r=calculateQuarterlyReport([
   doc([base]),
-  doc([{...base,movementReason:'Repositionnement GF',observations:'Observation rectifiée'}],{
+  doc([{...base,movementReason:'Autre intitulé RD',observations:'Observation rectifiée du RD'}],{
    id:'rd',name:'RD-CSP Cadres du 06-03-2026.pdf',documentType:'rd'
   })
  ],2026,1);
  assert.equal(r.rows.length,1);
- assert.match(r.rows[0].movementReason,/ODJ : Reclassement annuel/);
- assert.match(r.rows[0].movementReason,/RD : Repositionnement GF/);
- assert.match(r.rows[0].observations,/Observation rectifiée/);
+ assert.equal(r.rows[0].movementReason,'Reclassement ADP');
+ assert.equal(r.rows[0].observations,'—');
  assert.equal(r.rows[0].notes,'');
+});
+test('Observations ODJ seulement sur admission, titularisation, mutation et avancement',()=>{
+ for(const kind of ['admission','titularisation','mutation','avancement']){
+  const ev1=ev({kind,observations:'Précision dans l ODJ'});
+  const r=calculateQuarterlyReport([
+   doc([ev1]),
+   doc([{...ev1,observations:'Texte différent RD'}],{id:'rd',documentType:'rd'})
+  ],2026,1);
+  assert.equal(r.rows.length,1,kind);
+  assert.equal(r.rows[0].observations,'Précision dans l ODJ',kind);
+  assert.equal(r.rows[0].movementReason,'—');
+ }
+});
+test('Si seul le RD a un commentaire, le CR ne le présente pas comme une information ODJ',()=>{
+ const e=ev({kind:'avancement',observations:undefined});
+ const r=calculateQuarterlyReport([
+  doc([e]),
+  doc([{...e,observations:'Observation RD'}],{id:'rd',documentType:'rd'})
+ ],2026,1);
+ assert.equal(r.rows.length,1);
+ assert.equal(r.rows[0].observations,'—');
 });
