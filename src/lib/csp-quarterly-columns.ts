@@ -28,8 +28,8 @@ export function getMovementColumns(selected:readonly OptionalMovementColumn[]=de
  // Pour les admissions au stage et les titularisations, le GF est obligatoire
  // et la colonne NR+ n'est jamais pertinente, même si l'option globale est cochée.
  const stageOrTitularisation=kind==='admission'||kind==='titularisation';
- const visible=columns.filter((c,i)=>
-  i<3||(c.id==='gf'&&stageOrTitularisation)||
+ const visible=columns.filter(c=>
+  ['name','agency','dates'].includes(c.id)||(c.id==='gf'&&stageOrTitularisation)||
   (c.id!=='nrSteps'||!stageOrTitularisation)&&selected.includes(c.id as OptionalMovementColumn)
  );
  const total=visible.reduce((n,c)=>n+c.width,0);
