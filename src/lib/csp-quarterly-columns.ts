@@ -1,17 +1,13 @@
 import type {QuarterlyRow} from './csp-quarterly-report';
-export type OptionalMovementColumn='motif'|'observations'|'gf'|'nr'|'nrSteps'|'source';
+import {annotationForCspKind} from './csp-annotation-rules';
+export type OptionalMovementColumn='gf'|'nr'|'nrSteps'|'source';
 export const optionalMovementColumns=[
- {id:'motif',label:'Motif du mouvement'},
- {id:'observations',label:'Observations / commentaires'},
  {id:'gf',label:'GF avant / après'},
  {id:'nr',label:'NR avant / après'},
  {id:'nrSteps',label:'NR attribués (NR +)'},
  {id:'source',label:'Source'}
 ] as const;
-// Les deux nouveaux champs restent facultatifs par défaut afin d'éviter
-// une relecture coûteuse de PDF tant que l'administrateur ne les demande pas.
-export const defaultMovementColumns:OptionalMovementColumn[]=optionalMovementColumns
- .filter(c=>c.id!=='motif'&&c.id!=='observations').map(c=>c.id);
+export const defaultMovementColumns:OptionalMovementColumn[]=optionalMovementColumns.map(c=>c.id);
 const date=(s:string)=>/^\d{4}-\d{2}-\d{2}$/.test(s)?s.slice(8)+'/'+s.slice(5,7)+'/'+s.slice(0,4):'—';
 const columns=[
  {id:'name',label:'Nom / prénom',header:'NOM PRÉNOM',width:2.36,value:(r:QuarterlyRow)=>r.name},
@@ -28,9 +24,12 @@ export function getMovementColumns(selected:readonly OptionalMovementColumn[]=de
  // Pour les admissions au stage et les titularisations, le GF est obligatoire
  // et la colonne NR+ n'est jamais pertinente, même si l'option globale est cochée.
  const stageOrTitularisation=kind==='admission'||kind==='titularisation';
+ const annotation=annotationForCspKind(kind||'');
+ const annotationId=annotation==='movementReason'?'motif':annotation==='observations'?'observations':undefined;
  const visible=columns.filter(c=>
-  ['name','agency','dates'].includes(c.id)||(c.id==='gf'&&stageOrTitularisation)||
-  (c.id!=='nrSteps'||!stageOrTitularisation)&&selected.includes(c.id as OptionalMovementColumn)
+  ['name','agency','dates'].includes(c.id)||c.id===annotationId||
+  (c.id==='gf'&&stageOrTitularisation)||
+  ((c.id!=='nrSteps'||!stageOrTitularisation)&&selected.includes(c.id as OptionalMovementColumn))
  );
  const total=visible.reduce((n,c)=>n+c.width,0);
  // Conserver la largeur originale de la page PPT (12,33 pouces),
