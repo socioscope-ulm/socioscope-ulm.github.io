@@ -42,3 +42,17 @@ test('NR+ reste une option pour les autres mouvements et les largeurs restent é
   assert.ok(Math.abs(getMovementColumns(['gf','nr','nrSteps','source'],kind).reduce((n,c)=>n+c.width,0)-full)<1e-6);
  }
 });
+
+test('Motif et observations sont des colonnes activables avant CSP / effet',()=>{
+ const columns=getMovementColumns(['motif','observations','gf','nr'],'mesure');
+ assert.deepEqual(columns.slice(0,5).map(c=>c.id),['name','agency','motif','observations','dates']);
+ assert.equal(columns[2].header,'MOTIF');
+ assert.equal(columns[3].header,'OBSERVATIONS');
+ assert.equal(getMovementColumns().some(c=>c.id==='motif'||c.id==='observations'),false,
+  'pas de téléchargement automatique des PDF originaux pour un CR sans ces options');
+ assert.equal(columns.reduce((n,c)=>n+c.width,0).toFixed(2),'12.33');
+});
+test('Motif et observations ne suppriment pas GF obligatoire ni la suppression du NR+ de stage',()=>{
+ const ids=getMovementColumns(['motif','observations','nrSteps'],'admission').map(c=>c.id);
+ assert.deepEqual(ids,['name','agency','motif','observations','dates','gf']);
+});
