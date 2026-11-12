@@ -81,3 +81,40 @@ test('Relecture historique : enrichit uniquement le motif et les observations po
  assert.deepEqual(enrichQuarterlyAnnotations(original,[{...extracted[0],id:'unknown'}]),original,
   'un avancement distinct ne doit jamais prendre le texte d une autre ligne');
 });
+
+test('Pignon Jean Yves : motif imprimé sur la ligne supérieure des en-têtes ODJ du T2',()=>{
+ const pg=page([
+  cell('MOTIF',709,467,48),
+  cell('NOM PRENOM',40,420,115),cell('GF',450,420,24),
+  cell('ANCIEN NR',525,420,75),cell('NOUVEAU NR',610,420,65),
+  cell("DATE D'EFFET",845,420,100),
+  cell('PIGNON JEAN YVES',40,373,125),cell('13',450,373,22),
+  cell('245',525,373,32),cell('250',610,373,32),
+  cell('NR encouragement à la mobilité',704,373,142),cell('01/04/2026',845,373,90)
+ ]);
+ const report=extractCspPages([pg],'cr');
+ assert.equal(report.events.length,1);
+ const event=report.events[0];
+ assert.equal(event.name,'PIGNON JEAN YVES');
+ assert.equal(event.kind,'mesure');
+ assert.equal(event.movementReason,'NR encouragement à la mobilité');
+ assert.equal(event.nrBefore,245);
+ assert.equal(event.nrAfter,250);
+});
+test('Motif ODJ dans une colonne repérée : conserver le texte sur deux lignes et la date séparée',()=>{
+ const pg=page([
+  cell('NOM PRENOM',40,420,115),cell('GF',450,420,24),
+  cell('ANCIEN NR',525,420,75),cell('NOUVEAU NR',610,420,65),
+  cell('MOTIF DE LA MESURE',699,420,126),cell("DATE D'EFFET",845,420,100),
+  cell('EXEMPLE ALICE',40,363,125),cell('13',450,363,22),
+  cell('245',525,363,32),cell('250',610,363,32),
+  cell('NR encouragement',704,378,112),
+  cell('à la mobilité',704,362,94),cell('01/04/2026',845,363,90)
+ ]);
+ const report=extractCspPages([pg],'cr');
+ assert.equal(report.events.length,1);
+ const event=report.events[0];
+ assert.equal(event.movementReason,'NR encouragement à la mobilité');
+ assert.equal(event.nrAfter,250);
+ assert.equal(event.effective,'2026-04-01');
+});
