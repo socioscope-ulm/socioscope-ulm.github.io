@@ -1,5 +1,5 @@
 import type {QuarterlyRow} from './csp-quarterly-report';
-import {annotationForCspKind} from './csp-annotation-rules';
+import {annotationForCspKind} from './csp-annotation-rules.ts';
 export type OptionalMovementColumn='gf'|'nr'|'nrSteps'|'source';
 export const optionalMovementColumns=[
  {id:'gf',label:'GF avant / après'},
