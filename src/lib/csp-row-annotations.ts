@@ -47,8 +47,17 @@ export function readCspRowAnnotations(page:CspPage,headerY:number,band:CspTextIt
   const x=mid(h);
   const left=[...markers].filter(i=>mid(i)<x-13).sort((a,b)=>mid(b)-mid(a))[0];
   const right=[...markers].filter(i=>mid(i)>x+13).sort((a,b)=>mid(a)-mid(b))[0];
-  const min=left?(mid(left)+x)/2:Math.max(0,h.x-16);
-  const max=right?(x+mid(right))/2:page.width;
+  // ODJ columns are not equally wide. The printed heading is centred in
+  // the cell, but its content often begins 15–30pt to the left. Midpoint-only
+  // bounds would silently drop the first words or the whole annotation.
+  // Derive the bounds independently for each page and keep a safety gap from
+  // the adjacent numeric/date column.
+  const leftCenter=left?mid(left):undefined,rightCenter=right?mid(right):undefined;
+  const rawMin=leftCenter===undefined?Math.max(0,h.x-16):(leftCenter+x)/2;
+  const rawMax=rightCenter===undefined?page.width:(x+rightCenter)/2;
+  const padding=Math.min(34,Math.max(10,(rawMax-rawMin)*.30));
+  const min=leftCenter===undefined?rawMin:Math.max(leftCenter+9,rawMin-padding);
+  const max=rightCenter===undefined?rawMax:Math.min(rightCenter-10,rawMax+Math.min(17,padding*.55));
   const value=text(band.filter(i=>textItemOverlapsColumn(i,min,max)));
   if(!value)continue;
   if(reasonHeader(h.str))result.movementReason=value;
