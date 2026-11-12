@@ -7,7 +7,7 @@ export type QuarterlyEvent = {
  acknowledgedByRD?:unknown; acknowledgedByDocument?:unknown;
  gfBefore?:number; gfAfter?:number; nrBefore?:number; nrAfter?:number;
  nrSteps?:number; gfDelta?:number; agency?:string; job?:string; reference?:string;
- note?:string; movementReason?:string; observations?:string; extractionIssue?:string;
+ note?:string; movementReason?:string; observations?:string; aptitude?:string; extractionIssue?:string;
  recordedBefore?:{gf?:number;nr?:number;agency?:string;job?:string};
  recordedAfter?:{gf?:number;nr?:number;agency?:string;job?:string;nrProvisional?:boolean};
 };
@@ -18,7 +18,7 @@ export type QuarterlyDocument = {
 export type QuarterlySource = {id:string;ref:string;name:string;date:string;type:'ODJ'|'RD';status:string;automaticallyValidated?:boolean;confirmedByRDForReport?:boolean};
 export type QuarterlyRow = {
  id:string; name:string; kind:string; meeting:string; effective:string;
- agency:string; job:string; movementReason:string; observations:string; gfBefore:string; gfAfter:string;
+ agency:string; job:string; movementReason:string; observations:string; aptitude:string; gfBefore:string; gfAfter:string;
  nrBefore:string; nrAfter:string; nrSteps:string; source:string;
  notes:string; resolvedNotes?:string; sources:string[]; estimated:boolean;
 };
@@ -36,7 +36,7 @@ export type QuarterlyReport = {
 export const kindLabels:Record<string,string>={
  admission:'Admission au stage',titularisation:'Titularisation',mutation:"Mutation d'office",
  reclassement:'Reclassement',avancement:'Avancement au choix',
- posthume:'Avancement à titre posthume',mesure:'Mesure salariale',nomination:'Nomination'
+ posthume:'Avancement à titre posthume',mesure:'Mesure salariale',nomination:'Nomination aux postes vacants'
 };
 export const kindOrder=['admission','titularisation','mutation','reclassement','avancement','mesure','nomination','posthume'];
 const norm=(v:unknown)=>String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().replace(/[^A-Z0-9]+/g,' ').trim().replace(/\s+/g,' ');
@@ -164,7 +164,7 @@ function toRow(g:Group):QuarterlyRow{
   const distinct=odj.filter((value,i)=>odj.findIndex(other=>norm(other)===norm(value))===i);
   return distinct.length?distinct.join('\n'):'—';
  };
- const checks:string[]=[],resolved:string[]=[];
+ // The RD APTITUDE is documentary text, never a career decision or a\n // technical validation note; only the RD can supply it.\n const aptitudes=g.items.filter(x=>x.doc.documentType==='rd')\n  .map(x=>String(x.e.aptitude||'').trim()).filter(Boolean);\n const distinctAptitudes=aptitudes.filter((v,i)=>aptitudes.findIndex(t=>norm(v)===norm(t))===i);\n const aptitude=first.kind==='nomination'?(distinctAptitudes.join('\\n')||'—'):'—';\n const checks:string[]=[],resolved:string[]=[];
  // Ne jamais masquer un éventuel écart réel GF sur ces mouvements.
  if(constantStageGF&&filled(originalBeforeGF)&&filled(originalAfterGF)&&originalBeforeGF!==originalAfterGF){
   checks.push('Incohérence GF pour '+kindLabels[first.kind]+' : GF avant '+originalBeforeGF+' différent du GF après '+originalAfterGF+'. Les documents sources doivent être vérifiés.');
@@ -198,7 +198,7 @@ function toRow(g:Group):QuarterlyRow{
  const date=g.items[0].doc.date;
  return {id:g.base+':'+g.items[0].e.id,name:first.name,kind:first.kind,
   meeting:date,effective:first.effective||'',
-  agency,job,movementReason:annotation('movementReason'),observations:annotation('observations'),
+  agency,job,movementReason:annotation('movementReason'),observations:annotation('observations'),aptitude,
   gfBefore:fmt(beforeGF),gfAfter:fmt(afterGF),
   nrBefore:fmt(beforeNR),nrAfter:fmt(afterNR)+(estimated?'*':''),
   nrSteps:steps===undefined||!Number.isInteger(steps)?'—':String(steps),
