@@ -70,3 +70,15 @@ test('Plus de cases activables Motif et Observations; tailles de page constantes
   assert.equal(getMovementColumns(defaultMovementColumns,kind).reduce((n,c)=>n+c.width,0).toFixed(2),'12.33');
  }
 });
+
+test('Nomination aux postes vacants : Aptitude RD systématique avant CSP / effet',()=>{
+ const columns=getMovementColumns([], 'nomination');
+ assert.deepEqual(columns.slice(0,4).map(c=>c.id),['name','agency','aptitude','dates']);
+ assert.equal(columns[2].header,'APTITUDE');
+ assert.equal(columns[2].label,'Aptitude (RD)');
+ assert.equal(columns.some(c=>c.id==='nrSteps'),false);
+ assert.equal(getMovementColumns(['nrSteps'],'nomination').some(c=>c.id==='nrSteps'),true);
+ for(const kind of ['admission','titularisation','mutation','avancement','mesure','reclassement','posthume'])
+  assert.equal(getMovementColumns([],kind).some(c=>c.id==='aptitude'),false,kind);
+ assert.equal(columns.reduce((n,c)=>n+c.width,0).toFixed(2),'12.33');
+});
