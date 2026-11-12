@@ -6,7 +6,7 @@ import {calculateQuarterlyReport,isCadresDocument,kindLabels} from '../lib/csp-q
 import {enrichQuarterlyAnnotations,recoverQuarterlyAnnotationsFromPages} from '../lib/csp-quarterly-annotations';
 import {annotationForCspKind} from '../lib/csp-annotation-rules.ts';
 import type {QuarterlyDocument,QuarterlyReport,QuarterlyEvent} from '../lib/csp-quarterly-report';
-type ImportMeta={id:string;name:string;date:string;status:string;documentType:'cr'|'rd';perEventValidation?:boolean;automaticallyValidated?:boolean};
+type ImportMeta={id:string;name:string;date:string;status:string;documentType:'cr'|'rd';perEventValidation?:boolean;automaticallyValidated?:boolean;unreadPages?:number};
 type AnnotationCacheEntry={events:QuarterlyEvent[];fallback:QuarterlyEvent[];motifPages:number[];observationPages:number[]};
 const printedMotif=(value:string)=>/^\s*MOTIFS?(?:\s|$)/i.test(value);
 const printedObservation=(value:string)=>/^\s*(?:OBSERVATIONS?|COMMENTAIRES?|REMARQUES?)(?:\s|$)/i.test(value);
@@ -100,7 +100,7 @@ export default function CspQuarterlyReport({revision=0}:{revision?:number}){
     }
     docs.push({id:fresh.id,name:fresh.name,date:fresh.date,status:fresh.status,
       documentType:fresh.documentType,perEventValidation:!!fresh.perEventValidation,
-      automaticallyValidated:fresh.automaticallyValidated===true,events});
+      automaticallyValidated:fresh.automaticallyValidated===true,unreadPages:fresh.unreadPages,events});
    }
    const nextReport=calculateQuarterlyReport(docs,year,quarter);
    setReport(nextReport);setAnnotationWarnings(readWarnings);setLoadRevision(v=>v+1);
@@ -131,6 +131,7 @@ export default function CspQuarterlyReport({revision=0}:{revision?:number}){
       <li><b>Admissions au stage et titularisations :</b> le GF avant/après reste visible et le NR+ est masqué.</li>
       <li><b>Motifs et observations automatiques :</b> les ODJ fournissent le « Motif » pour les reclassements et mesures salariales ; les « Observations / commentaires » pour les admissions au stage, titularisations, mutations d’office et avancements. La colonne correspondante apparaît automatiquement avant « CSP / effet ». Les PDF historiques sont relus sans aucune nouvelle validation.</li>
       <li><b>Contrôles :</b> les écarts réellement incohérents restent signalés ; un NR calculé est marqué d’un astérisque.</li>
+      <li><b>Validation par RD dans le CR :</b> un ODJ dont toutes les décisions correspondent sans ambiguïté à un RD validé est présenté comme « confirmé par RD » même si son statut technique historique est « À vérifier ». Cette indication n’enregistre aucune nouvelle validation.</li>
       <li><b>Intégrité :</b> aucun document validé, aucune donnée individuelle ni aucun mouvement CSP n’est modifié par cet export.</li>
      </ul>
     </div>
@@ -158,7 +159,7 @@ export default function CspQuarterlyReport({revision=0}:{revision?:number}){
      setSelectedColumns(previous=>checked?[...previous,c.id]:previous.filter(id=>id!==c.id));
     }}/>{c.label}
    </label>)}</div>
-   <p className="filter-note">Colonnes documentaires automatiques, avant la date : <b>Motif</b> pour reclassement et mesures salariales ; <b>Observations / commentaires</b> pour admission, titularisation, mutation d’office et avancement. Les textes proviennent des ODJ validés, relus lors de la préparation du CR. Seules les quatre options ci-dessus sont à sélectionner. GF obligatoire pour admission/titularisation ; NR + masqué pour ces deux mouvements.</p>
+   <p className="filter-note">Colonnes documentaires automatiques, avant la date : <b>Motif</b> pour reclassement et mesures salariales ; <b>Observations / commentaires</b> pour admission, titularisation, mutation d’office et avancement. Les textes proviennent des ODJ, y compris lorsque les décisions sont confirmées par le RD validé ; ces PDF sont relus sans nouvelle validation. Seules les quatre options ci-dessus sont à sélectionner. GF obligatoire pour admission/titularisation ; NR + masqué pour ces deux mouvements.</p>
   </fieldset>
   <section className="panel" aria-label="Contrôles documentaires du compte rendu" style={{margin:'16px 0',padding:14}}>
    <div className="panel-heading" style={{marginBottom:10}}>
