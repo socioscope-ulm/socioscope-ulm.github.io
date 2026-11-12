@@ -1,6 +1,7 @@
 import {unheadedAvancements} from './csp-unheaded-avancement.ts';
 import {cspNameHeader} from './csp-table-header.ts';
 import {readCspRowAnnotations,textItemOverlapsColumn} from './csp-row-annotations.ts';
+import {cleanCspPrintedCell,isCspPageFooter} from './csp-quarterly-document-text.ts';
 import {normalName} from './agents.ts';
 import {validDate} from './csp.ts';
 import type {CspEvent,CspKind} from './csp.ts';
@@ -49,8 +50,8 @@ export function extractCrPage(pg:CspPage,kind:CspKind,report:CspPageReport):CspE
   // ODJ tables already have reliable column positions from crTable().
   // Read annotation cells through those positions as a second independent
   // method; PDFs may split/offset MOTIF headings over multiple lines.
-  const annotationCell=(c?:Column)=>text(band.filter(i=>
-   !!c&&textItemOverlapsColumn(i,c.left,c.right)));
+  const annotationCell=(c?:Column)=>cleanCspPrintedCell(text(band.filter(i=>
+   !!c&&textItemOverlapsColumn(i,c.left,c.right)&&!isCspPageFooter(i,pg))));
   const printedMotif=annotationCell(find(/^MOTIFS?(?: |$)/));
   const printedObservations=annotationCell(find(/^(?:OBSERVATIONS?|COMMENTAIRES?|REMARQUES?)(?: |$)/));
   // The header-aware, width-adjusted reader is the primary source.
