@@ -352,3 +352,28 @@ test('La trace de doublon même trimestre ne signale pas à tort une date d effe
  assert.equal(report.previouslyReported.length,1);
  assert.equal(report.previouslyReported[0].effectOutsideOriginalQuarter,false);
 });
+
+test('Le CR affiche le motif et les observations, sans les confondre avec une anomalie',()=>{
+ const event=ev({kind:'mesure',movementReason:'NR encouragement à la mobilité',
+  observations:'Observation de la CSP',note:'',nrSteps:1});
+ const r=calculateQuarterlyReport([doc([event])],2026,1);
+ assert.equal(r.rows.length,1);
+ assert.equal(r.rows[0].movementReason,'NR encouragement à la mobilité');
+ assert.equal(r.rows[0].observations,'Observation de la CSP');
+ assert.equal(r.rows[0].notes,'');
+});
+test('Conserve les libellés documentaires différents du RD et de l ODJ sur une seule ligne',()=>{
+ const base=ev({kind:'reclassement',gfBefore:12,gfAfter:13,nrBefore:210,nrAfter:220,gfDelta:1,
+  movementReason:'Reclassement annuel',observations:'Ancienne observation'});
+ const r=calculateQuarterlyReport([
+  doc([base]),
+  doc([{...base,movementReason:'Repositionnement GF',observations:'Observation rectifiée'}],{
+   id:'rd',name:'RD-CSP Cadres du 06-03-2026.pdf',documentType:'rd'
+  })
+ ],2026,1);
+ assert.equal(r.rows.length,1);
+ assert.match(r.rows[0].movementReason,/ODJ : Reclassement annuel/);
+ assert.match(r.rows[0].movementReason,/RD : Repositionnement GF/);
+ assert.match(r.rows[0].observations,/Observation rectifiée/);
+ assert.equal(r.rows[0].notes,'');
+});
