@@ -6,7 +6,7 @@ export type QuarterlyEvent = {
  acknowledgedByRD?:unknown; acknowledgedByDocument?:unknown;
  gfBefore?:number; gfAfter?:number; nrBefore?:number; nrAfter?:number;
  nrSteps?:number; gfDelta?:number; agency?:string; job?:string; reference?:string;
- note?:string; extractionIssue?:string;
+ note?:string; movementReason?:string; observations?:string; extractionIssue?:string;
  recordedBefore?:{gf?:number;nr?:number;agency?:string;job?:string};
  recordedAfter?:{gf?:number;nr?:number;agency?:string;job?:string;nrProvisional?:boolean};
 };
@@ -17,7 +17,7 @@ export type QuarterlyDocument = {
 export type QuarterlySource = {id:string;ref:string;name:string;date:string;type:'ODJ'|'RD';status:string;automaticallyValidated?:boolean};
 export type QuarterlyRow = {
  id:string; name:string; kind:string; meeting:string; effective:string;
- agency:string; job:string; gfBefore:string; gfAfter:string;
+ agency:string; job:string; movementReason:string; observations:string; gfBefore:string; gfAfter:string;
  nrBefore:string; nrAfter:string; nrSteps:string; source:string;
  notes:string; resolvedNotes?:string; sources:string[]; estimated:boolean;
 };
@@ -152,6 +152,15 @@ function toRow(g:Group):QuarterlyRow{
  const sourceRefs=[...new Set(g.items.map(x=>x.ref+' p.'+(x.e.page||'?')))];
  const agency=priority.map(x=>x.e.recordedAfter?.agency||x.e.agency||x.e.recordedBefore?.agency||'').find(Boolean)||'—';
  const job=priority.map(x=>x.e.job||x.e.recordedAfter?.job||'').find(Boolean)||'';
+ // Printed reason and observation cells are documentary facts, distinct from
+ // validation notes. Keep both sources when ODJ and RD actually differ.
+ const annotation=(key:'movementReason'|'observations')=>{
+  const options=priority.map(x=>({value:String(x.e[key]||'').trim(),type:x.doc.documentType==='cr'?'ODJ':'RD'}))
+   .filter(x=>!!x.value);
+  const distinct=options.filter((x,i)=>options.findIndex(v=>norm(v.value)===norm(x.value))===i);
+  if(!distinct.length)return '—';
+  return distinct.length===1?distinct[0].value:distinct.map(x=>x.type+' : '+x.value).join('\n');
+ };
  const checks:string[]=[],resolved:string[]=[];
  // Ne jamais masquer un éventuel écart réel GF sur ces mouvements.
  if(constantStageGF&&filled(originalBeforeGF)&&filled(originalAfterGF)&&originalBeforeGF!==originalAfterGF){
@@ -186,7 +195,8 @@ function toRow(g:Group):QuarterlyRow{
  const date=g.items[0].doc.date;
  return {id:g.base+':'+g.items[0].e.id,name:first.name,kind:first.kind,
   meeting:date,effective:first.effective||'',
-  agency,job,gfBefore:fmt(beforeGF),gfAfter:fmt(afterGF),
+  agency,job,movementReason:annotation('movementReason'),observations:annotation('observations'),
+  gfBefore:fmt(beforeGF),gfAfter:fmt(afterGF),
   nrBefore:fmt(beforeNR),nrAfter:fmt(afterNR)+(estimated?'*':''),
   nrSteps:steps===undefined||!Number.isInteger(steps)?'—':String(steps),
   source:sourceRefs.join(', '),sources:[...new Set(g.items.map(x=>x.ref))],
