@@ -6,6 +6,9 @@ import {calculateQuarterlyReport,isCadresDocument,kindLabels} from '../lib/csp-q
 import {enrichQuarterlyAnnotations} from '../lib/csp-quarterly-annotations';
 import type {QuarterlyDocument,QuarterlyReport,QuarterlyEvent} from '../lib/csp-quarterly-report';
 type ImportMeta={id:string;name:string;date:string;status:string;documentType:'cr'|'rd';perEventValidation?:boolean;automaticallyValidated?:boolean};
+type AnnotationCacheEntry={events:QuarterlyEvent[];motifPages:number[];observationPages:number[]};
+const printedMotif=(value:string)=>/^\\s*MOTIFS?(?:\\s|$)/i.test(value);
+const printedObservation=(value:string)=>/^\\s*(?:OBSERVATIONS?|COMMENTAIRES?|REMARQUES?)(?:\\s|$)/i.test(value);
 const current=new Date();
 export default function CspQuarterlyReport({revision=0}:{revision?:number}){
  const [year,setYear]=useState(current.getFullYear());
@@ -17,7 +20,7 @@ export default function CspQuarterlyReport({revision=0}:{revision?:number}){
  const [report,setReport]=useState<QuarterlyReport|null>(null);
  const [annotationStatus,setAnnotationStatus]=useState('');
  const [annotationWarnings,setAnnotationWarnings]=useState<string[]>([]);
- const annotationCache=useRef(new Map<string,QuarterlyEvent[]>());
+ const annotationCache=useRef(new Map<string,AnnotationCacheEntry>());
  const [loadRevision,setLoadRevision]=useState(0);
  useEffect(()=>{annotationCache.current.clear();},[revision]);
  useEffect(()=>{setReport(null);setError('');},[year,quarter,revision]);
@@ -59,18 +62,36 @@ export default function CspQuarterlyReport({revision=0}:{revision?:number}){
       wantsObservations&&!e.observations));
     if(needsPdf){
      try{
-      let extracted=annotationCache.current.get(fresh.id);
-      if(!extracted){
+      let cached=annotationCache.current.get(fresh.id);
+      if(!cached){
        setAnnotationStatus('Relecture documentaire (motifs / observations) : '+fresh.name);
        const original=await fetch('/api/agents/files/'+encodeURIComponent(fresh.id),{cache:'no-store'});
        if(!original.ok)throw Error('PDF original indisponible (HTTP '+original.status+').');
        const {readCspPDF}=await import('../lib/csp-extract');
        const pdf=new File([await original.blob()],fresh.name,{type:'application/pdf'});
        const extraction=await readCspPDF(pdf,()=>{},fresh.documentType);
-       extracted=extraction.events as QuarterlyEvent[];
-       annotationCache.current.set(fresh.id,extracted);
+       cached={
+        events:extraction.events as QuarterlyEvent[],
+        motifPages:extraction.pages.filter(p=>p.items.some(i=>printedMotif(i.str))).map(p=>p.page),
+        observationPages:extraction.pages.filter(p=>p.items.some(i=>printedObservation(i.str))).map(p=>p.page)
+       };
+       annotationCache.current.set(fresh.id,cached);
       }
-      events=enrichQuarterlyAnnotations(events,extracted);
+      events=enrichQuarterlyAnnotations(events,cached.events);
+      // The PDF may contain a real MOTIF header even when pdfjs cannot
+      // associate a text fragment with a specific validated row. Never hide
+      // such cases silently or confuse a missing text with an empty motif.
+      const missing=events.filter(e=>
+       e.selected&&!e.candidacy&&
+       ((wantsMotif&&['mesure','reclassement','avancement','posthume'].includes(e.kind)&&
+         cached!.motifPages.includes(e.page??-1)&&!e.movementReason)||
+        (wantsObservations&&cached!.observationPages.includes(e.page??-1)&&!e.observations)));
+      if(missing.length){
+       const list=missing.slice(0,12).map(e=>e.name+' (p. '+e.page+')').join(', ');
+       readWarnings.push(fresh.name+' : '+missing.length+
+        ' ligne(s) avec en-tête Motif/Observations mais texte non récupéré : '+list+
+        (missing.length>12?' et '+(missing.length-12)+' autre(s)':''));
+      }
      }catch(ex){
       readWarnings.push(fresh.name+' : '+(ex instanceof Error?ex.message:'lecture impossible'));
      }
@@ -170,7 +191,7 @@ export default function CspQuarterlyReport({revision=0}:{revision?:number}){
    </details>
   </section>
   {annotationStatus&&<p className="filter-note" role="status">{annotationStatus}</p>}
-  {!!annotationWarnings.length&&<details className="document-folder"><summary>Informations non récupérées dans certains PDF ({annotationWarnings.length})</summary><div className="document-folder-content"><p>Le compte rendu reste disponible ; ces textes n’ont pas été inventés.</p><ul>{annotationWarnings.map((x,i)=><li key={i}>{x}</li>)}</ul></div></details>}
+  {!!annotationWarnings.length&&<details className="document-folder" open><summary>Motifs / observations restant à contrôler ({annotationWarnings.length} document(s))</summary><div className="document-folder-content"><p>Un PDF peut contenir un motif imprimé sans que son texte soit correctement associé à l’agent. Ces cas sont signalés explicitement ; aucune valeur n’est inventée et les décisions restent validées.</p><ul>{annotationWarnings.map((x,i)=><li key={i}>{x}</li>)}</ul></div></details>}
   {error&&<p className="notice" role="alert">{error}</p>}
   {!report&&!busy&&<p className="filter-note">Sélectionner une période, puis préparer le rapport. Les données ne sont chargées que sur demande pour limiter la consommation Supabase.</p>}
   {report&&<>
