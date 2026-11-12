@@ -1,4 +1,5 @@
 import {normalName} from './agents.ts';
+import {readCspRowAnnotations} from './csp-row-annotations.ts';
 import {validDate} from './csp.ts';
 import type {CspEvent} from './csp.ts';
 import type {CspPage,CspPageReport,CspTextItem} from './csp-extract.ts';
@@ -74,6 +75,7 @@ function extractPotentialBeneficiaries(pg:CspPage,report:CspPageReport):CspEvent
   const valid=awarded!==undefined&&awarded>=1&&awarded<=20;
   const mismatch=valid&&before!==undefined&&after!==undefined&&after!==before+awarded*5;
   events.push({id:`p${pg.page}b${ix}`,name:row.text.trim(),kind:'avancement',effective,page:pg.page,selected:true,
+   ...readCspRowAnnotations(pg,head.y,band),
    ...(firstGF!==undefined?{gfBefore:firstGF}:{}),...(before!==undefined?{nrBefore:before}:{}),
    ...(after!==undefined?{nrAfter:after}:{}),...(valid?{nrSteps:awarded}:{}),
    ...(!valid||mismatch?{extractionIssue:mismatch?'Nombre de NR accordé incompatible avec les NR avant/après. Vérifier.':'Nombre de NR accordé absent ou illisible. Vérifier.'}:{})});
@@ -123,7 +125,8 @@ export function extractBeneficiaryAdvancements(pg:CspPage,report:CspPageReport):
   const cell=rows(nrItems.filter(i=>i.y<hi&&i.y>lo)).map(r=>r.text).join(' ').trim();
   const parsed=cell.match(/^(\d{1,3})\s*(?:NR)?$/i),count=parsed?Number(parsed[1]):undefined;
   const valid=count!==undefined&&count>=1&&count<=20;
-  events.push({id:`p${pg.page}b${ix}`,name:r.text.trim(),kind:'avancement',effective,page:pg.page,selected:true,...(valid?{nrSteps:count}:{extractionIssue:'Avancement reconnu : nombre de NR absent, illisible ou hors limites. Vérifier cette ligne.'})});
+  events.push({id:`p${pg.page}b${ix}`,name:r.text.trim(),kind:'avancement',effective,page:pg.page,selected:true,
+   ...readCspRowAnnotations(pg,head.y,content.filter(i=>i.y<hi&&i.y>lo)),...(valid?{nrSteps:count}:{extractionIssue:'Avancement reconnu : nombre de NR absent, illisible ou hors limites. Vérifier cette ligne.'})});
  }
  report.count=events.length;report.status=events.length?'read':'unsupported';report.note=events.length?'Tableau Bénéficiaires / Nombre de NR reconnu ; date d’effet commune '+effective+'.'+(events.some(e=>e.extractionIssue)?' Certains nombres de NR restent à vérifier.':''):'Tableau d’avancement reconnu, aucune ligne nominative lisible.';
  return events;
