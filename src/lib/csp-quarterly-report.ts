@@ -1,4 +1,5 @@
 import {annotationForCspKind} from './csp-annotation-rules.ts';
+import {cleanCspPrintedCell,formatCspNominationAptitude} from './csp-quarterly-document-text.ts';
 /** Rapport CSP cadres par date de séance, sans modification des validations. */
 export type QuarterlyEvent = {
  id:string; name:string; agentId?:string; kind:string; effective:string;
@@ -160,14 +161,14 @@ function toRow(g:Group):QuarterlyRow{
  const annotation=(key:'movementReason'|'observations')=>{
   if(requiredAnnotation!==key)return '—';
   const odj=g.items.filter(x=>x.doc.documentType==='cr')
-   .map(x=>String(x.e[key]||'').trim()).filter(Boolean);
+   .map(x=>cleanCspPrintedCell(x.e[key])).filter(Boolean);
   const distinct=odj.filter((value,i)=>odj.findIndex(other=>norm(other)===norm(value))===i);
   return distinct.length?distinct.join('\n'):'—';
  };
  // The RD APTITUDE is documentary text, never a career decision or a
  // technical validation note; only the RD can supply it.
  const aptitudes=g.items.filter(x=>x.doc.documentType==='rd')
-  .map(x=>String(x.e.aptitude||'').trim()).filter(Boolean);
+  .map(x=>formatCspNominationAptitude(x.e.aptitude,first.effective)).filter(Boolean);
  const distinctAptitudes=aptitudes.filter((v,i)=>aptitudes.findIndex(t=>norm(v)===norm(t))===i);
  const aptitude=first.kind==='nomination'?(distinctAptitudes.join('\n')||'—'):'—';
  const checks:string[]=[],resolved:string[]=[];
@@ -397,9 +398,9 @@ export function calculateQuarterlyReport(documents:QuarterlyDocument[],year:numb
    }));
   };
   const matches=docs.filter(d=>d.documentType==='cr'&&d.date===meeting&&['review','validated'].includes(d.status))
-   .flatMap(d=>(d.events||[]).filter(e=>match(e)&&!!String(e[field]||'').trim()).map(e=>({e,d})));
+   .flatMap(d=>(d.events||[]).filter(e=>match(e)&&!!cleanCspPrintedCell(e[field])).map(e=>({e,d})));
   if(matches.length!==1)return row;
-  return {...row,[field]:String(matches[0].e[field]).trim()};
+  return {...row,[field]:cleanCspPrintedCell(matches[0].e[field])};
  };
  const rows=retained.map(reportRow).sort((a,b)=>a.meeting.localeCompare(b.meeting)||
   kindOrder.indexOf(a.kind)-kindOrder.indexOf(b.kind)||a.name.localeCompare(b.name,'fr')||a.effective.localeCompare(b.effective));
