@@ -397,3 +397,39 @@ test('Si seul le RD a un commentaire, le CR ne le présente pas comme une inform
  assert.equal(r.rows.length,1);
  assert.equal(r.rows[0].observations,'—');
 });
+
+test('Un RD validé peut afficher le commentaire documentaire de l ODJ restant en vérification',()=>{
+ const common={kind:'mutation' as const,name:'AGENT MUTATION',agentId:'AA-001',
+  effective:'2026-01-01',gfBefore:17,gfAfter:17,nrBefore:310,nrAfter:310,
+  recordedBefore:{gf:17,nr:310},recordedAfter:{gf:17,nr:310}};
+ const odj=doc([ev({...common,observations:'Observations de la ligne ODJ',approved:undefined})],
+  {id:'odj-review',status:'review',date:'2026-04-10',name:'ODJ-CSP Cadres du 10-04-2026.pdf'});
+ const rd=doc([ev({...common,observations:undefined})],
+  {id:'rd-valide',status:'validated',documentType:'rd',date:'2026-04-10',name:'RD-CSP Cadres du 10-04-2026.pdf'});
+ const before=JSON.stringify([odj,rd]);
+ const report=calculateQuarterlyReport([odj,rd],2026,2);
+ assert.equal(report.rows.length,1,'ODJ review ne crée pas une deuxième décision');
+ assert.deepEqual(report.rows[0].sources,['D02'],'seul le RD validé est retenu comme décision');
+ assert.equal(report.rows[0].observations,'Observations de la ligne ODJ');
+ assert.equal(report.rows[0].gfBefore,'17');
+ assert.equal(report.rows[0].nrAfter,'310');
+ assert.equal(odj.status,'review');
+ assert.equal(JSON.stringify([odj,rd]),before,'lecture documentaire sans modification des CSP');
+});
+test('Un ODJ en vérification ambigu ou incompatible ne complète jamais le RD',()=>{
+ const base={kind:'mutation' as const,name:'AGENT MUTATION',agentId:'AA-001',
+  effective:'2026-01-01',gfBefore:17,gfAfter:17,nrBefore:310,nrAfter:310};
+ const rd=doc([ev(base)],{id:'rd-valide',status:'validated',documentType:'rd',date:'2026-04-10'});
+ const odj=doc([ev({...base,observations:'Observation A',approved:undefined})],
+  {id:'odj-review',status:'review',date:'2026-04-10'});
+ const another=doc([ev({...base,observations:'Observation B',approved:undefined})],
+  {id:'odj-second',status:'review',date:'2026-04-10'});
+ const ambiguous=calculateQuarterlyReport([rd,odj,another],2026,2);
+ assert.equal(ambiguous.rows.length,1);
+ assert.equal(ambiguous.rows[0].observations,'—');
+ const otherNR=doc([ev({...base,nrBefore:315,nrAfter:315,observations:'Observation fausse',approved:undefined})],
+  {id:'odj-conflict',status:'review',date:'2026-04-10'});
+ const conflict=calculateQuarterlyReport([rd,otherNR],2026,2);
+ assert.equal(conflict.rows.length,1);
+ assert.equal(conflict.rows[0].observations,'—');
+});
