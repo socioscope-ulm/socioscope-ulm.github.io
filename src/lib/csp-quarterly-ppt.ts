@@ -63,8 +63,10 @@ function numberOfLines(value:string,width:number,fontSize=8.9){
  return String(value).split('\n').reduce((n,line)=>n+Math.max(1,Math.ceil(line.length/chars)),0);
 }
 function movementHeight(e:QuarterlyRow,columns:ReturnType<typeof getMovementColumns>){
+ // Motifs et observations peuvent contenir plusieurs lignes : ne plus
+ // plafonner les hauteurs à 0,82 in (le texte était alors tronqué).
  const lines=Math.max(...columns.map(c=>numberOfLines(c.value(e),c.width)));
- return Math.min(.82,Math.max(.40,.085+lines*.148));
+ return Math.min(4.25,Math.max(.40,.12+lines*.165));
 }
 /** Petites rubriques côte à côte verticalement ; grands motifs découpés selon l'espace restant.
  * Retourne le nombre total de mouvements insérés (test d'exhaustivité).
