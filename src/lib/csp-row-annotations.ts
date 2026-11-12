@@ -1,4 +1,5 @@
 import {normalName} from './agents.ts';
+import {cleanCspPrintedCell,isCspPageFooter} from './csp-quarterly-document-text.ts';
 import type {CspPage,CspTextItem} from './csp-extract.ts';
 
 export type CspRowAnnotations={movementReason?:string;observations?:string};
@@ -58,7 +59,7 @@ export function readCspRowAnnotations(page:CspPage,headerY:number,band:CspTextIt
   const padding=Math.min(34,Math.max(10,(rawMax-rawMin)*.30));
   const min=leftCenter===undefined?rawMin:Math.max(leftCenter+9,rawMin-padding);
   const max=rightCenter===undefined?rawMax:Math.min(rightCenter-10,rawMax+Math.min(17,padding*.55));
-  const value=text(band.filter(i=>textItemOverlapsColumn(i,min,max)));
+  const value=cleanCspPrintedCell(text(band.filter(i=>textItemOverlapsColumn(i,min,max)&&!isCspPageFooter(i,page))));
   if(!value)continue;
   if(reasonHeader(h.str))result.movementReason=value;
   else result.observations=value;
