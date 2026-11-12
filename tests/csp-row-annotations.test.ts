@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readCspRowAnnotations} from '../src/lib/csp-row-annotations.ts';
+import {readCspRowAnnotations,textItemOverlapsColumn} from '../src/lib/csp-row-annotations.ts';
 import {extractCspPages} from '../src/lib/csp-extract.ts';
 import {validateCspEvent,cspKey} from '../src/lib/csp.ts';
 import {enrichQuarterlyAnnotations} from '../src/lib/csp-quarterly-annotations.ts';
@@ -117,4 +117,38 @@ test('Motif ODJ dans une colonne repérée : conserver le texte sur deux lignes 
  assert.equal(event.movementReason,'NR encouragement à la mobilité');
  assert.equal(event.nrAfter,250);
  assert.equal(event.effective,'2026-04-01');
+});
+
+test('ODJ paysage du T2 : le texte du motif déborde légèrement avant le bord gauche de la cellule',()=>{
+ // Representative coordinates taken from a real landscape ODJ; anonymized.
+ const pg:CspPage={page:2,width:841.9,height:595.3,items:[
+  cell('CSP du 07/05/2026',650,540,180),
+  cell('MESURES SALARIALES',40,490,230),
+  cell('NOM PRENOM',66.6,384,63),
+  cell('UM/DUM',215.4,384,37),
+  cell('SDUM/FSDUM',350.8,384,61),
+  cell('GF',470.2,384,12.5),
+  cell('ANCIEN',501.8,389,37),cell('NR',512.6,379,13),
+  cell('NOUVEAU',540.7,389,45),cell('NR',556.8,379,13),
+  cell('MOTIF',652.7,384,28),
+  cell('DATE',764.4,389,27),cell("D'EFFET",757.9,379,37.5),
+  cell('AGENT EXEMPLE',53.8,351,110),
+  cell('14',471.4,351,10.1),cell('265',511.6,351,15),cell('270',555.7,351,15.1),
+  cell('NR encouragement à la mobilité',602.4,351,128.6),
+  cell('01/04/2026',754.2,351,45)
+ ]};
+ assert.equal(textItemOverlapsColumn(cell('NR encouragement à la mobilité',602.4,351,128.6),615,722),true);
+ assert.equal(textItemOverlapsColumn(cell('270',555.7,351,15.1),615,722),false);
+ const notes=readCspRowAnnotations(pg,384,pg.items.filter(i=>i.y===351));
+ assert.deepEqual(notes,{movementReason:'NR encouragement à la mobilité'});
+ const parsed=extractCspPages([pg],'cr');
+ assert.equal(parsed.events.length,1);
+ const e=parsed.events[0];
+ assert.equal(e.name,'AGENT EXEMPLE');
+ assert.equal(e.kind,'mesure');
+ assert.equal(e.movementReason,'NR encouragement à la mobilité');
+ assert.equal(e.gfBefore,14);
+ assert.equal(e.nrBefore,265);
+ assert.equal(e.nrAfter,270);
+ assert.equal(e.effective,'2026-04-01');
 });
