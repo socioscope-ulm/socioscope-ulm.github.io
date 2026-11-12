@@ -7,8 +7,8 @@ import {enrichQuarterlyAnnotations} from '../lib/csp-quarterly-annotations';
 import type {QuarterlyDocument,QuarterlyReport,QuarterlyEvent} from '../lib/csp-quarterly-report';
 type ImportMeta={id:string;name:string;date:string;status:string;documentType:'cr'|'rd';perEventValidation?:boolean;automaticallyValidated?:boolean};
 type AnnotationCacheEntry={events:QuarterlyEvent[];motifPages:number[];observationPages:number[]};
-const printedMotif=(value:string)=>/^\\s*MOTIFS?(?:\\s|$)/i.test(value);
-const printedObservation=(value:string)=>/^\\s*(?:OBSERVATIONS?|COMMENTAIRES?|REMARQUES?)(?:\\s|$)/i.test(value);
+const printedMotif=(value:string)=>/^\s*MOTIFS?(?:\s|$)/i.test(value);
+const printedObservation=(value:string)=>/^\s*(?:OBSERVATIONS?|COMMENTAIRES?|REMARQUES?)(?:\s|$)/i.test(value);
 const current=new Date();
 export default function CspQuarterlyReport({revision=0}:{revision?:number}){
  const [year,setYear]=useState(current.getFullYear());
