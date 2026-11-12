@@ -164,7 +164,13 @@ function toRow(g:Group):QuarterlyRow{
   const distinct=odj.filter((value,i)=>odj.findIndex(other=>norm(other)===norm(value))===i);
   return distinct.length?distinct.join('\n'):'—';
  };
- // The RD APTITUDE is documentary text, never a career decision or a\n // technical validation note; only the RD can supply it.\n const aptitudes=g.items.filter(x=>x.doc.documentType==='rd')\n  .map(x=>String(x.e.aptitude||'').trim()).filter(Boolean);\n const distinctAptitudes=aptitudes.filter((v,i)=>aptitudes.findIndex(t=>norm(v)===norm(t))===i);\n const aptitude=first.kind==='nomination'?(distinctAptitudes.join('\\n')||'—'):'—';\n const checks:string[]=[],resolved:string[]=[];
+ // The RD APTITUDE is documentary text, never a career decision or a
+ // technical validation note; only the RD can supply it.
+ const aptitudes=g.items.filter(x=>x.doc.documentType==='rd')
+  .map(x=>String(x.e.aptitude||'').trim()).filter(Boolean);
+ const distinctAptitudes=aptitudes.filter((v,i)=>aptitudes.findIndex(t=>norm(v)===norm(t))===i);
+ const aptitude=first.kind==='nomination'?(distinctAptitudes.join('\n')||'—'):'—';
+ const checks:string[]=[],resolved:string[]=[];
  // Ne jamais masquer un éventuel écart réel GF sur ces mouvements.
  if(constantStageGF&&filled(originalBeforeGF)&&filled(originalAfterGF)&&originalBeforeGF!==originalAfterGF){
   checks.push('Incohérence GF pour '+kindLabels[first.kind]+' : GF avant '+originalBeforeGF+' différent du GF après '+originalAfterGF+'. Les documents sources doivent être vérifiés.');
