@@ -1,8 +1,9 @@
 'use client';
-import {useEffect,useMemo,useState} from 'react';
+import {useEffect,useMemo,useRef,useState} from 'react';
 import {defaultMovementColumns,getMovementColumns,optionalMovementColumns,type OptionalMovementColumn} from '../lib/csp-quarterly-columns';
 import {ChevronRight,Download,RefreshCw,FileText} from 'lucide-react';
 import {calculateQuarterlyReport,isCadresDocument,kindLabels} from '../lib/csp-quarterly-report';
+import {enrichQuarterlyAnnotations} from '../lib/csp-quarterly-annotations';
 import type {QuarterlyDocument,QuarterlyReport,QuarterlyEvent} from '../lib/csp-quarterly-report';
 type ImportMeta={id:string;name:string;date:string;status:string;documentType:'cr'|'rd';perEventValidation?:boolean;automaticallyValidated?:boolean};
 const current=new Date();
@@ -14,14 +15,17 @@ export default function CspQuarterlyReport({revision=0}:{revision?:number}){
  const [busy,setBusy]=useState(false);
  const [error,setError]=useState('');
  const [report,setReport]=useState<QuarterlyReport|null>(null);
-
+ const [annotationStatus,setAnnotationStatus]=useState('');
+ const [annotationWarnings,setAnnotationWarnings]=useState<string[]>([]);
+ const annotationCache=useRef(new Map<string,QuarterlyEvent[]>());
  const [loadRevision,setLoadRevision]=useState(0);
+ useEffect(()=>{annotationCache.current.clear();},[revision]);
  useEffect(()=>{setReport(null);setError('');},[year,quarter,revision]);
  const grouped=useMemo(()=>Object.entries(kindLabels).map(([kind,label])=>({
   kind,label,count:report?.rows.filter(r=>r.kind===kind).length||0
  })).filter(x=>x.count),[report]);
  async function prepare(){
-  setBusy(true);setError('');setReport(null);
+  setBusy(true);setError('');setReport(null);setAnnotationStatus('');setAnnotationWarnings([]);
   try{
    const listing=await fetch('/api/csp',{cache:'no-store'});
    const body=await listing.json();
@@ -37,22 +41,48 @@ export default function CspQuarterlyReport({revision=0}:{revision?:number}){
    if(metas.length>45)throw Error('Trop de documents pour ce trimestre : traitement interrompu par sécurité.');
    if(older.length>150)throw Error('Historique CSP trop volumineux pour contrôler les mouvements déjà publiés.');
    const docs:QuarterlyDocument[]=[];
+   const wantsMotif=selectedColumns.includes('motif');
+   const wantsObservations=selectedColumns.includes('observations');
+   const readWarnings:string[]=[];
    // Read older validated decisions exclusively for report deduplication.
-   // Sequential queries avoid spikes in Supabase usage.
+   // The original PDFs are reread locally only when Motif / Observations are
+   // requested and only for the current quarter. Nothing is saved to Supabase.
    for(const meta of [...older,...metas]){
     const response=await fetch('/api/csp?id='+encodeURIComponent(meta.id),{cache:'no-store'});
     const detail=await response.json();
     if(!response.ok)throw Error(detail.error||'Impossible de lire '+meta.name);
     const fresh:ImportMeta=detail.meta||meta;
-   docs.push({id:fresh.id,name:fresh.name,date:fresh.date,status:fresh.status,
+    let events=(detail.events||[]) as QuarterlyEvent[];
+    const needsPdf=(wantsMotif||wantsObservations)&&fresh.date>=first&&fresh.date<next&&
+     events.some(e=>e.selected&&(
+      wantsMotif&&['avancement','reclassement','mesure','posthume'].includes(e.kind)&&!e.movementReason||
+      wantsObservations&&!e.observations));
+    if(needsPdf){
+     try{
+      let extracted=annotationCache.current.get(fresh.id);
+      if(!extracted){
+       setAnnotationStatus('Relecture documentaire (motifs / observations) : '+fresh.name);
+       const original=await fetch('/api/agents/files/'+encodeURIComponent(fresh.id),{cache:'no-store'});
+       if(!original.ok)throw Error('PDF original indisponible (HTTP '+original.status+').');
+       const {readCspPDF}=await import('../lib/csp-extract');
+       const pdf=new File([await original.blob()],fresh.name,{type:'application/pdf'});
+       const extraction=await readCspPDF(pdf,()=>{},fresh.documentType);
+       extracted=extraction.events as QuarterlyEvent[];
+       annotationCache.current.set(fresh.id,extracted);
+      }
+      events=enrichQuarterlyAnnotations(events,extracted);
+     }catch(ex){
+      readWarnings.push(fresh.name+' : '+(ex instanceof Error?ex.message:'lecture impossible'));
+     }
+    }
+    docs.push({id:fresh.id,name:fresh.name,date:fresh.date,status:fresh.status,
       documentType:fresh.documentType,perEventValidation:!!fresh.perEventValidation,
-      automaticallyValidated:fresh.automaticallyValidated===true,
-      events:(detail.events||[]) as QuarterlyEvent[]});
+      automaticallyValidated:fresh.automaticallyValidated===true,events});
    }
    const nextReport=calculateQuarterlyReport(docs,year,quarter);
-   setReport(nextReport);setLoadRevision(v=>v+1);
+   setReport(nextReport);setAnnotationWarnings(readWarnings);setLoadRevision(v=>v+1);
   }catch(ex){setError(ex instanceof Error?ex.message:'Impossible de préparer le compte rendu.');}
-  finally{setBusy(false);}
+  finally{setBusy(false);setAnnotationStatus('');}
  }
  async function exportPpt(){
   if(!report||!report.sources.length)return;
@@ -76,6 +106,7 @@ export default function CspQuarterlyReport({revision=0}:{revision?:number}){
       <li><b>ODJ et RD :</b> un mouvement confirmé ne compte qu’une fois, même si le RD présente le NR final dans une autre colonne.</li>
       <li><b>GF constant :</b> un RD qui confirme une nomination à GF constant peut valider les valeurs GF/NR de l’ODJ correspondant.</li>
       <li><b>Admissions au stage et titularisations :</b> le GF avant/après reste visible et le NR+ est masqué.</li>
+      <li><b>Motifs et observations :</b> les textes imprimés sur chaque ligne sont lus dans des colonnes indépendantes des notes de contrôle. La colonne Motif est placée avant la date ; les observations sont facultatives. Les PDF originaux peuvent être relus sans toucher aux validations.</li>
       <li><b>Contrôles :</b> les écarts réellement incohérents restent signalés ; un NR calculé est marqué d’un astérisque.</li>
       <li><b>Intégrité :</b> aucun document validé, aucune donnée individuelle ni aucun mouvement CSP n’est modifié par cet export.</li>
      </ul>
@@ -99,9 +130,13 @@ export default function CspQuarterlyReport({revision=0}:{revision?:number}){
    <legend>Colonnes des tableaux de mouvements</legend>
    <p className="filter-note">Toujours présentes : Nom / prénom, Agence / poste et CSP / effet.</p>
    <div className="analysis-options csp-column-options">{optionalMovementColumns.map(c=><label key={c.id} className="check-label">
-    <input type="checkbox" checked={selectedColumns.includes(c.id)} onChange={e=>setSelectedColumns(previous=>e.target.checked?[...previous,c.id]:previous.filter(id=>id!==c.id))}/>{c.label}
+    <input type="checkbox" checked={selectedColumns.includes(c.id)} onChange={e=>{
+     const checked=e.target.checked;
+     setSelectedColumns(previous=>checked?[...previous,c.id]:previous.filter(id=>id!==c.id));
+     if(checked&&(c.id==='motif'||c.id==='observations'))setReport(null);
+    }}/>{c.label}
    </label>)}</div>
-   <p className="filter-note">Pour les admissions au stage et les titularisations, le GF avant / après reste obligatoire et la colonne « NR + » n’est jamais affichée, même si elle est sélectionnée. Pour les autres motifs, les colonnes suivent votre sélection. L’aperçu et le PowerPoint respectent ces règles, rubrique par rubrique.</p>
+   <p className="filter-note">Les colonnes « Motif du mouvement » et « Observations / commentaires » sont facultatives : les cocher puis cliquer sur « Préparer le compte rendu ». Pour les documents plus anciens, le PDF original est relu localement uniquement sur demande ; aucune validation n’est modifiée. Le GF est toujours visible pour les admissions et titularisations, sans colonne NR +.</p>
   </fieldset>
   <section className="panel" aria-label="Contrôles documentaires du compte rendu" style={{margin:'16px 0',padding:14}}>
    <div className="panel-heading" style={{marginBottom:10}}>
@@ -134,6 +169,8 @@ export default function CspQuarterlyReport({revision=0}:{revision?:number}){
     </div>
    </details>
   </section>
+  {annotationStatus&&<p className="filter-note" role="status">{annotationStatus}</p>}
+  {!!annotationWarnings.length&&<details className="document-folder"><summary>Informations non récupérées dans certains PDF ({annotationWarnings.length})</summary><div className="document-folder-content"><p>Le compte rendu reste disponible ; ces textes n’ont pas été inventés.</p><ul>{annotationWarnings.map((x,i)=><li key={i}>{x}</li>)}</ul></div></details>}
   {error&&<p className="notice" role="alert">{error}</p>}
   {!report&&!busy&&<p className="filter-note">Sélectionner une période, puis préparer le rapport. Les données ne sont chargées que sur demande pour limiter la consommation Supabase.</p>}
   {report&&<>
