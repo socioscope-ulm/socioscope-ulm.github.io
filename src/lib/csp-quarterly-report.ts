@@ -13,9 +13,9 @@ export type QuarterlyEvent = {
 };
 export type QuarterlyDocument = {
  id:string; name:string; date:string; status:string; documentType:'cr'|'rd';
- perEventValidation?:boolean; automaticallyValidated?:boolean; events:QuarterlyEvent[];
+ perEventValidation?:boolean; automaticallyValidated?:boolean; unreadPages?:number; events:QuarterlyEvent[];
 };
-export type QuarterlySource = {id:string;ref:string;name:string;date:string;type:'ODJ'|'RD';status:string;automaticallyValidated?:boolean};
+export type QuarterlySource = {id:string;ref:string;name:string;date:string;type:'ODJ'|'RD';status:string;automaticallyValidated?:boolean;confirmedByRDForReport?:boolean};
 export type QuarterlyRow = {
  id:string; name:string; kind:string; meeting:string; effective:string;
  agency:string; job:string; movementReason:string; observations:string; gfBefore:string; gfAfter:string;
@@ -282,8 +282,40 @@ export function calculateQuarterlyReport(documents:QuarterlyDocument[],year:numb
  // Reuse the server's completion result: it checks active validation proofs,
  // unresolved events and unread pages. This never promotes events for export.
  const completedAutomatically=(d:QuarterlyDocument)=>d.status==='review'&&d.automaticallyValidated===true;
+ // The native CSP status is never changed here. In a CR, an ODJ whose
+ // decisions are all unambiguously confirmed by a validated RD is not a
+ // document still requiring a *documentary* decision. Some older ODJ records
+ // retain their raw "review" status although their RDs are validated.
+ const reportRDConfirmation=(d:QuarterlyDocument)=>{
+  if(d.documentType!=='cr'||d.status!=='review'||(d.unreadPages??0)>0||
+    !d.events.length)return false;
+  const original=d.events.filter(e=>e.selected===true&&!e.candidacy&&!e.nonRetained&&!e.nonRetainedByRD);
+  if(original.length!==d.events.length)return false;
+  const value=(e:QuarterlyEvent,k:'gfBefore'|'gfAfter'|'nrBefore'|'nrAfter')=>numeric(e,k);
+  const compatiblePair=(a:QuarterlyEvent,b:QuarterlyEvent)=>{
+   if(a.kind!==b.kind||a.effective!==b.effective||
+      norm(a.name)!==norm(b.name)||
+      a.agentId&&b.agentId&&a.agentId!==b.agentId)return false;
+   for(const key of ['reference','agency','job'] as const)
+    if(a[key]&&b[key]&&norm(a[key])!==norm(b[key]))return false;
+   for(const key of ['gfBefore','gfAfter','nrBefore','nrAfter'] as const){
+    const before=value(a,key),after=value(b,key);
+    if(before!==undefined&&after!==undefined&&before!==after)return false;
+   }
+   return true;
+  };
+  return original.every(event=>{
+   if(event.extractionIssue||!event.effective)return false;
+   const matches=docs.filter(rd=>rd.documentType==='rd'&&rd.date===d.date&&rd.status==='validated')
+    .flatMap(rd=>(rd.events||[]).filter(e=>isValidatedMovement(rd,e)&&compatiblePair(event,e)));
+   // A second identical RD is ambiguous, not permission to conceal an alert.
+   return matches.length===1;
+  });
+ };
  const sources=docs.map((d,i)=>({id:d.id,ref:'D'+String(i+1).padStart(2,'0'),
-  name:d.name,date:d.date,type:d.documentType==='cr'?'ODJ' as const:'RD' as const,status:d.status,automaticallyValidated:completedAutomatically(d)}));
+  name:d.name,date:d.date,type:d.documentType==='cr'?'ODJ' as const:'RD' as const,
+  status:d.status,automaticallyValidated:completedAutomatically(d),
+  confirmedByRDForReport:!completedAutomatically(d)&&reportRDConfirmation(d)}));
  const groups:Group[]=[];const candidates=new Map<string,QuarterlyCandidate>();const alerts:string[]=[];
  for(let index=0;index<docs.length;index++){
   const doc=docs[index],ref=sources[index].ref;
@@ -365,10 +397,10 @@ export function calculateQuarterlyReport(documents:QuarterlyDocument[],year:numb
  };
  const rows=retained.map(reportRow).sort((a,b)=>a.meeting.localeCompare(b.meeting)||
   kindOrder.indexOf(a.kind)-kindOrder.indexOf(b.kind)||a.name.localeCompare(b.name,'fr')||a.effective.localeCompare(b.effective));
- const pending=docs.filter(d=>d.status!=='validated'&&!completedAutomatically(d));
+ const pending=docs.filter((d,i)=>d.status!=='validated'&&!completedAutomatically(d)&&!sources[i].confirmedByRDForReport);
  const pendingDocuments=pending.length;
  const formatted=(d:string)=>d.slice(8,10)+'/'+d.slice(5,7)+'/'+d.slice(0,4);
- if(pendingDocuments)alerts.push(pendingDocuments+' document(s) encore en vérification : '+pending.map(d=>(d.documentType==='cr'?'ODJ':'RD')+' du '+formatted(d.date)).join(', ')+'. Les décisions confirmées dans un autre document validé restent prises en compte.');
+ if(pendingDocuments)alerts.push(pendingDocuments+' document(s) encore en vérification dans le CR : '+pending.map(d=>(d.documentType==='cr'?'ODJ':'RD')+' du '+formatted(d.date)).join(', ')+'. Les décisions déjà confirmées par un RD validé ne sont pas comptées parmi les mouvements à vérifier.');
  const meetings=[...new Set(docs.map(d=>d.date))];
  for(const meeting of meetings){
   const xs=sources.filter(s=>s.date===meeting);
