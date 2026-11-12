@@ -5,6 +5,7 @@ import {ChevronRight,Download,RefreshCw,FileText} from 'lucide-react';
 import {calculateQuarterlyReport,isCadresDocument,kindLabels} from '../lib/csp-quarterly-report';
 import {enrichQuarterlyAnnotations,recoverQuarterlyAnnotationsFromPages} from '../lib/csp-quarterly-annotations';
 import {annotationForCspKind} from '../lib/csp-annotation-rules.ts';
+import {needsRDNominationAptitude,recoverRDNominationAptitudes} from '../lib/csp-quarterly-aptitude.ts';
 import type {QuarterlyDocument,QuarterlyReport,QuarterlyEvent} from '../lib/csp-quarterly-report';
 type ImportMeta={id:string;name:string;date:string;status:string;documentType:'cr'|'rd';perEventValidation?:boolean;automaticallyValidated?:boolean;unreadPages?:number};
 type AnnotationCacheEntry={events:QuarterlyEvent[];fallback:QuarterlyEvent[];motifPages:number[];observationPages:number[]};
@@ -22,8 +23,9 @@ export default function CspQuarterlyReport({revision=0}:{revision?:number}){
  const [annotationStatus,setAnnotationStatus]=useState('');
  const [annotationWarnings,setAnnotationWarnings]=useState<string[]>([]);
  const annotationCache=useRef(new Map<string,AnnotationCacheEntry>());
+ const aptitudeCache=useRef(new Map<string,QuarterlyEvent[]>());
  const [loadRevision,setLoadRevision]=useState(0);
- useEffect(()=>{annotationCache.current.clear();},[revision]);
+ useEffect(()=>{annotationCache.current.clear();aptitudeCache.current.clear();},[revision]);
  useEffect(()=>{setReport(null);setError('');},[year,quarter,revision]);
  const grouped=useMemo(()=>Object.entries(kindLabels).map(([kind,label])=>({
   kind,label,count:report?.rows.filter(r=>r.kind===kind).length||0
@@ -98,6 +100,37 @@ export default function CspQuarterlyReport({revision=0}:{revision?:number}){
       readWarnings.push(fresh.name+' : '+(ex instanceof Error?ex.message:'lecture impossible'));
      }
     }
+    // Aptitude is taken from the original RD, only for the in-memory CR.
+    // No change to already validated events or individual career projections.
+    const readAptitude=fresh.documentType==='rd'&&fresh.status==='validated'&&
+     fresh.date>=first&&fresh.date<next&&needsRDNominationAptitude(events);
+    if(readAptitude){
+     try{
+      let cached=aptitudeCache.current.get(fresh.id);
+      if(!cached){
+       setAnnotationStatus('Relecture des aptitudes des nominations (RD) : '+fresh.name);
+       const original=await fetch('/api/agents/files/'+encodeURIComponent(fresh.id),{cache:'no-store'});
+       if(!original.ok)throw Error('RD original indisponible (HTTP '+original.status+').');
+       const {readCspPDF}=await import('../lib/csp-extract');
+       const pdf=new File([await original.blob()],fresh.name,{type:'application/pdf'});
+       const extraction=await readCspPDF(pdf,()=>{},'rd');
+       cached=recoverRDNominationAptitudes(events,extraction.pages);
+       aptitudeCache.current.set(fresh.id,cached);
+      }
+      events=events.map(e=>{
+       const original=cached.find(x=>x.id===e.id&&x.name===e.name&&x.kind===e.kind);
+       return original?.aptitude?{...e,aptitude:original.aptitude}:e;
+      });
+      const missing=events.filter(e=>e.kind==='nomination'&&e.selected===true&&
+       (!fresh.perEventValidation||e.approved===true)&&!e.aptitude);
+      if(missing.length)
+       readWarnings.push(fresh.name+' : aptitude RD non retrouvée pour '+
+        missing.map(e=>e.name+' (p. '+(e.page||'?')+')').join(', ')+'.');
+     }catch(ex){
+      readWarnings.push(fresh.name+' : relecture des aptitudes RD impossible : '+
+       (ex instanceof Error?ex.message:'lecture impossible')+'.');
+     }
+    }
     docs.push({id:fresh.id,name:fresh.name,date:fresh.date,status:fresh.status,
       documentType:fresh.documentType,perEventValidation:!!fresh.perEventValidation,
       automaticallyValidated:fresh.automaticallyValidated===true,unreadPages:fresh.unreadPages,events});
@@ -128,6 +161,7 @@ export default function CspQuarterlyReport({revision=0}:{revision?:number}){
       <li><b>Une seule présentation par décision :</b> un mouvement déjà présenté dans une CSP antérieure n’est pas repris comme un nouveau mouvement. Le rapprochement utilise l’agent, le motif, la date d’effet, les références et les valeurs GF/NR. Deux véritables évolutions restent distinctes.</li>
       <li><b>ODJ et RD :</b> un mouvement confirmé ne compte qu’une fois, même si le RD présente le NR final dans une autre colonne.</li>
       <li><b>GF constant :</b> un RD qui confirme une nomination à GF constant peut valider les valeurs GF/NR de l’ODJ correspondant.</li>
+      <li><b>Nomination aux postes vacants :</b> la colonne « Aptitude » reprend les mentions imprimées dans le RD pour chaque candidat retenu ; cette lecture ne modifie aucune validation.</li>
       <li><b>Admissions au stage et titularisations :</b> le GF avant/après reste visible et le NR+ est masqué.</li>
       <li><b>Motifs et observations automatiques :</b> les ODJ fournissent le « Motif » pour les reclassements et mesures salariales ; les « Observations / commentaires » pour les admissions au stage, titularisations, mutations d’office et avancements. La colonne correspondante apparaît automatiquement avant « CSP / effet ». Les PDF historiques sont relus sans aucune nouvelle validation.</li>
       <li><b>Contrôles :</b> les écarts réellement incohérents restent signalés ; un NR calculé est marqué d’un astérisque.</li>
@@ -201,7 +235,7 @@ export default function CspQuarterlyReport({revision=0}:{revision?:number}){
    </details>
   </section>
   {annotationStatus&&<p className="filter-note" role="status">{annotationStatus}</p>}
-  {!!annotationWarnings.length&&<details className="document-folder" open><summary>Motifs / observations restant à contrôler ({annotationWarnings.length} document(s))</summary><div className="document-folder-content"><p>Un PDF peut contenir un motif imprimé sans que son texte soit correctement associé à l’agent. Ces cas sont signalés explicitement ; aucune valeur n’est inventée et les décisions restent validées.</p><ul>{annotationWarnings.map((x,i)=><li key={i}>{x}</li>)}</ul></div></details>}
+  {!!annotationWarnings.length&&<details className="document-folder" open><summary>Informations documentaires à contrôler ({annotationWarnings.length} document(s))</summary><div className="document-folder-content"><p>Un motif, une observation ou une aptitude peut être présent dans un PDF sans pouvoir être rattaché avec certitude au bon mouvement. Les documents concernés sont signalés ; aucun texte n’est inventé et les validations restent inchangées.</p><ul>{annotationWarnings.map((x,i)=><li key={i}>{x}</li>)}</ul></div></details>}
   {error&&<p className="notice" role="alert">{error}</p>}
   {!report&&!busy&&<p className="filter-note">Sélectionner une période, puis préparer le rapport. Les données ne sont chargées que sur demande pour limiter la consommation Supabase.</p>}
   {report&&<>
