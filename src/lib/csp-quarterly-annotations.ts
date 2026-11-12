@@ -11,10 +11,16 @@ export function enrichQuarterlyAnnotations(events:QuarterlyEvent[],read:Quarterl
   const same=(other:QuarterlyEvent)=>other.kind===event.kind&&norm(other.name)===norm(event.name);
   let match=read.find(other=>other.id===event.id&&same(other));
   if(!match){
-   const possible=read.filter(other=>same(other)&&other.effective===event.effective&&
-    (event.page===undefined||other.page===event.page||
-      (Array.isArray(event.pages)&&other.page!==undefined&&event.pages.includes(other.page))));
-   if(possible.length===1)match=possible[0];
+   // Without an exact row id, never guess when this agent has multiple
+   // same-kind same-date decisions (including cumulative advancements).
+   const ownDuplicates=events.filter(other=>other.kind===event.kind&&
+    norm(other.name)===norm(event.name)&&other.effective===event.effective);
+   if(ownDuplicates.length===1){
+    const possible=read.filter(other=>same(other)&&other.effective===event.effective&&
+     (event.page===undefined||other.page===event.page||
+       (Array.isArray(event.pages)&&other.page!==undefined&&event.pages.includes(other.page))));
+    if(possible.length===1)match=possible[0];
+   }
   }
   if(!match)return event;
   const movementReason=event.movementReason||match.movementReason;
