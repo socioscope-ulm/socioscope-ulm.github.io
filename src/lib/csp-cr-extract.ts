@@ -46,6 +46,15 @@ export function extractCrPage(pg:CspPage,kind:CspKind,report:CspPageReport):CspE
   const name=cell(nameCol);if(!name||!/[A-ZÀ-Ÿ]/.test(name))continue;
   const e:CspEvent={id:`p${pg.page}r${ix}`,name,kind,effective:date(cell(dateCol)),page:pg.page,selected:true};
   Object.assign(e,readCspRowAnnotations(pg,head.y,band));
+  // ODJ tables already have reliable column positions from crTable().
+  // Read annotation cells through those positions as a second independent
+  // method; PDFs may split/offset MOTIF headings over multiple lines.
+  const annotationCell=(c?:Column)=>text(band.filter(i=>
+   !!c&&i.x+Math.min(i.width/2,12)>=c.left&&i.x+Math.min(i.width/2,12)<c.right));
+  const printedMotif=annotationCell(find(/^MOTIFS?(?: |$)/));
+  const printedObservations=annotationCell(find(/^(?:OBSERVATIONS?|COMMENTAIRES?|REMARQUES?)(?: |$)/));
+  if(printedMotif)e.movementReason=printedMotif;
+  if(printedObservations)e.observations=printedObservations;
   const issues:string[]=[];
   const readNumber=(column:Column|undefined,key:'gfBefore'|'gfAfter'|'nrBefore'|'nrAfter')=>{const n=num(column);if(n!==undefined&&n>=1&&n<=(key.startsWith('gf')?30:999))e[key]=n;else issues.push(`${key.startsWith('gf')?'GF':'NR'} ${key.endsWith('Before')?'avant':'après'} absent ou illisible`);};
   if(kind==='reclassement'){
