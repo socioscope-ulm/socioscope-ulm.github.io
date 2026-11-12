@@ -6,7 +6,7 @@ test('GF avant/apres est toujours visible pour admission et titularisation',()=>
  for(const kind of ['admission','titularisation']){
   const columns=getMovementColumns([],kind);
   assert.ok(columns.some(c=>c.id==='gf'));
-  assert.deepEqual(columns.map(c=>c.id),['name','agency','dates','gf']);
+  assert.deepEqual(columns.map(c=>c.id),['name','agency','observations','dates','gf']);
  }
 });
 test('Les autres motifs respectent la case GF et les colonnes selectionnees',()=>{
@@ -14,7 +14,7 @@ test('Les autres motifs respectent la case GF et les colonnes selectionnees',()=
   assert.equal(getMovementColumns([],kind).some(c=>c.id==='gf'),false);
   assert.equal(getMovementColumns(['gf'],kind).some(c=>c.id==='gf'),true);
  }
- assert.deepEqual(getMovementColumns(['nr'],'admission').map(c=>c.id),['name','agency','dates','gf','nr']);
+ assert.deepEqual(getMovementColumns(['nr'],'admission').map(c=>c.id),['name','agency','observations','dates','gf','nr']);
 });
 test('Les largeurs des tableaux restent constantes quel que soit le motif',()=>{
  const total=columns=>columns.reduce((sum,c)=>sum+c.width,0);
@@ -43,16 +43,30 @@ test('NR+ reste une option pour les autres mouvements et les largeurs restent é
  }
 });
 
-test('Motif et observations sont des colonnes activables avant CSP / effet',()=>{
- const columns=getMovementColumns(['motif','observations','gf','nr'],'mesure');
- assert.deepEqual(columns.slice(0,5).map(c=>c.id),['name','agency','motif','observations','dates']);
- assert.equal(columns[2].header,'MOTIF');
- assert.equal(columns[3].header,'OBSERVATIONS');
- assert.equal(getMovementColumns().some(c=>c.id==='motif'||c.id==='observations'),false,
-  'pas de téléchargement automatique des PDF originaux pour un CR sans ces options');
- assert.equal(columns.reduce((n,c)=>n+c.width,0).toFixed(2),'12.33');
+test('Motif affiché automatiquement sur reclassements et mesures, avant la date',()=>{
+ for(const kind of ['reclassement','mesure']){
+  const columns=getMovementColumns([],kind);
+  assert.deepEqual(columns.slice(0,4).map(c=>c.id),['name','agency','motif','dates']);
+  assert.equal(columns[2].header,'MOTIF');
+  assert.equal(columns.some(c=>c.id==='observations'),false);
+ }
 });
-test('Motif et observations ne suppriment pas GF obligatoire ni la suppression du NR+ de stage',()=>{
- const ids=getMovementColumns(['motif','observations','nrSteps'],'admission').map(c=>c.id);
- assert.deepEqual(ids,['name','agency','motif','observations','dates','gf']);
+test('Observations affichées automatiquement sur admissions, titularisations, mutations et avancements',()=>{
+ for(const kind of ['admission','titularisation','mutation','avancement']){
+  const columns=getMovementColumns([],kind);
+  assert.deepEqual(columns.slice(0,4).map(c=>c.id),['name','agency','observations','dates']);
+  assert.equal(columns.some(c=>c.id==='motif'),false);
+ }
+ const stage=getMovementColumns(['nrSteps'],'admission').map(c=>c.id);
+ assert.deepEqual(stage,['name','agency','observations','dates','gf']);
+});
+test('Plus de cases activables Motif et Observations; tailles de page constantes',async()=>{
+ const {optionalMovementColumns,defaultMovementColumns}=await import('../src/lib/csp-quarterly-columns.ts');
+ assert.deepEqual(optionalMovementColumns.map(c=>c.id),['gf','nr','nrSteps','source']);
+ assert.deepEqual(defaultMovementColumns,['gf','nr','nrSteps','source']);
+ assert.equal(getMovementColumns().some(c=>c.id==='motif'||c.id==='observations'),false);
+ const kinds=['admission','titularisation','mutation','avancement','reclassement','mesure','nomination','posthume'];
+ for(const kind of kinds){
+  assert.equal(getMovementColumns(defaultMovementColumns,kind).reduce((n,c)=>n+c.width,0).toFixed(2),'12.33');
+ }
 });
