@@ -339,7 +339,31 @@ export function calculateQuarterlyReport(documents:QuarterlyDocument[],year:numb
     quarterKey(group.items[0].e.effective)!==quarterKey(original.date)
   });
  }
- const rows=retained.map(toRow).sort((a,b)=>a.meeting.localeCompare(b.meeting)||
+ // Documentary-only ODJ information may still be present when a RD
+ // confirmed the decision while the ODJ remains "À vérifier".
+ // These ODJ fields are display-only. They cannot validate a decision,
+ // create a movement, or change a single GF/NR value.
+ const reportRow=(group:Group):QuarterlyRow=>{
+  const row=toRow(group),field=annotationForCspKind(row.kind);
+  if(!field||row[field]!=='—')return row;
+  const base=group.items[0].e,meeting=group.items[0].doc.date;
+  const match=(other:QuarterlyEvent)=>{
+   if(other.kind!==base.kind||other.effective!==base.effective||
+      norm(other.agentId||other.name)!==norm(base.agentId||base.name)||
+      other.selected===false||other.candidacy||other.nonRetained||other.nonRetainedByRD)return false;
+   if(base.reference&&other.reference&&norm(base.reference)!==norm(other.reference))return false;
+   return group.items.every(x=>['gfBefore','gfAfter','nrBefore','nrAfter'].every(k=>{
+    const key=k as 'gfBefore'|'gfAfter'|'nrBefore'|'nrAfter';
+    const a=numeric(x.e,key),b=numeric(other,key);
+    return a===undefined||b===undefined||a===b;
+   }));
+  };
+  const matches=docs.filter(d=>d.documentType==='cr'&&d.date===meeting&&['review','validated'].includes(d.status))
+   .flatMap(d=>(d.events||[]).filter(e=>match(e)&&!!String(e[field]||'').trim()).map(e=>({e,d})));
+  if(matches.length!==1)return row;
+  return {...row,[field]:String(matches[0].e[field]).trim()};
+ };
+ const rows=retained.map(reportRow).sort((a,b)=>a.meeting.localeCompare(b.meeting)||
   kindOrder.indexOf(a.kind)-kindOrder.indexOf(b.kind)||a.name.localeCompare(b.name,'fr')||a.effective.localeCompare(b.effective));
  const pending=docs.filter(d=>d.status!=='validated'&&!completedAutomatically(d));
  const pendingDocuments=pending.length;
