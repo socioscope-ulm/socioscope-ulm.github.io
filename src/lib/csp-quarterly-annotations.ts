@@ -1,5 +1,6 @@
 import {annotationForCspKind} from './csp-annotation-rules.ts';
 import {readCspRowAnnotations} from './csp-row-annotations.ts';
+import {cleanCspPrintedCell} from './csp-quarterly-document-text.ts';
 import {cspNameHeader} from './csp-table-header.ts';
 import type {CspPage,CspTextItem} from './csp-extract.ts';
 import type {QuarterlyEvent} from './csp-quarterly-report.ts';
@@ -12,6 +13,10 @@ const norm=(v:unknown)=>String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/
  */
 export function enrichQuarterlyAnnotations(events:QuarterlyEvent[],read:QuarterlyEvent[]):QuarterlyEvent[]{
  return events.map(event=>{
+  // Some older PDF imports recorded the printed page count (e.g. "1/1")
+  // instead of an empty observation. Clean this temporary CR copy first.
+  const base=event.observations&&!cleanCspPrintedCell(event.observations)
+   ?{...event,observations:undefined}:event;
   const same=(other:QuarterlyEvent)=>other.kind===event.kind&&norm(other.name)===norm(event.name);
   let match=read.find(other=>other.id===event.id&&same(other));
   if(!match){
@@ -26,11 +31,11 @@ export function enrichQuarterlyAnnotations(events:QuarterlyEvent[],read:Quarterl
     if(possible.length===1)match=possible[0];
    }
   }
-  if(!match)return event;
-  const movementReason=event.movementReason||match.movementReason;
-  const observations=event.observations||match.observations;
-  if(!movementReason&&!observations)return event;
-  return {...event,...(movementReason?{movementReason}:{}),...(observations?{observations}:{})};
+  if(!match)return base;
+  const movementReason=cleanCspPrintedCell(base.movementReason)||cleanCspPrintedCell(match.movementReason);
+  const observations=cleanCspPrintedCell(base.observations)||cleanCspPrintedCell(match.observations);
+  if(!movementReason&&!observations)return base;
+  return {...base,...(movementReason?{movementReason}:{}),...(observations?{observations}:{})};
  });
 }
 
@@ -45,7 +50,7 @@ export function recoverQuarterlyAnnotationsFromPages(events:QuarterlyEvent[],pag
  const pagesByNumber=new Map(pages.map(p=>[p.page,p]));
  return events.map(event=>{
   const field=annotationForCspKind(event.kind);
-  if(!field||event[field]||!event.page)return event;
+  if(!field||cleanCspPrintedCell(event[field])||!event.page)return event;
   const page=pagesByNumber.get(event.page);
   if(!page)return event;
   const head=cspNameHeader(page.items)?.head;
