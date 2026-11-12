@@ -15,7 +15,7 @@ const current=new Date();
 export default function CspQuarterlyReport({revision=0}:{revision?:number}){
  const [year,setYear]=useState(current.getFullYear());
  const [quarter,setQuarter]=useState(Math.ceil((current.getMonth()+1)/3));
- const [includeCandidates,setIncludeCandidates]=useState(true);
+ const [includeCandidates,setIncludeCandidates]=useState(false);
  const [selectedColumns,setSelectedColumns]=useState<OptionalMovementColumn[]>(defaultMovementColumns);
  const [busy,setBusy]=useState(false);
  const [error,setError]=useState('');
@@ -162,7 +162,7 @@ export default function CspQuarterlyReport({revision=0}:{revision?:number}){
       <li><b>ODJ et RD :</b> un mouvement confirmé ne compte qu’une fois, même si le RD présente le NR final dans une autre colonne.</li>
       <li><b>GF constant :</b> un RD qui confirme une nomination à GF constant peut valider les valeurs GF/NR de l’ODJ correspondant.</li>
       <li><b>Nomination aux postes vacants :</b> la colonne « Aptitude » reprend les décisions inscrites dans le RD pour chaque candidat retenu, mais retire la mention « Date d’effet » et sa date, déjà présentées dans la colonne CSP / effet. Aucune validation n’est modifiée.</li>
-      <li><b>Admissions au stage et titularisations :</b> une seule valeur est affichée dans la colonne « GF » quand le GF avant/après est constant. En cas de divergence réelle, les deux valeurs restent visibles pour contrôle. Le NR+ est masqué.</li>
+      <li><b>Admissions au stage et titularisations :</b> une seule valeur est affichée dans la colonne « GF » quand le GF avant/après est constant. En cas de divergence réelle, les deux valeurs restent visibles pour contrôle. Le NR+ reste absent uniquement pour ces mouvements.</li>
       <li><b>Motifs et observations automatiques :</b> les ODJ fournissent le « Motif » pour les reclassements et mesures salariales ; les « Observations / commentaires » pour les admissions au stage, titularisations, mutations d’office et avancements. La colonne correspondante apparaît automatiquement avant « CSP / effet ». Si la cellule source est vide, la cellule du compte rendu reste vide ; les numéros de pagination comme « 1/1 » sont ignorés. Les PDF historiques sont relus sans aucune nouvelle validation.</li>
       <li><b>Contrôles :</b> les écarts réellement incohérents restent signalés ; un NR calculé est marqué d’un astérisque.</li>
       <li><b>Validation par RD dans le CR :</b> un ODJ dont toutes les décisions correspondent sans ambiguïté à un RD validé est présenté comme « confirmé par RD » même si son statut technique historique est « À vérifier ». Cette indication n’enregistre aucune nouvelle validation.</li>
@@ -184,7 +184,7 @@ export default function CspQuarterlyReport({revision=0}:{revision?:number}){
   </div>
   <fieldset disabled={busy} style={{margin:'16px 0',padding:16,border:'1px solid #ddd',borderRadius:8}}>
    <legend>Options de présentation du compte rendu</legend>
-   <p className="filter-note">Toujours présentes : Nom / prénom, Agence / poste et CSP / effet.</p>
+   <p className="filter-note">Toujours présentes : Nom / prénom, Agence / poste et CSP / effet. La colonne NR + apparaît automatiquement sur les mouvements concernés, sauf admission au stage et titularisation. Les quatre options ci-dessous sont décochées par défaut.</p>
    <div className="analysis-options csp-column-options">{optionalMovementColumns.map(c=><label key={c.id} className="check-label">
     <input type="checkbox" checked={selectedColumns.includes(c.id)} onChange={e=>{
      const checked=e.target.checked;
@@ -196,7 +196,7 @@ export default function CspQuarterlyReport({revision=0}:{revision?:number}){
      Inclure les candidatures non retenues
     </label>
    </div>
-   <p className="filter-note">Colonnes documentaires automatiques, avant la date : <b>Motif</b> pour reclassement et mesures salariales ; <b>Observations / commentaires</b> pour admission, titularisation, mutation d’office et avancement. Les textes proviennent des ODJ, y compris lorsque les décisions sont confirmées par le RD validé ; ces PDF sont relus sans nouvelle validation. Seules les quatre options ci-dessus sont à sélectionner. Une seule valeur « GF » est présentée pour admission/titularisation lorsque le GF est constant ; NR + masqué pour ces deux mouvements.</p>
+   <p className="filter-note">Colonnes documentaires automatiques, avant la date : <b>Motif</b> pour reclassement et mesures salariales ; <b>Observations / commentaires</b> pour admission, titularisation, mutation d’office et avancement. Les textes proviennent des ODJ, y compris lorsque les décisions sont confirmées par le RD validé ; ces PDF sont relus sans nouvelle validation. Trois colonnes restent facultatives (GF avant/après, NR avant/après, Source), ainsi que l’affichage des candidatures non retenues ; aucune n’est cochée par défaut. Les tableaux partagent les mêmes repères de colonnes sur une même page PowerPoint, même si NR + est absent en admission/titularisation.</p>
   </fieldset>
   <section className="panel" aria-label="Contrôles documentaires du compte rendu" style={{margin:'16px 0',padding:14}}>
    <div className="panel-heading" style={{marginBottom:10}}>
