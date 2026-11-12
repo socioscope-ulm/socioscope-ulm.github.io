@@ -206,3 +206,47 @@ test('Une association incertaine de noms ne transfère jamais le commentaire à 
  ],[pg]);
  assert.equal(row.observations,undefined);
 });
+
+test('ODJ type Yao / Prevost : cellule COMMENTAIRES vide malgré le pied de page 1/1',()=>{
+ const pg:CspPage={page:1,width:841.9,height:595.3,items:[
+  cell('TITULARISATION',40,490,145),
+  cell('NOM PRENOM',55,419,92),
+  cell('UM/DUM',215,419,37),cell('GF',620,419,20),
+  cell('NR',686,419,18),cell('COMMENTAIRES',744,419,89),
+  cell('AGENT EXEMPLE',54,118,114),
+  cell('12',620,118,20),cell('180',686,118,23),
+  cell('1/1',790,54,25),cell('Page 1 sur 1',715,24,100)
+ ]};
+ const band=pg.items.filter(i=>i.y<413&&i.y>pg.height*.07);
+ assert.deepEqual(readCspRowAnnotations(pg,419,band),{});
+ const stored=[{id:'p1r0',name:'AGENT EXEMPLE',kind:'titularisation',page:1,selected:true,approved:true}];
+ const reread=recoverQuarterlyAnnotationsFromPages(stored,[pg]);
+ assert.equal(reread[0].observations,undefined);
+ assert.equal(JSON.stringify(stored),JSON.stringify(reread),'sans annotation, aucune valeur ajoutée');
+});
+
+test('Un commentaire réel est conservé et le 1/1 du bas de page supprimé',()=>{
+ const pg:CspPage={page:1,width:841.9,height:595.3,items:[
+  cell('MUTATION D OFFICE',50,490,175),
+  cell('NOM PRENOM',55,419,92),cell('UM/DUM',215,419,37),
+  cell('NR',686,419,18),cell('OBSERVATIONS',744,419,89),
+  cell('AGENT EXEMPLE',54,118,114),
+  cell('Mutation validée par RD',744,135,92),
+  cell('avec maintien du GF',744,121,90),
+  cell('1/1',790,54,25)
+ ]};
+ const band=pg.items.filter(i=>i.y<413&&i.y>pg.height*.07);
+ const result=readCspRowAnnotations(pg,419,band);
+ assert.equal(result.observations,'Mutation validée par RD avec maintien du GF');
+ assert.doesNotMatch(result.observations||'',/1\/1/);
+});
+
+test('Une valeur de pagination historique ne bloque pas la relecture de la vraie observation',()=>{
+ const original=[{id:'p1r0',name:'AGENT EXEMPLE',kind:'mutation',page:1,selected:true,observations:'1/1'}];
+ const reextracted=[{...original[0],observations:'Observation valable'}];
+ const enriched=enrichQuarterlyAnnotations(original,reextracted);
+ assert.equal(enriched[0].observations,'Observation valable');
+ assert.equal(original[0].observations,'1/1','aucune donnée persistante modifiée');
+ const missing=enrichQuarterlyAnnotations(original,[]);
+ assert.equal(missing[0].observations,undefined);
+});
