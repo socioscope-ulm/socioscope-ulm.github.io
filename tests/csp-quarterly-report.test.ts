@@ -481,3 +481,27 @@ test('Une décision RD absente ou plusieurs RDs concurrents ne valident jamais l
  assert.equal(conflict.sources[0].confirmedByRDForReport,false);
  assert.equal(conflict.pendingDocuments,1);
 });
+
+test('Nomination aux postes vacants : reprend uniquement le texte imprimé dans le RD',()=>{
+ const nomination=ev({kind:'nomination',aptitude:'Mention ODJ non probante',
+  reference:'26-12345.01',job:'POSTE VACANT'});
+ const rd={...nomination,aptitude:"Candidature retenue - GF constant - Date d'effet 01/09/2026",id:'rd-movement'};
+ const odj=doc([nomination],{id:'odj',documentType:'cr'});
+ const decision=doc([rd],{id:'rd',documentType:'rd'});
+ const before=JSON.stringify([odj,decision]);
+ const report=calculateQuarterlyReport([odj,decision],2026,1);
+ assert.equal(report.rows.length,1);
+ assert.equal(report.rows[0].kind,'nomination');
+ assert.equal(report.rows[0].aptitude,rd.aptitude);
+ assert.equal(report.rows[0].gfBefore,'12');
+ assert.equal(report.rows[0].nrAfter,'220');
+ assert.equal(JSON.stringify([odj,decision]),before);
+});
+test('Sans Aptitude récupérée, aucune valeur ne doit être inventée à partir de la note du RD',()=>{
+ const nomination=ev({kind:'nomination',note:'GF constant',aptitude:undefined});
+ const r=calculateQuarterlyReport([
+  doc([nomination],{id:'rd-only',documentType:'rd',status:'validated'})
+ ],2026,1);
+ assert.equal(r.rows[0].aptitude,'—');
+ assert.equal(r.rows.length,1);
+});
