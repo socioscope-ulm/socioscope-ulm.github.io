@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
 import {getMovementColumns} from '../src/lib/csp-quarterly-columns.ts';
 
 test('GF avant/apres est toujours visible pour admission et titularisation',()=>{
@@ -81,4 +82,34 @@ test('Nomination aux postes vacants : Aptitude RD systématique avant CSP / effe
  for(const kind of ['admission','titularisation','mutation','avancement','mesure','reclassement','posthume'])
   assert.equal(getMovementColumns([],kind).some(c=>c.id==='aptitude'),false,kind);
  assert.equal(columns.reduce((n,c)=>n+c.width,0).toFixed(2),'12.33');
+});
+
+test('Admission et titularisation : une seule valeur GF, dans aperçu et PowerPoint',()=>{
+ for(const kind of ['admission','titularisation']){
+  const columns=getMovementColumns([],kind);
+  const gf=columns.find(c=>c.id==='gf');
+  assert.ok(gf);
+  assert.equal(gf.label,'GF');
+  assert.equal(gf.header,'GF');
+  assert.equal(gf.value({gfBefore:'12',gfAfter:'12'} as any),'12');
+  assert.equal(gf.value({gfBefore:'—',gfAfter:'12'} as any),'12');
+  assert.equal(gf.value({gfBefore:'12',gfAfter:'—'} as any),'12');
+  assert.equal(gf.value({gfBefore:'—',gfAfter:'—'} as any),'—');
+  assert.equal(gf.value({gfBefore:'12',gfAfter:'13'} as any),'12 → 13',
+   'un écart réel doit rester visible et contrôlable');
+  assert.equal(columns.reduce((sum,c)=>sum+c.width,0).toFixed(2),'12.33');
+ }
+ const other=getMovementColumns(['gf'],'reclassement').find(c=>c.id==='gf');
+ assert.equal(other?.header,'GF AV. / AP.');
+ assert.equal(other?.value({gfBefore:'12',gfAfter:'13'} as any),'12 / 13');
+});
+
+test('La case candidatures non retenues est alignée avec les quatre options de colonnes du CR',()=>{
+ const jsx=readFileSync(new URL('../src/app/csp-quarterly-report.tsx',import.meta.url),'utf8');
+ const group=jsx.match(/<div className="analysis-options csp-column-options">([\s\S]*?)<\/div>/)?.[1]||'';
+ assert.match(group,/optionalMovementColumns\.map/);
+ assert.match(group,/id="csp-cr-include-candidates"/);
+ assert.match(group,/checked=\{includeCandidates\}/);
+ assert.equal((jsx.match(/id="csp-cr-include-candidates"/g)||[]).length,1,
+  'une seule commande pour les candidatures non retenues');
 });
