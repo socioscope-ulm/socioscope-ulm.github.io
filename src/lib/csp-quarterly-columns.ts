@@ -10,6 +10,14 @@ export const optionalMovementColumns=[
 ] as const;
 export const defaultMovementColumns:OptionalMovementColumn[]=optionalMovementColumns.map(c=>c.id);
 const date=(s:string)=>/^\d{4}-\d{2}-\d{2}$/.test(s)?s.slice(8)+'/'+s.slice(5,7)+'/'+s.slice(0,4):'—';
+const stageGf=(r:QuarterlyRow)=>{
+ const before=String(r.gfBefore||'').trim(),after=String(r.gfAfter||'').trim();
+ if(before===after)return before||'—';
+ if(!before||before==='—')return after||'—';
+ if(!after||after==='—')return before;
+ // Do not conceal a genuinely contradictory GF in documentary data.
+ return before+' → '+after;
+};
 const columns=[
  {id:'name',label:'Nom / prénom',header:'NOM PRÉNOM',width:2.36,value:(r:QuarterlyRow)=>r.name},
  {id:'agency',label:'Agence / poste',header:'AGENCE / POSTE',width:2.46,value:(r:QuarterlyRow)=>[r.agency,r.job].filter(x=>x&&x!=='—').join('\n')||'—'},
@@ -32,7 +40,9 @@ export function getMovementColumns(selected:readonly OptionalMovementColumn[]=de
   ['name','agency','dates'].includes(c.id)||c.id===annotationId||(c.id==='aptitude'&&kind==='nomination')||
   (c.id==='gf'&&stageOrTitularisation)||
   ((c.id!=='nrSteps'||!stageOrTitularisation)&&selected.includes(c.id as OptionalMovementColumn))
- );
+ ).map(c=>stageOrTitularisation&&c.id==='gf'
+  ?{...c,label:'GF',header:'GF',width:.78,value:stageGf}
+  :c);
  const total=visible.reduce((n,c)=>n+c.width,0);
  // Conserver la largeur originale de la page PPT (12,33 pouces),
  // quels que soient les choix de colonnes, y compris les champs longs.
