@@ -1,5 +1,6 @@
 import {unheadedAvancements} from './csp-unheaded-avancement.ts';
 import {cspNameHeader} from './csp-table-header.ts';
+import {readCspRowAnnotations} from './csp-row-annotations.ts';
 import {normalName} from './agents.ts';
 import {validDate} from './csp.ts';
 import type {CspEvent,CspKind} from './csp.ts';
@@ -44,6 +45,7 @@ export function extractCrPage(pg:CspPage,kind:CspKind,report:CspPageReport):CspE
   const band=content.filter(i=>i.y<hi&&i.y>lo),cell=(c?:Column)=>text(band.filter(i=>inColumn(i,c))),num=(c?:Column)=>{const v=cell(c);return /^\d{1,3}$/.test(v)?Number(v):undefined;};
   const name=cell(nameCol);if(!name||!/[A-ZÀ-Ÿ]/.test(name))continue;
   const e:CspEvent={id:`p${pg.page}r${ix}`,name,kind,effective:date(cell(dateCol)),page:pg.page,selected:true};
+  Object.assign(e,readCspRowAnnotations(pg,head.y,band));
   const issues:string[]=[];
   const readNumber=(column:Column|undefined,key:'gfBefore'|'gfAfter'|'nrBefore'|'nrAfter')=>{const n=num(column);if(n!==undefined&&n>=1&&n<=(key.startsWith('gf')?30:999))e[key]=n;else issues.push(`${key.startsWith('gf')?'GF':'NR'} ${key.endsWith('Before')?'avant':'après'} absent ou illisible`);};
   if(kind==='reclassement'){
@@ -112,7 +114,7 @@ export function extractCrCandidates(pg:CspPage,report:CspPageReport):CspEvent[]{
   const band=content.filter(i=>i.y<hi&&i.y>lo),cell=(c?:Column)=>text(band.filter(i=>inColumn(i,c)));
   const name=cell(nameCol);if(!name||/PAS DE CANDIDAT/.test(normalName(name)))continue;
   const gf=cell(gfCol),nr=cell(nrCol);
-  events.push({id:`p${pg.page}c${ix}`,name,kind:'nomination',candidacy:true,effective:'',page:pg.page,selected:true,reference:ref,job,agency,team,m3e,...(/^\d{1,2}$/.test(gf)&&+gf>0&&+gf<=30?{gfBefore:+gf}:{}),...(/^\d{1,3}$/.test(nr)&&+nr>0?{nrBefore:+nr}:{}),note:'Candidature de l’ODJ : en attente de confirmation par un RD.'});
+  events.push({id:`p${pg.page}c${ix}`,name,kind:'nomination',candidacy:true,effective:'',page:pg.page,selected:true,reference:ref,job,agency,team,m3e,...readCspRowAnnotations(pg,head.y,band),...(/^\d{1,2}$/.test(gf)&&+gf>0&&+gf<=30?{gfBefore:+gf}:{}),...(/^\d{1,3}$/.test(nr)&&+nr>0?{nrBefore:+nr}:{}),note:'Candidature de l’ODJ : en attente de confirmation par un RD.'});
  }
  report.section='Candidatures';report.count=events.length;report.status=events.length?'read':text(pg.items).includes('PAS DE CANDIDAT')?'empty':'unsupported';
  report.note=events.length?'Candidatures en attente du RD : aucune prise de poste appliquée.':report.status==='empty'?'Aucun candidat : aucun mouvement individuel.':'Aucune candidature lisible : vérifier le PDF.';
