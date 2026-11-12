@@ -1,5 +1,6 @@
 import type {QuarterlyRow} from './csp-quarterly-report';
 import {annotationForCspKind} from './csp-annotation-rules.ts';
+import {cleanCspPrintedCell,formatCspNominationAptitude} from './csp-quarterly-document-text.ts';
 export type OptionalMovementColumn='gf'|'nr'|'nrSteps'|'source';
 export const optionalMovementColumns=[
  {id:'gf',label:'GF avant / après'},
@@ -12,9 +13,9 @@ const date=(s:string)=>/^\d{4}-\d{2}-\d{2}$/.test(s)?s.slice(8)+'/'+s.slice(5,7)
 const columns=[
  {id:'name',label:'Nom / prénom',header:'NOM PRÉNOM',width:2.36,value:(r:QuarterlyRow)=>r.name},
  {id:'agency',label:'Agence / poste',header:'AGENCE / POSTE',width:2.46,value:(r:QuarterlyRow)=>[r.agency,r.job].filter(x=>x&&x!=='—').join('\n')||'—'},
- {id:'motif',label:'Motif du mouvement',header:'MOTIF',width:2.22,value:(r:QuarterlyRow)=>r.movementReason||'—'},
- {id:'observations',label:'Observations / commentaires',header:'OBSERVATIONS',width:2.27,value:(r:QuarterlyRow)=>r.observations||'—'},
- {id:'aptitude',label:'Aptitude (RD)',header:'APTITUDE',width:2.76,value:(r:QuarterlyRow)=>r.aptitude||'—'},
+ {id:'motif',label:'Motif du mouvement',header:'MOTIF',width:2.22,value:(r:QuarterlyRow)=>cleanCspPrintedCell(r.movementReason)},
+ {id:'observations',label:'Observations / commentaires',header:'OBSERVATIONS',width:2.27,value:(r:QuarterlyRow)=>cleanCspPrintedCell(r.observations)},
+ {id:'aptitude',label:'Aptitude (RD)',header:'APTITUDE',width:2.76,value:(r:QuarterlyRow)=>formatCspNominationAptitude(r.aptitude,r.effective)},
  {id:'dates',label:'CSP / effet',header:'CSP / EFFET',width:1.48,value:(r:QuarterlyRow)=>date(r.meeting)+'\n'+date(r.effective)},
  {id:'gf',label:'GF avant / après',header:'GF AV. / AP.',width:1.18,value:(r:QuarterlyRow)=>r.gfBefore+' / '+r.gfAfter},
  {id:'nr',label:'NR avant / après',header:'NR AV. / AP.',width:1.21,value:(r:QuarterlyRow)=>r.nrBefore+' / '+r.nrAfter},
