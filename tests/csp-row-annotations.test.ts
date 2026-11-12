@@ -82,20 +82,20 @@ test('Relecture historique : enrichit uniquement le motif et les observations po
   'un avancement distinct ne doit jamais prendre le texte d une autre ligne');
 });
 
-test('Pignon Jean Yves : motif imprimé sur la ligne supérieure des en-têtes ODJ du T2',()=>{
+test('Motif imprimé sur la ligne supérieure des en-têtes ODJ du T2',()=>{
  const pg=page([
   cell('MOTIF',709,467,48),
   cell('NOM PRENOM',40,420,115),cell('GF',450,420,24),
   cell('ANCIEN NR',525,420,75),cell('NOUVEAU NR',610,420,65),
   cell("DATE D'EFFET",845,420,100),
-  cell('PIGNON JEAN YVES',40,373,125),cell('13',450,373,22),
+  cell('AGENT EXEMPLE',40,373,125),cell('13',450,373,22),
   cell('245',525,373,32),cell('250',610,373,32),
   cell('NR encouragement à la mobilité',704,373,142),cell('01/04/2026',845,373,90)
  ]);
  const report=extractCspPages([pg],'cr');
  assert.equal(report.events.length,1);
  const event=report.events[0];
- assert.equal(event.name,'PIGNON JEAN YVES');
+ assert.equal(event.name,'AGENT EXEMPLE');
  assert.equal(event.kind,'mesure');
  assert.equal(event.movementReason,'NR encouragement à la mobilité');
  assert.equal(event.nrBefore,245);
