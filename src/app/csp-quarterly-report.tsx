@@ -4,6 +4,7 @@ import {defaultMovementColumns,getMovementColumns,optionalMovementColumns,type O
 import {ChevronRight,Download,RefreshCw,FileText} from 'lucide-react';
 import {calculateQuarterlyReport,isCadresDocument,kindLabels} from '../lib/csp-quarterly-report';
 import {enrichQuarterlyAnnotations} from '../lib/csp-quarterly-annotations';
+import {annotationForCspKind} from '../lib/csp-annotation-rules';
 import type {QuarterlyDocument,QuarterlyReport,QuarterlyEvent} from '../lib/csp-quarterly-report';
 type ImportMeta={id:string;name:string;date:string;status:string;documentType:'cr'|'rd';perEventValidation?:boolean;automaticallyValidated?:boolean};
 type AnnotationCacheEntry={events:QuarterlyEvent[];motifPages:number[];observationPages:number[]};
@@ -44,22 +45,20 @@ export default function CspQuarterlyReport({revision=0}:{revision?:number}){
    if(metas.length>45)throw Error('Trop de documents pour ce trimestre : traitement interrompu par sécurité.');
    if(older.length>150)throw Error('Historique CSP trop volumineux pour contrôler les mouvements déjà publiés.');
    const docs:QuarterlyDocument[]=[];
-   const wantsMotif=selectedColumns.includes('motif');
-   const wantsObservations=selectedColumns.includes('observations');
    const readWarnings:string[]=[];
    // Read older validated decisions exclusively for report deduplication.
-   // The original PDFs are reread locally only when Motif / Observations are
-   // requested and only for the current quarter. Nothing is saved to Supabase.
+   // Every ODJ in this quarter is reread when its required printed
+   // annotation is absent; no user checkbox and no Supabase updates.
    for(const meta of [...older,...metas]){
     const response=await fetch('/api/csp?id='+encodeURIComponent(meta.id),{cache:'no-store'});
     const detail=await response.json();
     if(!response.ok)throw Error(detail.error||'Impossible de lire '+meta.name);
     const fresh:ImportMeta=detail.meta||meta;
     let events=(detail.events||[]) as QuarterlyEvent[];
-    const needsPdf=(wantsMotif||wantsObservations)&&fresh.date>=first&&fresh.date<next&&
-     events.some(e=>e.selected&&(
-      wantsMotif&&['avancement','reclassement','mesure','posthume'].includes(e.kind)&&!e.movementReason||
-      wantsObservations&&!e.observations));
+    const needsPdf=fresh.documentType==='cr'&&fresh.date>=first&&fresh.date<next&&
+     events.some(e=>e.selected&&!e.candidacy&&(
+      (annotationForCspKind(e.kind)==='movementReason'&&!e.movementReason)||
+      (annotationForCspKind(e.kind)==='observations'&&!e.observations)));
     if(needsPdf){
      try{
       let cached=annotationCache.current.get(fresh.id);
@@ -83,9 +82,10 @@ export default function CspQuarterlyReport({revision=0}:{revision?:number}){
       // such cases silently or confuse a missing text with an empty motif.
       const missing=events.filter(e=>
        e.selected&&!e.candidacy&&
-       ((wantsMotif&&['mesure','reclassement','avancement','posthume'].includes(e.kind)&&
+       ((annotationForCspKind(e.kind)==='movementReason'&&
          cached!.motifPages.includes(e.page??-1)&&!e.movementReason)||
-        (wantsObservations&&cached!.observationPages.includes(e.page??-1)&&!e.observations)));
+        (annotationForCspKind(e.kind)==='observations'&&
+         cached!.observationPages.includes(e.page??-1)&&!e.observations)));
       if(missing.length){
        const list=missing.slice(0,12).map(e=>e.name+' (p. '+e.page+')').join(', ');
        readWarnings.push(fresh.name+' : '+missing.length+
@@ -127,7 +127,7 @@ export default function CspQuarterlyReport({revision=0}:{revision?:number}){
       <li><b>ODJ et RD :</b> un mouvement confirmé ne compte qu’une fois, même si le RD présente le NR final dans une autre colonne.</li>
       <li><b>GF constant :</b> un RD qui confirme une nomination à GF constant peut valider les valeurs GF/NR de l’ODJ correspondant.</li>
       <li><b>Admissions au stage et titularisations :</b> le GF avant/après reste visible et le NR+ est masqué.</li>
-      <li><b>Motifs et observations :</b> les textes imprimés sur chaque ligne sont lus dans des colonnes indépendantes des notes de contrôle. La colonne Motif est placée avant la date ; les observations sont facultatives. Les PDF originaux peuvent être relus sans toucher aux validations.</li>
+      <li><b>Motifs et observations automatiques :</b> les ODJ fournissent le « Motif » pour les reclassements et mesures salariales ; les « Observations / commentaires » pour les admissions au stage, titularisations, mutations d’office et avancements. La colonne correspondante apparaît automatiquement avant « CSP / effet ». Les PDF historiques sont relus sans aucune nouvelle validation.</li>
       <li><b>Contrôles :</b> les écarts réellement incohérents restent signalés ; un NR calculé est marqué d’un astérisque.</li>
       <li><b>Intégrité :</b> aucun document validé, aucune donnée individuelle ni aucun mouvement CSP n’est modifié par cet export.</li>
      </ul>
@@ -154,10 +154,9 @@ export default function CspQuarterlyReport({revision=0}:{revision?:number}){
     <input type="checkbox" checked={selectedColumns.includes(c.id)} onChange={e=>{
      const checked=e.target.checked;
      setSelectedColumns(previous=>checked?[...previous,c.id]:previous.filter(id=>id!==c.id));
-     if(checked&&(c.id==='motif'||c.id==='observations'))setReport(null);
     }}/>{c.label}
    </label>)}</div>
-   <p className="filter-note">Les colonnes « Motif du mouvement » et « Observations / commentaires » sont facultatives : les cocher puis cliquer sur « Préparer le compte rendu ». Pour les documents plus anciens, le PDF original est relu localement uniquement sur demande ; aucune validation n’est modifiée. Le GF est toujours visible pour les admissions et titularisations, sans colonne NR +.</p>
+   <p className="filter-note">Colonnes documentaires automatiques, avant la date : <b>Motif</b> pour reclassement et mesures salariales ; <b>Observations / commentaires</b> pour admission, titularisation, mutation d’office et avancement. Les textes proviennent des ODJ validés, relus lors de la préparation du CR. Seules les quatre options ci-dessus sont à sélectionner. GF obligatoire pour admission/titularisation ; NR + masqué pour ces deux mouvements.</p>
   </fieldset>
   <section className="panel" aria-label="Contrôles documentaires du compte rendu" style={{margin:'16px 0',padding:14}}>
    <div className="panel-heading" style={{marginBottom:10}}>
