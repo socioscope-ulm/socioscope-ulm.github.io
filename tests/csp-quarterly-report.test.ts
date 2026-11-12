@@ -492,7 +492,8 @@ test('Nomination aux postes vacants : reprend uniquement le texte imprimé dans 
  const report=calculateQuarterlyReport([odj,decision],2026,1);
  assert.equal(report.rows.length,1);
  assert.equal(report.rows[0].kind,'nomination');
- assert.equal(report.rows[0].aptitude,rd.aptitude);
+ assert.equal(report.rows[0].aptitude,'Candidature retenue - GF constant');
+ assert.equal(rd.aptitude,"Candidature retenue - GF constant - Date d'effet 01/09/2026",'le RD source reste intact');
  assert.equal(report.rows[0].gfBefore,'12');
  assert.equal(report.rows[0].nrAfter,'220');
  assert.equal(JSON.stringify([odj,decision]),before);
@@ -504,4 +505,24 @@ test('Sans Aptitude récupérée, aucune valeur ne doit être inventée à parti
  ],2026,1);
  assert.equal(r.rows[0].aptitude,'—');
  assert.equal(r.rows.length,1);
+});
+
+test('Observations vides : le 1/1 du PDF ne doit jamais apparaître dans le CR',async()=>{
+ const {getMovementColumns}=await import('../src/lib/csp-quarterly-columns.ts');
+ const event=ev({kind:'titularisation',observations:'1/1',note:''});
+ const input=doc([event],{id:'odj',documentType:'cr'});
+ const original=JSON.stringify(input);
+ const result=calculateQuarterlyReport([input],2026,1);
+ assert.equal(result.rows.length,1);
+ const column=getMovementColumns([], 'titularisation').find(c=>c.id==='observations');
+ assert.ok(column);
+ assert.equal(column.value(result.rows[0]),'','la cellule affichée doit être vide');
+ assert.equal(JSON.stringify(input),original,'pas de modification du document CSP validé');
+});
+test('Observation ODJ réelle dans le même tableau : conserver ses mots',async()=>{
+ const {getMovementColumns}=await import('../src/lib/csp-quarterly-columns.ts');
+ const event=ev({kind:'mutation',observations:'Prise de poste le 01/06/2026',note:''});
+ const report=calculateQuarterlyReport([doc([event])],2026,1);
+ const text=getMovementColumns([], 'mutation').find(c=>c.id==='observations')?.value(report.rows[0]);
+ assert.equal(text,'Prise de poste le 01/06/2026');
 });
