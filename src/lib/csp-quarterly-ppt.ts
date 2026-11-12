@@ -12,7 +12,7 @@ const kindTitles:Record<string,string>={
  admission:'ADMISSIONS AU STAGE',titularisation:'TITULARISATIONS',
  mutation:"MUTATIONS D'OFFICE",reclassement:'RECLASSEMENTS',
  avancement:'AVANCEMENTS',mesure:'MESURES SALARIALES',
- nomination:'NOMINATIONS',posthume:'AVANCEMENTS A TITRE POSTHUME'
+ nomination:'NOMINATIONS AUX POSTES VACANTS',posthume:'AVANCEMENTS A TITRE POSTHUME'
 };
 type Presentation={layout:string;author:string;title:string;subject:string;lang:string;theme:unknown;
  addSlide:(opts?:{masterName?:string})=>any;
