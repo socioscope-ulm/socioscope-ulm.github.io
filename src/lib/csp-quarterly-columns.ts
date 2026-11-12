@@ -14,6 +14,7 @@ const columns=[
  {id:'agency',label:'Agence / poste',header:'AGENCE / POSTE',width:2.46,value:(r:QuarterlyRow)=>[r.agency,r.job].filter(x=>x&&x!=='—').join('\n')||'—'},
  {id:'motif',label:'Motif du mouvement',header:'MOTIF',width:2.22,value:(r:QuarterlyRow)=>r.movementReason||'—'},
  {id:'observations',label:'Observations / commentaires',header:'OBSERVATIONS',width:2.27,value:(r:QuarterlyRow)=>r.observations||'—'},
+ {id:'aptitude',label:'Aptitude (RD)',header:'APTITUDE',width:2.76,value:(r:QuarterlyRow)=>r.aptitude||'—'},
  {id:'dates',label:'CSP / effet',header:'CSP / EFFET',width:1.48,value:(r:QuarterlyRow)=>date(r.meeting)+'\n'+date(r.effective)},
  {id:'gf',label:'GF avant / après',header:'GF AV. / AP.',width:1.18,value:(r:QuarterlyRow)=>r.gfBefore+' / '+r.gfAfter},
  {id:'nr',label:'NR avant / après',header:'NR AV. / AP.',width:1.21,value:(r:QuarterlyRow)=>r.nrBefore+' / '+r.nrAfter},
@@ -27,7 +28,7 @@ export function getMovementColumns(selected:readonly OptionalMovementColumn[]=de
  const annotation=annotationForCspKind(kind||'');
  const annotationId=annotation==='movementReason'?'motif':annotation==='observations'?'observations':undefined;
  const visible=columns.filter(c=>
-  ['name','agency','dates'].includes(c.id)||c.id===annotationId||
+  ['name','agency','dates'].includes(c.id)||c.id===annotationId||(c.id==='aptitude'&&kind==='nomination')||
   (c.id==='gf'&&stageOrTitularisation)||
   ((c.id!=='nrSteps'||!stageOrTitularisation)&&selected.includes(c.id as OptionalMovementColumn))
  );
