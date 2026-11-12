@@ -4,7 +4,7 @@ import {defaultMovementColumns,getMovementColumns,optionalMovementColumns,type O
 import {ChevronRight,Download,RefreshCw,FileText} from 'lucide-react';
 import {calculateQuarterlyReport,isCadresDocument,kindLabels} from '../lib/csp-quarterly-report';
 import {enrichQuarterlyAnnotations} from '../lib/csp-quarterly-annotations';
-import {annotationForCspKind} from '../lib/csp-annotation-rules';
+import {annotationForCspKind} from '../lib/csp-annotation-rules.ts';
 import type {QuarterlyDocument,QuarterlyReport,QuarterlyEvent} from '../lib/csp-quarterly-report';
 type ImportMeta={id:string;name:string;date:string;status:string;documentType:'cr'|'rd';perEventValidation?:boolean;automaticallyValidated?:boolean};
 type AnnotationCacheEntry={events:QuarterlyEvent[];motifPages:number[];observationPages:number[]};
