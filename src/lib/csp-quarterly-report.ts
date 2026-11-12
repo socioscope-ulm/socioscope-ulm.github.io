@@ -1,3 +1,4 @@
+import {annotationForCspKind} from './csp-annotation-rules';
 /** Rapport CSP cadres par date de séance, sans modification des validations. */
 export type QuarterlyEvent = {
  id:string; name:string; agentId?:string; kind:string; effective:string;
@@ -152,14 +153,16 @@ function toRow(g:Group):QuarterlyRow{
  const sourceRefs=[...new Set(g.items.map(x=>x.ref+' p.'+(x.e.page||'?')))];
  const agency=priority.map(x=>x.e.recordedAfter?.agency||x.e.agency||x.e.recordedBefore?.agency||'').find(Boolean)||'—';
  const job=priority.map(x=>x.e.job||x.e.recordedAfter?.job||'').find(Boolean)||'';
- // Printed reason and observation cells are documentary facts, distinct from
- // validation notes. Keep both sources when ODJ and RD actually differ.
+ // Documentary Motif / Observations are taken exclusively from the ODJ.
+ // An RD note must never replace a printed ODJ cell and can be a different
+ // type of control message. A missing ODJ cell is reported, not fabricated.
+ const requiredAnnotation=annotationForCspKind(first.kind);
  const annotation=(key:'movementReason'|'observations')=>{
-  const options=priority.map(x=>({value:String(x.e[key]||'').trim(),type:x.doc.documentType==='cr'?'ODJ':'RD'}))
-   .filter(x=>!!x.value);
-  const distinct=options.filter((x,i)=>options.findIndex(v=>norm(v.value)===norm(x.value))===i);
-  if(!distinct.length)return '—';
-  return distinct.length===1?distinct[0].value:distinct.map(x=>x.type+' : '+x.value).join('\n');
+  if(requiredAnnotation!==key)return '—';
+  const odj=g.items.filter(x=>x.doc.documentType==='cr')
+   .map(x=>String(x.e[key]||'').trim()).filter(Boolean);
+  const distinct=odj.filter((value,i)=>odj.findIndex(other=>norm(other)===norm(value))===i);
+  return distinct.length?distinct.join('\n'):'—';
  };
  const checks:string[]=[],resolved:string[]=[];
  // Ne jamais masquer un éventuel écart réel GF sur ces mouvements.
