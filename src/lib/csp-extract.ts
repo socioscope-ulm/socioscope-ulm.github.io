@@ -1,6 +1,7 @@
 import {extractBeneficiaryAdvancements} from './csp-beneficiary-advancements.ts';
 import {unheadedAvancements} from './csp-unheaded-avancement.ts';
 import {cspNameHeader} from './csp-table-header.ts';
+import {readCspRowAnnotations} from './csp-row-annotations.ts';
 import {detectCspDocumentType} from './csp-document-type.ts';
 import {installPDFByteMethods} from '../../public/pdf-byte-compat.js';
 import {normalName} from './agents.ts';
@@ -68,6 +69,7 @@ export function extractCspPages(pages:CspPage[],documentType:'rd'|'cr'='rd'){
    const anchor=nameRows[ix];const hi=ix?(nameRows[ix-1].y+anchor.y)/2:headerY-7,lo=ix+1<nameRows.length?(anchor.y+nameRows[ix+1].y)/2:pg.height*.07;
    const band=content.filter(i=>i.y<=hi&&i.y>lo);const text=textOf(band),name=anchor.text.replace(/\s+/g,' ').trim();const effective=iso(text);
    const e:CspEvent={id:'p'+pg.page+'r'+ix,name,kind,effective,page:pg.page,selected:true};
+   Object.assign(e,readCspRowAnnotations(pg,headerY,band));
    const cell=(left:number,right:number)=>textOf(band.filter(i=>(i.x+i.width/2)/pg.width>=left&&(i.x+i.width/2)/pg.width<right));
    if(kind==='reclassement'||kind==='avancement'){
     e.agency=cell(kind==='reclassement'?.35:.32,kind==='reclassement'?.75:.70).replace(/^UNITE LOGISTIQUE MAINTENANCE\s*\/\s*/i,'');
