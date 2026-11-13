@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {matchPhotoName,nearbyPhotoName,portraitImageBoxes} from '../src/lib/photo-match.ts';
+import {matchPhotoName,nearbyPhotoName,portraitImageBoxes,matchPptxPortraits} from '../src/lib/photo-match.ts';
 const agents=[{id:'fiction-1',name:'Éloïse MARTIN-DUPRÉ'},{id:'fiction-2',name:'Nolan Exemple'},{id:'fiction-3',name:'Nolan Exemple'}];
 test('nom complet accentué, prénom inversé et tirets',()=>{assert.equal(matchPhotoName('MARTIN DUPRE ELOISE',agents)[0]?.id,'fiction-1');});
 test('homonymes et nom partiel restent à rattacher',()=>{assert.equal(matchPhotoName('Nolan Exemple',agents).length,2);assert.equal(matchPhotoName('MARTIN',agents).length,0);assert.equal(matchPhotoName('Eloise Martin Dupre Administratrice',agents).length,0);});
@@ -25,4 +25,22 @@ test('un portrait partage par deux noms exige une verification',()=>{
  const portrait={x:30,y:100,w:45,h:95};
  const labels=[{x:85,y:112,w:120,h:16,text:'Eloise Martin Dupre'},{x:85,y:115,w:120,h:16,text:'Nolan Exemple'}];
  assert.equal(nearbyPhotoName(portrait,[portrait],labels,agents).certain,false);
+});
+
+
+test('PowerPoint : les roles de fonction ne sont pas confondus avec les noms',()=>{
+ assert.equal(matchPhotoName('MPL 1 Eloise Martin Dupre',agents)[0]?.id,'fiction-1');
+});
+test('PowerPoint : plusieurs photos sur une meme ligne sont associees a leur legende respective',()=>{
+ const portraits=[{x:100,y:100,w:80,h:100},{x:300,y:100,w:80,h:100}];
+ const captions=[{x:95,y:205,w:90,h:22,text:'Eloise Martin Dupre'},{x:295,y:205,w:90,h:22,text:'Nolan Exemple'}];
+ const result=matchPptxPortraits(portraits,captions,agents);
+ assert.deepEqual(result.map(x=>x.name),['Éloïse MARTIN-DUPRÉ','Nolan Exemple']);
+ assert.equal(result[0].certain,true);
+ assert.equal(result[1].certain,false);
+});
+test('PowerPoint : image et nom superposes avec legende laterale',()=>{
+ const portrait={x:100,y:100,w:80,h:100};
+ const label={x:183,y:120,w:120,h:20,text:'Éloïse MARTIN-DUPRÉ'};
+ assert.equal(matchPptxPortraits([portrait],[label],agents)[0].name,'Éloïse MARTIN-DUPRÉ');
 });
