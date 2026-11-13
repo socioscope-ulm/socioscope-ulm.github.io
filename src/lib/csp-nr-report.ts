@@ -2,10 +2,11 @@
 export type NRReportEvent = {
   id:string; name:string; agentId?:string; kind:string; effective:string; selected?:boolean;
   approved?:boolean; candidacy?:boolean; nonRetained?:boolean; nonRetainedByRD?:unknown;
-  acknowledgedByDocument?:unknown; acknowledgedByRD?:unknown;
-  agency?:string; gfBefore?:number; gfAfter?:number; nrBefore?:number; nrAfter?:number; nrSteps?:number;
+  acknowledgedByDocument?:{id?:string;eventId?:string;[key:string]:unknown}; acknowledgedByRD?:unknown;
+  agency?:string; job?:string; team?:string; reference?:string; gfDelta?:number;
+  gfBefore?:number; gfAfter?:number; nrBefore?:number; nrAfter?:number; nrSteps?:number;
   recordedBefore?:{gf?:number;nr?:number;agency?:string};
-  recordedAfter?:{gf?:number;nr?:number;agency?:string};
+  recordedAfter?:{gf?:number;nr?:number;agency?:string;nrProvisional?:boolean};
 };
 export type NRReportDocument = {id:string;name:string;date:string;status:string;events:NRReportEvent[];manual?:boolean};
 export type NRReportRow = {
@@ -24,14 +25,45 @@ const agencyOf=(e:NRReportEvent)=>String(e.recordedBefore?.agency||e.recordedAft
 export function calculateNRReport(documents:NRReportDocument[],year:number):{year:number;rows:NRReportRow[];totalCsp:number;totalManual:number;total:number;toVerify:number;agents:number}{
  const rows:NRReportRow[]=[];
  const signatures=new Set<string>();
+ // An approved ODJ candidacy may establish the starting NR of its *exact*
+ // approved RD decision. This is an accounting-only reconciliation: the
+ // source events and their provisional fields are never modified.
+ const odjByRd=new Map<string,{doc:NRReportDocument;event:NRReportEvent}[]>();
+ for(const odj of documents.filter(d=>d.status==='validated'&&!d.manual))
+  for(const candidate of odj.events||[]){
+   const link=candidate.acknowledgedByDocument;
+   if(candidate.kind!=='nomination'||candidate.candidacy!==true||candidate.selected!==true||
+      candidate.approved!==true||!link?.id||!link?.eventId)continue;
+   const key=JSON.stringify([link.id,link.eventId]);
+   const matches=odjByRd.get(key)||[];
+   matches.push({doc:odj,event:candidate});odjByRd.set(key,matches);
+  }
  for(const doc of [...documents.filter(d=>!d.manual),...documents.filter(d=>d.manual)]){
   if(doc.status!=='validated')continue;
   for(const e of doc.events||[]){
    if(e.selected!==true||e.approved!==true||e.candidacy||e.nonRetained||e.nonRetainedByRD||e.acknowledgedByDocument||e.acknowledgedByRD||!Object.hasOwn(labels,e.kind)||!/^\d{4}-\d{2}-\d{2}$/.test(e.effective)||Number(e.effective.slice(0,4))!==year)continue;
-   const beforeNR=hasNR(e.recordedBefore?.nr)?e.recordedBefore.nr:hasNR(e.nrBefore)?e.nrBefore:null;
+   let beforeNR:number|null=hasNR(e.recordedBefore?.nr)?e.recordedBefore.nr:hasNR(e.nrBefore)?e.nrBefore:null;
    const afterNR=hasNR(e.recordedAfter?.nr)?e.recordedAfter.nr:hasNR(e.nrAfter)?e.nrAfter:null;
    const beforeGF=hasGF(e.recordedBefore?.gf)?e.recordedBefore.gf:hasGF(e.gfBefore)?e.gfBefore:null;
    const afterGF=hasGF(e.recordedAfter?.gf)?e.recordedAfter.gf:hasGF(e.gfAfter)?e.gfAfter:null;
+   // A GF-constant nomination with no declared NR gain keeps the same NR
+   // only if a uniquely linked, approved ODJ confirms the exact initial GF
+   // and NR, reference, assignment, and CSP meeting date. Otherwise keep
+   // "A verifier": do not infer a zero from a merely provisional NR.
+   if(!doc.manual&&e.kind==='nomination'&&e.gfDelta===0&&e.nrSteps===undefined&&
+      beforeNR===null&&afterNR!==null&&afterGF!==null){
+    const matches=(odjByRd.get(JSON.stringify([doc.id,e.id]))||[]).filter(({doc:odj,event:original})=>
+     odj.date===doc.date&&normalized(original.name)===normalized(e.name)&&
+     !!original.reference&&original.reference===e.reference&&
+     hasNR(original.nrBefore)&&original.nrBefore===afterNR&&
+     hasGF(original.gfBefore)&&original.gfBefore===afterGF&&
+     (!original.agentId||!e.agentId||original.agentId===e.agentId)&&
+     (!original.job||!e.job||normalized(original.job)===normalized(e.job))&&
+     (!original.team||!e.team||normalized(original.team)===normalized(e.team))&&
+     (!original.agency||!e.agency||normalized(original.agency)===normalized(e.agency))
+    );
+    if(matches.length===1)beforeNR=matches[0].event.nrBefore!;
+   }
    let nr:number|null=null;
    let justification:NRReportRow['justification']='à vérifier';
    if(beforeNR!==null&&afterNR!==null){
