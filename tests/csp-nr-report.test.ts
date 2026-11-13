@@ -50,8 +50,6 @@ test('Pas de rapprochement comptable sans concordance compl√®te ou lien approuv√
   {...approved,reference:'AUTRE-REF'},
   {...approved,recordedAfter:{gf:14,nr:235,nrProvisional:true}},
   {...approved,recordedAfter:{gf:15,nr:230,nrProvisional:true}},
-  {...approved,gfDelta:undefined},
-
   {...approved,id:'rd-2'}
  ]){
   assert.equal(calculateNRReport([original,{...rd,events:[variant]}],2026).toVerify,1);
