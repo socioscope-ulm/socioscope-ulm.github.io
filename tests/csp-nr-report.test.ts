@@ -169,6 +169,6 @@ test('Un reclassement sans RD unique, non validé ou incohérent ne perd pas son
  assert.equal(calculateNRReport([odj,{...rd,events:[{...rdEv,recordedAfter:{gf:14,nr:215}}]}],2026).toVerify,1);
  assert.equal(calculateNRReport([odj,{...rd,events:[{...rdEv,approved:false}]}],2026).toVerify,1);
  assert.equal(calculateNRReport([odj,{...rd,events:[rdEv,{...rdEv,id:'another'}]}],2026).toVerify,1);
- assert.equal(calculateNRReport([{...odj,events:[odjEv,{...odjEv,id:'another'}]},rd],2026).toVerify,2);
+ assert.equal(calculateNRReport([{...odj,events:[odjEv,{...odjEv,id:'another'}]},rd],2026).toVerify,1); // identical duplicate alerts are deduplicated
  assert.equal(calculateNRReport([odj,{...rd,events:[rdEv]},doc([rdEv],{id:'another-rd',date:'2026-09-11',documentType:'rd'})],2026).toVerify,1);
 });
