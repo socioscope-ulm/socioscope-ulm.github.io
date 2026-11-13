@@ -6,7 +6,7 @@ export async function compressPhoto(blob:Blob){
 function xml(text:string){const doc=new DOMParser().parseFromString(text,'application/xml');if(doc.querySelector('parsererror'))throw Error('PowerPoint illisible.');return doc;}
 const nodes=(el:Element|Document,tag:string)=>Array.from(el.getElementsByTagNameNS('*',tag));
 const first=(el:Element,tag:string)=>nodes(el,tag)[0];
-function box(el:Element):Box{const off=first(el,'off'),ext=first(el,'ext');return {x:Number(off?.getAttribute('x')),y:Number(off?.getAttribute('y')),w:Number(ext?.getAttribute('cx')),h:Number(ext?.getAttribute('cy'))};}
+function box(el:Element):Box{const transform=first(el,'xfrm');const off=transform?first(transform,'off'):undefined,ext=transform?first(transform,'ext'):undefined;return {x:Number(off?.getAttribute('x')),y:Number(off?.getAttribute('y')),w:Number(ext?.getAttribute('cx')),h:Number(ext?.getAttribute('cy'))};}
 export async function extractPortraits(file:File,progress:(s:string)=>void,onPhoto:(p:ExtractedPhoto)=>Promise<void>,onPage:(blob:Blob,page:number)=>Promise<void>,agents:PhotoAgent[]=[]){
  if(file.size>40*1024*1024)throw Error('40 Mo maximum par trombinoscope.');
  if(/\.ppt$/i.test(file.name))throw Error('Enregistrer ce PowerPoint au format PPTX ou PDF avant l’import.');
