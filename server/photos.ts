@@ -12,6 +12,42 @@ export async function photoRoute(req:Request,path:string,admin:boolean){
  }
  if(!admin)return json({error:'Administration uniquement.'},403);
  if(req.method==='GET')return json({agents:await catalog(),photos:(await db.prepare('SELECT id,agent_id,detected_name,source_name,page,updated_at FROM agent_photos ORDER BY created_at DESC').all()).results});
+ if(req.method==='PUT'){
+  // Update a previously attached Etat-Major portrait in place. Never stage
+  // an unassigned record, and never replace a portrait from another agency.
+  const form=await req.formData();const file=form.get('photo');
+  const agent=String(form.get('agent')||''),name=String(form.get('name')||'').trim().slice(0,200);
+  const source=String(form.get('source')||''),expectedSource=String(form.get('expectedSource')||'');
+  const oldSource='Trombinoscope Etat-Major ULM - oct2026.pdf';
+  const newSource='Trombinoscope Etat-Major ULM - nov2026.pdf';
+  if(source!==newSource||expectedSource!==oldSource)
+   return json({error:'Remplacement réservé à la nouvelle archive de l’état-major.'},400);
+  if(!(file instanceof File)||file.size>200000||file.size<4)return json({error:'Photo JPEG attendue (200 Ko maximum).'},400);
+  const bytes=new Uint8Array(await file.arrayBuffer());
+  if(bytes[0]!==255||bytes[1]!==216||bytes[2]!==255)return json({error:'Photo JPEG invalide.'},400);
+  const agents=await catalog();
+  const matches=matchPhotoName(name,agents);
+  if(matches.length!==1||matches[0].id!==agent)return json({error:'Correspondance agent non unique, remplacement refusé.'},409);
+  const previous=await db.prepare('SELECT id,object_key,source_name FROM agent_photos WHERE agent_id=?').bind(agent).first<any>();
+  if(!previous||previous.source_name!==oldSource)return json({error:'Photo existante modifiée ou autre source : remplacement refusé.'},409);
+  const key='photos/'+crypto.randomUUID()+'.jpg';
+  try{await bucket.put(key,bytes,{httpMetadata:{contentType:'image/jpeg'}});}catch{return json({error:'Enregistrement du nouveau portrait impossible. L’ancienne photo est conservée.'},503);}
+  try{
+   const changed=await db.prepare('UPDATE agent_photos SET object_key=?,detected_name=?,source_name=?,page=?,updated_at=now() WHERE id=?::uuid AND object_key=? AND source_name=? RETURNING id')
+    .bind(key,name,source,Math.max(1,Number(form.get('page'))||1),previous.id,previous.object_key,oldSource).first<any>();
+   if(!changed){
+    await storageFetch(key,{method:'DELETE'}).catch(()=>{});
+    return json({error:'Cette photo a changé pendant l’import. Ancienne attribution conservée.'},409);
+   }
+  }catch{
+   await storageFetch(key,{method:'DELETE'}).catch(()=>{});
+   return json({error:'Remplacement impossible, ancien portrait conservé.'},503);
+  }
+  try{const removed=await storageFetch(previous.object_key,{method:'DELETE'});
+   if(!removed.ok&&removed.status!==404)console.warn('Old Etat-Major portrait cleanup failed',removed.status);
+  }catch{console.warn('Old Etat-Major portrait cleanup unavailable');}
+  return json({ok:true,agent_id:agent,replaced:true});
+ }
  if(req.method==='POST'){
   const form=await req.formData();const file=form.get('photo');if(!(file instanceof File)||file.size>200000||file.size<4)return json({error:'Photo JPEG attendue (200 Ko maximum).'},400);
   const bytes=new Uint8Array(await file.arrayBuffer());if(bytes[0]!==255||bytes[1]!==216||bytes[2]!==255)return json({error:'Photo JPEG invalide.'},400);
