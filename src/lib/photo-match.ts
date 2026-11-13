@@ -3,7 +3,7 @@ export const photoNameKey=(s:string)=>s.normalize('NFD').replace(/[\u0300-\u036f
 export function matchPhotoName(name:string,agents:PhotoAgent[]){
  const key=photoNameKey(name);if(key.split(' ').length<2)return [];
  const sorted=(s:string)=>photoNameKey(s).split(' ').filter(Boolean).sort().join(' ');
- const canonical=key.replace(/^(RA|AM|RP|TM|PA)\s+/,'');
+ const canonical=key.replace(/^(?:(?:RA|AM|RP|TM|PA|RAC|TMC|MPL)(?:\s+[12])?|ALTERNANT(?:E)?(?:\s+(?:TM|AM|PA|RH))?)\s+/,'');
  const exact=agents.filter(a=>sorted(a.name)===sorted(key));
  return exact.length?exact:canonical!==key?agents.filter(a=>sorted(a.name)===sorted(canonical)):[];
 
@@ -44,4 +44,39 @@ export function nearbyPhotoName(photo:Box,photos:Box[],labels:Box[],agents:Photo
  // Save the catalogue spelling for a uniquely identified name so the API can
  // associate it even when a role prefix (RA, AM, RP, TM, PA) precedes the name.
  return {name:matched.length===1?matched[0].name:first.label.text||'',certain:!otherLabel&&!otherPhoto&&uniqueAgent};
+}
+
+
+/** Assign the visible portrait frames to the individual name captions on one
+ * PowerPoint slide. Coordinates alone drive the pairing, never facial matching.
+ * A result is certain only when a single catalogue agent and an unambiguous
+ * caption-to-picture relationship are both established. */
+export function matchPptxPortraits(photos:Box[],labels:Box[],agents:PhotoAgent[]){
+ const result=photos.map(()=>({name:'',certain:false}));
+ const score=(p:Box,t:Box)=>{
+  const photoCenter=p.x+p.w/2,labelCenter=t.x+t.w/2;
+  const dx=(labelCenter-photoCenter)/Math.max(.55,p.w);
+  const gap=(t.y-(p.y+p.h))/Math.max(.55,p.h);
+  if(gap>=-.30&&gap<=1.22&&Math.abs(dx)<=2)
+   return .19+Math.pow(Math.abs(dx),1.6)+Math.max(0,gap)*.8+Math.max(0,-gap)*2;
+  const side=(t.x-(p.x+p.w))/Math.max(.55,p.w);
+  const vertical=Math.abs(t.y+t.h/2-(p.y+p.h*.4))/Math.max(.55,p.h);
+  return side>=-.8&&side<=2.6&&vertical<=.95?1.5+Math.max(0,side)*.5+vertical:Infinity;
+ };
+ const pairs:{photo:number;label:number;score:number}[]=[];
+ photos.forEach((p,photo)=>labels.forEach((t,label)=>{
+  const s=score(p,t);if(Number.isFinite(s)&&s<5.5)pairs.push({photo,label,score:s});
+ }));
+ pairs.sort((a,b)=>a.score-b.score);
+ const usedPhotos=new Set<number>(),usedLabels=new Set<number>();
+ for(const pair of pairs){
+  if(usedPhotos.has(pair.photo)||usedLabels.has(pair.label))continue;
+  usedPhotos.add(pair.photo);usedLabels.add(pair.label);
+  const label=labels[pair.label].text||'',matched=matchPhotoName(label,agents);
+  const competing=pairs.some(other=>other!==pair&&other.score<=pair.score+.17&&
+   (other.photo===pair.photo||other.label===pair.label));
+  result[pair.photo]={name:matched.length===1?matched[0].name:label,
+   certain:matched.length===1&&pair.score<1.3&&!competing};
+ }
+ return result;
 }
