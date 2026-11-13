@@ -172,3 +172,55 @@ test('Un reclassement sans RD unique, non validé ou incohérent ne perd pas son
  assert.equal(calculateNRReport([{...odj,events:[odjEv,{...odjEv,id:'another'}]},rd],2026).toVerify,1); // identical duplicate alerts are deduplicated
  assert.equal(calculateNRReport([odj,{...rd,events:[rdEv]},doc([rdEv],{id:'another-rd',date:'2026-09-11',documentType:'rd'})],2026).toVerify,1);
 });
+
+test('NR exceptionnels avant repositionnement GF : 2 + 0 + 1, sans doubles comptes ODJ/RD',()=>{
+ const start='2026-01-01';
+ const exceptional=event({id:'exceptional',name:'AGENT FICTIF X',agentId:'X',kind:'avancement',
+   effective:start,nrSteps:2,nrBefore:315,nrAfter:325,gfBefore:17,
+   recordedBefore:{gf:17,nr:315,agency:'DIRECTION'},recordedAfter:{gf:17,nr:325,agency:'DIRECTION'}});
+ const reposition=event({id:'reposition',name:'AGENT FICTIF X',agentId:'X',kind:'reclassement',
+   effective:start,gfDelta:1,nrSteps:undefined,nrBefore:undefined,nrAfter:undefined,
+   recordedBefore:{gf:17,nr:315,agency:'DIRECTION'},recordedAfter:{gf:18,nr:325,agency:'DIRECTION'}});
+ const odjReposition=event({id:'odj-reposition',name:'AGENT FICTIF X',agentId:'X',kind:'reclassement',
+   effective:start,gfDelta:1,gfBefore:17,gfAfter:18,nrBefore:330,nrAfter:undefined,
+   recordedBefore:{gf:18,nr:330,agency:'DIRECTION'},recordedAfter:undefined});
+ const advancement=event({id:'adv-rd',name:'AGENT FICTIF X',agentId:'X',kind:'avancement',
+   effective:start,nrSteps:1,nrBefore:undefined,nrAfter:undefined,
+   recordedBefore:{gf:18,nr:325,agency:'DIRECTION'},recordedAfter:{gf:18,nr:330,agency:'DIRECTION'}});
+ const odjAdvancement=event({id:'adv-odj',name:'AGENT FICTIF X',agentId:'X',kind:'avancement',
+   effective:start,nrSteps:1,nrBefore:325,nrAfter:330,gfBefore:17,
+   recordedBefore:{gf:18,nr:330,agency:'DIRECTION'},recordedAfter:undefined});
+ const docs=[
+  doc([exceptional],{id:'earlier-odj',date:'2026-07-10',documentType:'cr'}),
+  doc([odjReposition,odjAdvancement],{id:'later-odj',date:'2026-09-11',documentType:'cr'}),
+  doc([reposition,advancement],{id:'later-rd',date:'2026-09-11',documentType:'rd'})
+ ];
+ const original=JSON.stringify(docs);
+ const result=calculateNRReport(docs,2026);
+ assert.equal(result.toVerify,0);
+ assert.equal(result.total,3);
+ assert.equal(result.rows.length,2);
+ assert.deepEqual(result.rows.map(r=>[r.beforeNR,r.afterNR,r.nr]),[[315,325,2],[325,330,1]]);
+ assert.equal(JSON.stringify(docs),original);
+});
+test('Ne jamais neutraliser un reclassement avec un intervalle NR ou une date différents',()=>{
+ const earlier=event({id:'earlier',kind:'avancement',effective:'2026-01-01',nrSteps:2,
+  recordedBefore:{gf:17,nr:315},recordedAfter:{gf:17,nr:325}});
+ const later=event({id:'later',kind:'reclassement',effective:'2026-01-01',gfDelta:1,nrSteps:undefined,
+  recordedBefore:{gf:17,nr:325},recordedAfter:{gf:18,nr:335}});
+ const docs=[doc([earlier],{id:'odj',date:'2026-07-10',documentType:'cr'}),
+  doc([later],{id:'rd',date:'2026-09-11',documentType:'rd'})];
+ assert.equal(calculateNRReport(docs,2026).total,4);
+ assert.equal(calculateNRReport([docs[0],{...docs[1],events:[{...later,effective:'2026-01-02',recordedBefore:{gf:17,nr:315},recordedAfter:{gf:18,nr:325}}]}],2026).total,4);
+});
+test('Un avancement ODJ/RD ne doit etre fusionne que si les NR directs concordent sans ambiguite',()=>{
+ const odj=event({id:'odj',kind:'avancement',nrSteps:1,nrBefore:210,nrAfter:215,
+  recordedBefore:{gf:13,nr:220},recordedAfter:undefined});
+ const rd=event({id:'rd',kind:'avancement',nrSteps:1,
+  recordedBefore:{gf:13,nr:210},recordedAfter:{gf:13,nr:215}});
+ const docs=[doc([odj],{id:'ODJ',date:'2026-09-11',documentType:'cr'}),
+  doc([rd],{id:'RD',date:'2026-09-11',documentType:'rd'})];
+ assert.equal(calculateNRReport(docs,2026).total,1);
+ const conflicting={...rd,recordedBefore:{gf:13,nr:215},recordedAfter:{gf:13,nr:220}};
+ assert.equal(calculateNRReport([docs[0],{...docs[1],events:[conflicting]}],2026).total,2);
+});

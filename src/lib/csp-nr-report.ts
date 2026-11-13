@@ -70,6 +70,60 @@ export function calculateNRReport(documents:NRReportDocument[],year:number):{yea
   alreadyReportedOdj.add(odj.id+':'+e.id);
   odjProofForRd.set(rd.id+':'+source.id,odj.name);
  }
+ // Match already-approved ODJ/RD advancements from one meeting by their
+ // *documented* NR interval. The stored situation can reflect a later
+ // cumulative state, so it must not create a second accounting award.
+ // Require a one-to-one ODJ/RD match with an explicit and equal NR interval.
+ for(const odj of odjDocs)for(const e of odj.events||[]){
+  if(!approved(e)||e.kind!=='avancement'||!hasNR(e.nrBefore)||!hasNR(e.nrAfter)||
+     e.nrAfter<=e.nrBefore||e.nrSteps!==(e.nrAfter-e.nrBefore)/5)continue;
+  const odjPeers=odjDocs.flatMap(d=>d.date===odj.date?
+   (d.events||[]).filter(v=>approved(v)&&matchIdentity(e,v)&&
+    v.nrBefore===e.nrBefore&&v.nrAfter===e.nrAfter):[]);
+  if(odjPeers.length!==1)continue;
+  const rdMatches=rdDocs.flatMap(rd=>rd.date===odj.date?
+   (rd.events||[]).filter(v=>approved(v)&&matchIdentity(e,v)&&
+    v.nrSteps===e.nrSteps&&v.recordedBefore?.nr===e.nrBefore&&
+    v.recordedAfter?.nr===e.nrAfter).map(v=>({rd,event:v})):[]);
+  if(rdMatches.length!==1)continue;
+  alreadyReportedOdj.add(odj.id+':'+e.id);
+  const match=rdMatches[0];
+  if(!odjProofForRd.has(match.rd.id+':'+match.event.id))
+   odjProofForRd.set(match.rd.id+':'+match.event.id,odj.name);
+ }
+ // A previously validated exceptional allocation at unchanged GF may be
+ // carried forward in the NR before/after of a later GF repositioning.
+ // Because it is the same interval on the same effective date, counting the
+ // later reclassement's recorded NR delta would award the same NR twice.
+ // The GF repositioning remains in the career history; only the duplicate
+ // *accounting* award is excluded.
+ const gfRepositionWithoutNewNr=new Set<string>();
+ for(const rd of rdDocs)for(const move of rd.events||[]){
+  if(!approved(move)||move.kind!=='reclassement'||move.gfDelta!==1||
+     !hasGF(move.recordedBefore?.gf)||!hasGF(move.recordedAfter?.gf)||
+     move.recordedAfter.gf!==move.recordedBefore.gf+1||
+     !hasNR(move.recordedBefore?.nr)||!hasNR(move.recordedAfter?.nr)||
+     move.recordedAfter.nr!==move.recordedBefore.nr+10)continue;
+  const earlier=odjDocs.flatMap(odj=>odj.date<rd.date?
+   (odj.events||[]).filter(e=>approved(e)&&e.kind==='avancement'&&
+    normalized(e.name)===normalized(move.name)&&
+    (!e.agentId||!move.agentId||e.agentId===move.agentId)&&
+    e.effective===move.effective&&e.nrSteps===2&&
+    e.recordedBefore?.gf===move.recordedBefore?.gf&&
+    e.recordedAfter?.gf===move.recordedBefore?.gf&&
+    e.recordedBefore.nr===move.recordedBefore.nr&&
+    e.recordedAfter.nr===move.recordedAfter.nr):[]);
+  if(earlier.length!==1)continue;
+  const competing=rdDocs.flatMap(d=>d.date===rd.date?
+   (d.events||[]).filter(e=>approved(e)&&e.kind==='reclassement'&&
+    normalized(e.name)===normalized(move.name)&&
+    e.effective===move.effective&&e.recordedBefore?.gf===move.recordedBefore?.gf&&
+    e.recordedAfter?.gf===move.recordedAfter?.gf&&
+    e.recordedBefore?.nr===move.recordedBefore?.nr&&
+    e.recordedAfter?.nr===move.recordedAfter?.nr):[]);
+  if(competing.length!==1)continue;
+  gfRepositionWithoutNewNr.add(rd.id+':'+move.id);
+ }
  // An approved ODJ candidacy may establish the starting NR of its *exact*
  // approved RD decision. This is an accounting-only reconciliation: the
  // source events and their provisional fields are never modified.
@@ -92,7 +146,7 @@ export function calculateNRReport(documents:NRReportDocument[],year:number):{yea
  for(const doc of [...documents.filter(d=>!d.manual),...documents.filter(d=>d.manual)]){
   if(doc.status!=='validated')continue;
   for(const e of doc.events||[]){
-   if(alreadyReportedOdj.has(doc.id+':'+e.id))continue;
+   if(alreadyReportedOdj.has(doc.id+':'+e.id)||gfRepositionWithoutNewNr.has(doc.id+':'+e.id))continue;
    if(e.selected!==true||e.approved!==true||e.candidacy||e.nonRetained||e.nonRetainedByRD||e.acknowledgedByDocument||e.acknowledgedByRD||!Object.hasOwn(labels,e.kind)||!/^\d{4}-\d{2}-\d{2}$/.test(e.effective)||Number(e.effective.slice(0,4))!==year)continue;
    let beforeNR:number|null=hasNR(e.recordedBefore?.nr)?e.recordedBefore.nr:hasNR(e.nrBefore)?e.nrBefore:null;
    const afterNR=hasNR(e.recordedAfter?.nr)?e.recordedAfter.nr:hasNR(e.nrAfter)?e.nrAfter:null;
