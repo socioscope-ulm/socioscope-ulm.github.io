@@ -1,7 +1,7 @@
 import {useEffect,useRef,useState} from 'react';
 import {UserRound,ChevronRight,ImagePlus} from 'lucide-react';
 import {compressPhoto,extractPortraits,type ExtractedPhoto} from '../lib/photo-extract';
-import {photoNameKey,type PhotoAgent} from '../lib/photo-match';
+import {photoNameKey,matchPhotoName,type PhotoAgent} from '../lib/photo-match';
 async function request(path:string,init?:RequestInit){const r=await fetch(path,init);if(!r.ok){const b=await r.json().catch(()=>({}));throw Object.assign(Error(b.error||'Opération impossible.'),{status:r.status});}return r;}
 function PhotoImage({agent,id,revision=0}:{agent?:string;id?:string;revision?:number}){const [url,setUrl]=useState('');useEffect(()=>{let active=true,object='';setUrl('');request('/api/photos/image?'+(agent?'agent='+encodeURIComponent(agent):'id='+id)).then(r=>r.blob()).then(b=>{if(active){object=URL.createObjectURL(b);setUrl(object);}}).catch(()=>{});return()=>{active=false;if(object)URL.revokeObjectURL(object);};},[agent,id,revision]);return url?<img src={url} alt="Photo de l’agent"/>:<UserRound aria-label="Photo non renseignée" size={42}/>;}
 async function uploadPhoto(photo:ExtractedPhoto,source:string,agent=''){const form=new FormData();form.set('photo',photo.blob,'portrait.jpg');form.set('name',photo.name);form.set('certain',String(photo.certain));form.set('source',source);form.set('page',String(photo.page));if(agent)form.set('agent',agent);return (await request('/api/photos',{method:'POST',body:form})).json();}
@@ -22,35 +22,31 @@ function ScannedPage({blob,page,onCrop}:{blob:Blob;page:number;onCrop:(photo:Ext
  return <section className="panel"><h3>Page {page} · sélectionner une photo</h3><p>Tracer un rectangle autour de la photo, puis l’ajouter. Répéter pour chaque agent de cette page.</p><div className="photo-crop"><canvas ref={canvas} onPointerDown={e=>{e.currentTarget.setPointerCapture(e.pointerId);start.current=point(e);setSelection(null);}} onPointerUp={e=>{if(!start.current)return;const end=point(e),s=start.current;setSelection({x:Math.min(s.x,end.x),y:Math.min(s.y,end.y),w:Math.abs(end.x-s.x),h:Math.abs(end.y-s.y)});start.current=null;}}/>{selection&&<div className="crop-outline" style={{left:selection.x/canvas.current!.width*100+'%',top:selection.y/canvas.current!.height*100+'%',width:selection.w/canvas.current!.width*100+'%',height:selection.h/canvas.current!.height*100+'%'}}/>}</div>{selection&&<><label>Nom associé<input value={name} onChange={e=>setName(e.target.value)}/></label><button className="btn" disabled={busy||selection.w<10||selection.h<10} onClick={()=>void ocr()}>Lire le nom sous la photo</button><button className="btn primary" disabled={busy||selection.w<10||selection.h<10} onClick={()=>void save()}>Ajouter la photo à rattacher</button></>}{error&&<p role="alert">{error}</p>}</section>;
 }
 export default function PhotoImport(){const [data,setData]=useState<any>(null),[busy,setBusy]=useState(''),[error,setError]=useState(''),[notice,setNotice]=useState(''),[scans,setScans]=useState<{blob:Blob;page:number;source:string}[]>([]),[opened,setOpened]=useState(false);const reload=async()=>{setData(await (await request('/api/photos')).json());window.dispatchEvent(new Event('socioscope-photos-changed'));};useEffect(()=>{if(opened)reload().catch(e=>setError(e.message));},[opened]);
- const read=async(file?:File)=>{if(!file)return;setBusy('Préparation…');setError('');setNotice('');setScans([]);let total=0,assigned=0,reused=0;try{
-  // Keep every manual association from previous imports. A reimport enriches
-  // the catalogue; it does not replace photos or ask to relink known portraits.
-  const existing=await (await request('/api/photos')).json();
-  const nameKey=(source:string,page:number,name:string)=>source+'|'+photoNameKey(name).replace(/^(RA|AM|RP|TM|PA) /,'').split(' ').filter(Boolean).sort().join(' ');
-  const previous=existing.photos.filter((p:any)=>p.source_name===file.name);
-  const known=new Set<string>(previous.filter((p:any)=>photoNameKey(p.detected_name||'')).map((p:any)=>nameKey(p.source_name,p.page,p.detected_name)));
-  // For portraits without detected names, compare the actual image. This also
-  // preserves manual relinking when OCR results change between two imports.
-  const digest=async(blob:Blob)=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',await blob.arrayBuffer()))).map(b=>b.toString(16).padStart(2,'0')).join('');
-  const priorFingerprints=new Map<number,Promise<Set<string>>>();
-  const pageFingerprints=(page:number)=>{
-   let existingHashes=priorFingerprints.get(page);
-   if(!existingHashes){
-    existingHashes=Promise.all(previous.filter((p:any)=>p.page===page).map(async(p:any)=>{try{return await digest(await (await request('/api/photos/image?id='+encodeURIComponent(p.id))).blob());}catch{return '';}})).then(hashes=>new Set(hashes.filter(Boolean)));
-    priorFingerprints.set(page,existingHashes);
-   }
-   return existingHashes;
-  };
-  await extractPortraits(file,setBusy,async photo=>{
-   const key=photoNameKey(photo.name)?nameKey(file.name,photo.page,photo.name):'';
-   if(key&&known.has(key)){reused++;return;}
-   const fingerprint=await digest(photo.blob),fingerprints=await pageFingerprints(photo.page);
-   if(fingerprints.has(fingerprint)){reused++;return;}
-   const saved=await uploadPhoto(photo,file.name);
-   total++;if(saved.agent_id)assigned++;
-   fingerprints.add(fingerprint);if(key)known.add(key);
-  },async(blob,page)=>{setScans(s=>[...s,{blob,page,source:file.name}]);},existing.agents||[]);
-  setNotice(`${total} nouvelle(s) photo(s) enregistrée(s), ${assigned} attribuée(s) automatiquement, ${reused} déjà présente(s) conservée(s) avec leurs rattachements. Les autres images sont à rattacher ci-dessous.`);
- }catch(e){setError((e as Error).message+(total?` ${total} nouvelle(s) photo(s) déjà enregistrée(s).`:''));}finally{await reload().catch(e=>setError(e.message));setBusy('');}};
- return <details className="document-folder" onToggle={e=>setOpened(e.currentTarget.open)}><summary><ChevronRight size={16} className="folder-chevron"/><ImagePlus size={20}/><strong>Photos des agents · trombinoscopes</strong><span className="badge">PDF · PowerPoint</span></summary><div className="document-folder-content"><section className="panel"><h2>Importer un trombinoscope</h2><p>PDF ou PPTX · 40 Mo maximum. Attribution automatique si le nom complet correspond à un seul agent et si son emplacement est sans ambiguïté. Les photos déjà présentes sont conservées jusqu’à confirmation du remplacement.</p><label className="btn primary file-input">Choisir un trombinoscope<input type="file" accept=".pdf,.pptx,.ppt" disabled={!!busy||!data} onChange={e=>{void read(e.target.files?.[0]);e.target.value='';}}/></label><p className="filter-note">Ancien format PPT : enregistrer en PPTX ou PDF. Les pages scannées ou aplaties se découpent ci-dessous ; la lecture du nom reste à vérifier. Terminer ces découpes avant de quitter cette page.</p>{busy&&<p role="status">{busy}</p>}{notice&&<p role="status">{notice}</p>}{error&&<p className="notice" role="alert">{error}</p>}{data&&<p>{data.photos.filter((p:any)=>p.agent_id).length} photo(s) attribuée(s) · {data.photos.filter((p:any)=>!p.agent_id).length} image(s) à rattacher</p>}</section>{scans.map((s,i)=><ScannedPage key={i} blob={s.blob} page={s.page} onCrop={async photo=>{await uploadPhoto(photo,s.source);await reload();}}/>)}{data?.photos.filter((p:any)=>!p.agent_id).map((photo:any)=><PhotoAssignment key={photo.id} photo={photo} agents={data.agents} onChange={reload}/>)}</div></details>;
+ const read=async(file?:File)=>{if(!file)return;setBusy('Préparation…');setError('');setNotice('');setScans([]);
+  let assigned=0,already=0,ignored=0;
+  try{
+   const existing=await (await request('/api/photos')).json();
+   const agents:PhotoAgent[]=existing.agents||[];
+   const occupied=new Set<string>((existing.photos||[]).filter((p:any)=>p.agent_id).map((p:any)=>String(p.agent_id)));
+   // Import only a portrait that can be linked to one known agent without ambiguity.
+   // Unknown or already-photographed agents MUST NOT create unassigned database rows.
+   await extractPortraits(file,setBusy,async photo=>{
+    if(!photo.certain){ignored++;return;}
+    const matches=matchPhotoName(photo.name,agents);
+    if(matches.length!==1){ignored++;return;}
+    const agent=matches[0].id;
+    if(occupied.has(agent)){already++;return;}
+    const saved=await uploadPhoto(photo,file.name,agent);
+    if(saved.agent_id===agent){assigned++;occupied.add(agent);}
+    else{
+     // Concurrent assignment: the upload must not leave an orphaned photo.
+     await request('/api/photos',{method:'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:saved.id})});
+     already++;
+    }
+   },async()=>{/* A flattened page cannot be assigned automatically. */},agents);
+   setNotice(assigned+' nouvelle(s) photo(s) directement rattachée(s), '+already+' agent(s) déjà photographié(s), '+ignored+' image(s) sans rapprochement fiable ignorée(s). Aucune fiche en attente créée.');
+  }catch(e){setError((e as Error).message+(assigned?' '+assigned+' photo(s) enregistrée(s) avant cette erreur.':''));}
+  finally{await reload().catch(e=>setError(e.message));setBusy('');}
+ };
+ return <details className="document-folder" onToggle={e=>setOpened(e.currentTarget.open)}><summary><ChevronRight size={16} className="folder-chevron"/><ImagePlus size={20}/><strong>Photos des agents · trombinoscopes</strong><span className="badge">PDF · PowerPoint</span></summary><div className="document-folder-content"><section className="panel"><h2>Importer un trombinoscope</h2><p>PDF ou PPTX · 40 Mo maximum. Seules les photos avec nom complet identifié de façon unique sont enregistrées directement sur la fiche correspondante. Images non reconnues et doublons : ignorés sans création de fiche. Les photos déjà rattachées sont conservées.</p><label className="btn primary file-input">Choisir un trombinoscope<input type="file" accept=".pdf,.pptx,.ppt" disabled={!!busy||!data} onChange={e=>{void read(e.target.files?.[0]);e.target.value='';}}/></label><p className="filter-note">Ancien format PPT : enregistrer en PPTX ou PDF. Les pages scannées ou les identités ambiguës ne sont pas enregistrées.</p>{busy&&<p role="status">{busy}</p>}{notice&&<p role="status">{notice}</p>}{error&&<p className="notice" role="alert">{error}</p>}{data&&<p>{data.photos.filter((p:any)=>p.agent_id).length} photo(s) attribuée(s)</p>}</section></div></details>;
 }
