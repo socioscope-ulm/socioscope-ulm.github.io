@@ -2,7 +2,7 @@ import {isNRWithoutAgency,type NRReportRow} from './csp-nr-report';
 
 export type NRAllocationScope='ulm'|'outside_ulm'|'to_clarify';
 export type NRScopeOverride={
- rowId:string;agentId:string;scope:'ulm'|'outside_ulm';
+ rowId:string;agentId:string;scope:NRAllocationScope;
  agency?:string;relatedAgency?:string;reason:string;updatedAt?:string;updatedBy?:string;
 };
 export type AccountedNRRow=NRReportRow&{
@@ -23,7 +23,7 @@ export function applyNRScopes<T extends {rows:NRReportRow[];total:number}>(repor
  const rows:AccountedNRRow[]=report.rows.map(r=>{
   const override=r.nr!==null&&r.nr>0?byId.get(r.id):undefined;
   const valid=override?.agentId===r.agentId;
-  const scope:NRAllocationScope=valid?(override!.scope==='outside_ulm'?'outside_ulm':'ulm'):(noAgency(r.agency)?'to_clarify':'ulm');
+  const scope:NRAllocationScope=valid?override!.scope:(noAgency(r.agency)?'to_clarify':'ulm');
   const agency=scope==='ulm'?(valid&&override!.scope==='ulm'&&override!.agency?.trim()||r.agency):'';
   const accountingAgency=noAgency(agency)?'':agency;
   return {...r,allocationScope:scope,accountingAgency,relatedAgency:valid?String(override?.relatedAgency||'').trim():'',
