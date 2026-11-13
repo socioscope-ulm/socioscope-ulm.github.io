@@ -47,7 +47,7 @@ export async function GET(request:Request){try{
     docs.push({...manual,manual:true} as any);
    }catch{/* Une saisie historique illisible ne bloque pas le bilan. */}
   }
-  const overrides=(await resources().db.prepare("SELECT id,agent,note,created FROM agent_decisions WHERE kind='nr_allocation' ORDER BY created,id").all<any>()).results.flatMap(row=>{try{const entry=JSON.parse(row.note||'{}');return typeof entry.rowId==='string'&&entry.agentId===row.agent&&['ulm','outside_ulm'].includes(entry.scope)?[entry as NRScopeOverride]:[];}catch{return [];}});
+  const overrides=(await resources().db.prepare("SELECT id,agent,note,created FROM agent_decisions WHERE kind='nr_allocation' ORDER BY created,id").all<any>()).results.flatMap(row=>{try{const entry=JSON.parse(row.note||'{}');return typeof entry.rowId==='string'&&entry.agentId===row.agent&&['ulm','outside_ulm','to_clarify'].includes(entry.scope)?[entry as NRScopeOverride]:[];}catch{return [];}});
   return Response.json(applyNRScopes(calculateNRReport(docs,year),overrides),{headers:{'Cache-Control':'no-store'}});
  }
 
@@ -104,10 +104,6 @@ export async function PATCH(request:Request){try{
   const scope=b.scope as 'ulm'|'outside_ulm'|'to_clarify';
   if(scope==='ulm'&&(!b.agency.trim()||['AGENCE NON RENSEIGNÉE','NON RENSEIGNÉE','SANS AGENCE'].includes(b.agency.trim().toUpperCase())))fail('Indiquer une agence fiable pour imputer ces NR à l’ULM.');
   const {db}=resources();const id='nr-allocation:'+encodeURIComponent(source.id);const existing=await db.prepare("SELECT id FROM agent_decisions WHERE id=? AND kind='nr_allocation'").bind(id).first<any>();
-  if(scope==='to_clarify'){
-   if(existing)await db.prepare("DELETE FROM agent_decisions WHERE id=? AND kind='nr_allocation'").bind(id).run();
-   return Response.json({ok:true,scope:'to_clarify'});
-  }
   const note=JSON.stringify({rowId:source.id,agentId:source.agentId,scope,agency:scope==='ulm'?b.agency.trim():'',relatedAgency:b.relatedAgency.trim(),reason:b.reason.trim(),updatedAt:new Date().toISOString(),updatedBy:String(request.headers.get('oai-authenticated-user-email')||'administrateur').slice(0,200)});
   await db.prepare("INSERT INTO agent_decisions (id,agent,kind,target,source,note,created) VALUES (?,?,'nr_allocation',NULL,'bilan-nr',?,?) ON CONFLICT(id) DO UPDATE SET note=excluded.note,created=excluded.created WHERE agent_decisions.kind='nr_allocation' AND agent_decisions.agent=excluded.agent").bind(id,source.agentId,note,new Date().toISOString()).run();
   return Response.json({ok:true,scope});
