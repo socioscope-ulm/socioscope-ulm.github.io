@@ -28,12 +28,18 @@ export function calculateNRReport(documents:NRReportDocument[],year:number):{yea
  // An approved ODJ candidacy may establish the starting NR of its *exact*
  // approved RD decision. This is an accounting-only reconciliation: the
  // source events and their provisional fields are never modified.
+ const approvedOdjCandidates:{doc:NRReportDocument;event:NRReportEvent}[]=[];
  const odjByRd=new Map<string,{doc:NRReportDocument;event:NRReportEvent}[]>();
  for(const odj of documents.filter(d=>d.status==='validated'&&!d.manual))
   for(const candidate of odj.events||[]){
    const link=candidate.acknowledgedByDocument;
    if(candidate.kind!=='nomination'||candidate.candidacy!==true||candidate.selected!==true||
-      candidate.approved!==true||!link?.id||!link?.eventId)continue;
+      candidate.approved!==true)continue;
+   // Historical validated ODJ records may lack an acknowledgement marker.
+   // In that case, require an unambiguous match on reference and all available
+   // assignment fields in the exact same CSP meeting.
+   approvedOdjCandidates.push({doc:odj,event:candidate});
+   if(!link?.id||!link?.eventId)continue;
    const key=JSON.stringify([link.id,link.eventId]);
    const matches=odjByRd.get(key)||[];
    matches.push({doc:odj,event:candidate});odjByRd.set(key,matches);
@@ -52,17 +58,24 @@ export function calculateNRReport(documents:NRReportDocument[],year:number):{yea
    // "A verifier": do not infer a zero from a merely provisional NR.
    if(!doc.manual&&e.kind==='nomination'&&e.gfDelta===0&&e.nrSteps===undefined&&
       beforeNR===null&&afterNR!==null&&afterGF!==null){
-    const matches=(odjByRd.get(JSON.stringify([doc.id,e.id]))||[]).filter(({doc:odj,event:original})=>
-     odj.date===doc.date&&normalized(original.name)===normalized(e.name)&&
+    const matches=approvedOdjCandidates.filter(({doc:odj,event:original})=>
+     odj.id!==doc.id&&odj.date===doc.date&&normalized(original.name)===normalized(e.name)&&
      !!original.reference&&original.reference===e.reference&&
      hasNR(original.nrBefore)&&original.nrBefore===afterNR&&
      hasGF(original.gfBefore)&&original.gfBefore===afterGF&&
      (!original.agentId||!e.agentId||original.agentId===e.agentId)&&
      (!original.job||!e.job||normalized(original.job)===normalized(e.job))&&
      (!original.team||!e.team||normalized(original.team)===normalized(e.team))&&
-     (!original.agency||!e.agency||normalized(original.agency)===normalized(e.agency))
+     (!original.agency||!e.agency||normalized(original.agency)===normalized(e.agency))&&
+     // If the ODJ is explicitly linked, it must reference this exact RD event.
+     (!original.acknowledgedByDocument||
+       original.acknowledgedByDocument.id===doc.id&&original.acknowledgedByDocument.eventId===e.id)
     );
-    if(matches.length===1)beforeNR=matches[0].event.nrBefore!;
+    // A conflicting explicit link or multiple competing identical references
+    // must not be quietly accepted as a constant-NR nomination.
+    const explicit=odjByRd.get(JSON.stringify([doc.id,e.id]))||[];
+    if(matches.length===1&&(!explicit.length||explicit.length===1&&explicit[0].event===matches[0].event))
+     beforeNR=matches[0].event.nrBefore!;
    }
    let nr:number|null=null;
    let justification:NRReportRow['justification']='à vérifier';

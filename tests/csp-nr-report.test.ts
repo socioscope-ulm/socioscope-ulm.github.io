@@ -51,12 +51,41 @@ test('Pas de rapprochement comptable sans concordance complète ou lien approuv�
   {...approved,recordedAfter:{gf:14,nr:235,nrProvisional:true}},
   {...approved,recordedAfter:{gf:15,nr:230,nrProvisional:true}},
   {...approved,gfDelta:undefined},
-  {...approved,nrSteps:1},
+
   {...approved,id:'rd-2'}
  ]){
   assert.equal(calculateNRReport([original,{...rd,events:[variant]}],2026).toVerify,1);
  }
+ assert.equal(calculateNRReport([original,{...rd,events:[{...approved,nrSteps:1}]}],2026).total,1);
  assert.equal(calculateNRReport([original,{...rd,date:'2026-09-12'}],2026).toVerify,1);
  assert.equal(calculateNRReport([{...original,events:[candidate,{...candidate,id:'duplicate'}]},rd],2026).toVerify,1);
  assert.equal(calculateNRReport([{...original,status:'review'},rd],2026).toVerify,1);
+});
+
+test('ODJ historiques sans lien stocké : rapprochement strict référence, GF et NR pour plusieurs nominations',()=>{
+ const names=['AGENT FICTIF UN','AGENT FICTIF DEUX'];
+ const odjEvents=names.map((name,i)=>event({id:'candidate-'+i,name,agentId:'FICTIF-'+i,
+  kind:'nomination',effective:'',candidacy:true,reference:'REFERENCE-'+i,job:'POSTE '+i,
+  gfBefore:9+i,nrBefore:160+i*5,recordedBefore:undefined,recordedAfter:undefined}));
+ const rdEvents=names.map((name,i)=>event({id:'decision-'+i,name,agentId:'FICTIF-'+i,
+  kind:'nomination',effective:'2026-04-01',reference:'REFERENCE-'+i,job:'POSTE '+i,
+  gfDelta:0,nrSteps:undefined,nrBefore:undefined,nrAfter:undefined,
+  recordedBefore:undefined,recordedAfter:{gf:9+i,nr:160+i*5}}));
+ const documents=[doc(odjEvents,{id:'odj',date:'2026-03-24'}),doc(rdEvents,{id:'rd',date:'2026-03-24'})];
+ const snapshot=JSON.stringify(documents);
+ const r=calculateNRReport(documents,2026);
+ assert.equal(r.toVerify,0);
+ assert.equal(r.total,0);
+ assert.equal(r.rows.length,0);
+ assert.equal(JSON.stringify(documents),snapshot);
+});
+test('Sans GF constant explicite ou avec GF/NR contradictoire, garder un contrôle',()=>{
+ const candidate=event({id:'candidate',kind:'nomination',effective:'',candidacy:true,
+  reference:'REF',job:'POSTE',gfBefore:10,nrBefore:165,recordedBefore:undefined,recordedAfter:undefined});
+ const rdEvent=event({id:'decision',kind:'nomination',reference:'REF',job:'POSTE',gfDelta:undefined,
+  nrSteps:undefined,recordedBefore:undefined,recordedAfter:{gf:10,nr:165}});
+ const odj=doc([candidate],{id:'odj'});
+ const rd=doc([rdEvent],{id:'rd'});
+ assert.equal(calculateNRReport([odj,rd],2026).toVerify,1);
+ assert.equal(calculateNRReport([odj,{...rd,events:[{...rdEvent,gfDelta:0,recordedAfter:{gf:10,nr:170}}]}],2026).toVerify,1);
 });
