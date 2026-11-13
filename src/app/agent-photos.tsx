@@ -93,22 +93,44 @@ export default function PhotoImport(){const [data,setData]=useState<any>(null),[
     setNotice(candidates.length+' photo(s) non attribuée(s) affichée(s) ci-dessous : '+plan.missing+' absente(s) du catalogue, '+plan.ambiguous+' correspondance(s) incertaine(s). Aucune modification dans la base.');
     return;
    }
-   for(const item of prepared){
-    setBusy('Attribution des portraits : '+(++processed)+' / '+prepared.length);
-    if(item.replace){
-     const result=await replaceOldEtatMajorPhoto(item.photo,manifest.source,item.agent,manifest.replaceSource);
-     if(result.replaced){replaced++;continue;}
-     throw Error('Le remplacement du portrait n’a pas été confirmé.');
+   // Previously every portrait waited for the preceding network request:
+   // a trombinoscope with 80+ replacements could appear frozen for minutes.
+   // Use only three concurrent workers to speed up transfers without flooding
+   // Supabase or losing individual progress/error information.
+   let next=0,failed=0;
+   const uploadErrors:string[]=[];
+   const worker=async()=>{
+    while(true){
+     const index=next++;
+     if(index>=prepared.length)return;
+     const item=prepared[index];
+     try{
+      if(item.replace){
+       const result=await replaceOldEtatMajorPhoto(item.photo,manifest.source,item.agent,manifest.replaceSource);
+       if(!result.replaced)throw Error('Remplacement non confirmé.');
+       replaced++;
+      }else{
+       const saved=await uploadPhoto(item.photo,manifest.source,item.agent);
+       if(saved.agent_id===item.agent){assigned++;occupied.add(item.agent);}
+       else{
+        // A concurrent assignment must not create any waiting photos.
+        await request('/api/photos',{method:'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:saved.id})});
+        plan.existing++;
+       }
+      }
+     }catch(e){
+      failed++;
+      if(uploadErrors.length<5)uploadErrors.push(item.photo.name+' : '+(e as Error).message);
+     }finally{
+      processed++;
+      setBusy('Photos traitées : '+processed+' / '+prepared.length+
+       ' · '+(assigned+replaced)+' enregistrée(s)'+(failed?' · '+failed+' échec(s)':''));
+     }
     }
-    const saved=await uploadPhoto(item.photo,manifest.source,item.agent);
-    if(saved.agent_id===item.agent){assigned++;occupied.add(item.agent);}
-    else{
-     // Another session attached a photo; never keep a pending duplicate.
-     await request('/api/photos',{method:'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:saved.id})});
-     plan.existing++;
-    }
-   }
+   };
+   await Promise.all(Array.from({length:Math.min(3,prepared.length)},()=>worker()));
    setNotice(assigned+' nouvelle(s) photo(s) attribuée(s), '+replaced+' ancienne(s) photo(s) état-major remplacée(s), '+plan.existing+' déjà présente(s) conservée(s), '+plan.missing+' agent(s) absent(s) du catalogue, '+plan.ambiguous+' correspondance(s) à vérifier, '+plan.duplicate+' doublon(s). '+candidates.length+' portrait(s) à examiner ci-dessous.');
+   if(failed)setError(failed+' photo(s) non enregistrée(s). Les autres ont été conservées. '+uploadErrors.join(' ; '));
   }catch(e){setError((e as Error).message+(assigned||replaced?' '+assigned+' nouvelle(s) photo(s) et '+replaced+' remplacement(s) déjà effectués.':''));}
   finally{await reload().catch(e=>setError(e.message));setBusy('');}
  };
