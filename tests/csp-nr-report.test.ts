@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {calculateNRReport,type NRReportDocument,type NRReportEvent} from '../src/lib/csp-nr-report.ts';
+import {calculateNRReport,isNRWithoutAgency,type NRReportDocument,type NRReportEvent} from '../src/lib/csp-nr-report.ts';
 const event=(overrides:Partial<NRReportEvent>={}):NRReportEvent=>({id:'1',name:'AGENT FICTIF',agentId:'AAA111',kind:'avancement',effective:'2026-01-01',selected:true,approved:true,recordedBefore:{nr:200,gf:10,agency:'AMT EST'},recordedAfter:{nr:205,gf:10,agency:'AMT EST'},...overrides});
 const doc=(events:NRReportEvent[],extra:Partial<NRReportDocument>={}):NRReportDocument=>({id:'csp-1',name:'CSP fictive',date:'2026-06-01',status:'validated',events,...extra});
 test('1 NR attribué et agence historique',()=>{const r=calculateNRReport([doc([event()])],2026);assert.equal(r.total,1);assert.equal(r.rows[0].agency,'AMT EST');assert.equal(r.agents,1);});
@@ -224,4 +224,30 @@ test('Un avancement ODJ/RD ne doit etre fusionne que si les NR directs concorden
  const conflicting={...rd,recordedBefore:{gf:13,nr:215},recordedAfter:{gf:13,nr:220}};
  assert.equal(calculateNRReport([docs[0],{...docs[1],events:[conflicting]}],2026).total,1);
  assert.equal(calculateNRReport([docs[0],{...docs[1],events:[conflicting]}],2026).toVerify,1);
+});
+
+
+test('Les NR sans agence restent comptés et peuvent être identifiés pour traitement',()=>{
+ const r=calculateNRReport([doc([
+  event({id:'without',recordedBefore:{gf:10,nr:200},recordedAfter:{gf:10,nr:205},agency:''}),
+  event({id:'known',name:'AUTRE AGENT FICTIF',agentId:'FICTIF2',recordedBefore:{gf:10,nr:210,agency:'AMT EST'},recordedAfter:{gf:10,nr:215,agency:'AMT EST'}}),
+  event({id:'unchecked',name:'TROISIEME AGENT FICTIF',agentId:'FICTIF3',recordedBefore:undefined,recordedAfter:undefined,agency:''})
+ ])],2026);
+ assert.equal(r.total,2);
+ assert.equal(r.toVerify,1);
+ const missing=r.rows.filter(isNRWithoutAgency);
+ assert.equal(missing.length,1);
+ assert.equal(missing[0].id,'csp-1:without');
+ assert.equal(missing[0].nr,1);
+ assert.equal(missing[0].document,'CSP fictive');
+ assert.equal(r.rows.filter(isNRWithoutAgency).reduce((sum,row)=>sum+row.nr!,0),1);
+});
+
+test('Repère les libellés usuels d’agence absente sans classer les agences connues',()=>{
+ for(const agency of ['Agence non renseignée','Non renseigné','agence inconnue','Sans agence',''])
+  assert.equal(isNRWithoutAgency({agency,nr:2}),true);
+ for(const agency of ['AMT EST','DIRECTION','ALN'])
+  assert.equal(isNRWithoutAgency({agency,nr:2}),false);
+ assert.equal(isNRWithoutAgency({agency:'Agence non renseignée',nr:null}),false);
+ assert.equal(isNRWithoutAgency({agency:'Agence non renseignée',nr:0}),false);
 });
