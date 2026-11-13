@@ -10,7 +10,7 @@ test('une légende partagée ou deux légendes voisines restent ambiguës',()=>{
 test('une carte avec le portrait a gauche et le nom a droite est reconnue',()=>{
  const portrait={x:30,y:100,w:45,h:95};
  const label={x:85,y:112,w:120,h:16,text:'Eloise Martin Dupre'};
- assert.deepEqual(nearbyPhotoName(portrait,[portrait],[label],agents),{name:label.text,certain:true});
+ assert.deepEqual(nearbyPhotoName(portrait,[portrait],[label],agents),{name:'Éloïse MARTIN-DUPRÉ',certain:true});
 });
 test('une legende de fonction ou une mention de contact ne devient pas un agent',()=>{
  const portrait={x:30,y:100,w:45,h:95};
