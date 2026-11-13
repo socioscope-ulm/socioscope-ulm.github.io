@@ -17,6 +17,10 @@ export async function extractPortraits(file:File,progress:(s:string)=>void,onPho
   const slides=Object.keys(zip.files).filter(n=>/^ppt\/slides\/slide\d+\.xml$/.test(n)).sort((a,b)=>Number(a.match(/slide(\d+)/)?.[1])-Number(b.match(/slide(\d+)/)?.[1]));
   if(slides.length>200)throw Error('200 diapositives maximum.');
   const supported=/\.(png|jpe?g|webp|gif|bmp)$/i;
+  const presentation=zip.file('ppt/presentation.xml');
+  const slideSize=presentation?first(xml(await presentation.async('string')),'sldSz'):null;
+  const pptWidth=Number(slideSize?.getAttribute('cx')||12192000);
+  const pptHeight=Number(slideSize?.getAttribute('cy')||6858000);
   const mediaPath=(target:string)=>decodeURIComponent(new URL(target,'https://local/ppt/slides/').pathname.slice(1));
   for(let i=0;i<slides.length;i++){
    progress('Lecture de la diapositive '+(i+1)+' / '+slides.length);
@@ -43,7 +47,7 @@ export async function extractPortraits(file:File,progress:(s:string)=>void,onPho
    }).filter(t=>t.text&&t.w>0&&t.h>0);
    // Slide-size is stored in ppt/presentation.xml; shape coordinates alone are
    // sufficient to reject off-slide objects when a slide size is not present.
-   const width=12192000,height=6858000;
+   const width=pptWidth,height=pptHeight;
    const pictureShapes=[...nodes(doc,'pic'),...nodes(doc,'sp').filter(el=>nodes(el,'blip').length>0)];
    const rawPictures=pictureShapes.map(el=>{
     const source=box(el),xfrm=first(el,'xfrm');
