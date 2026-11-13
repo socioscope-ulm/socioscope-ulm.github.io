@@ -58,7 +58,7 @@ export function calculateNRReport(documents:NRReportDocument[],year:number):{yea
    // zero-NR nomination for this accounting report without rewriting either
    // source or approving any decision. A declared GF or NR increase, an
    // incompatible explicit GF, or any ambiguity must remain "A verifier".
-   // This rule covers validated older ODJ/RD imports with no gfDelta field.
+   // This rule covers validated older ODJ/RD imports with no gfDelta field; do not change approved source records.
    if(!doc.manual&&e.kind==='nomination'&&(e.gfDelta===0||e.gfDelta===undefined)&&
       e.nrSteps===undefined&&beforeNR===null&&afterNR!==null&&afterGF!==null&&
       (beforeGF===null||beforeGF===afterGF)){
