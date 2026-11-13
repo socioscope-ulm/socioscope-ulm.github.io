@@ -2,8 +2,11 @@ export type PhotoAgent={id:string;name:string;agency?:string};
 export const photoNameKey=(s:string)=>s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().replace(/[^A-Z0-9]+/g,' ').trim();
 export function matchPhotoName(name:string,agents:PhotoAgent[]){
  const key=photoNameKey(name);if(key.split(' ').length<2)return [];
- const sorted=(s:string)=>photoNameKey(s).split(' ').sort().join(' ');
- return agents.filter(a=>sorted(a.name)===sorted(key));
+ const sorted=(s:string)=>photoNameKey(s).split(' ').filter(Boolean).sort().join(' ');
+ const canonical=key.replace(/^(RA|AM|RP|TM|PA)\s+/,'');
+ const exact=agents.filter(a=>sorted(a.name)===sorted(key));
+ return exact.length?exact:canonical!==key?agents.filter(a=>sorted(a.name)===sorted(canonical)):[];
+
 }
 export type Box={x:number;y:number;w:number;h:number;text?:string};
 
@@ -36,6 +39,9 @@ export function nearbyPhotoName(photo:Box,photos:Box[],labels:Box[],agents:Photo
  const first=ranked[0];if(!first||first.score>2.5)return {name:'',certain:false};
  const otherLabel=ranked.slice(1).some(r=>r.score<=first.score+.35);
  const otherPhoto=photos.some(p=>p!==photo&&photoLabelScore(p,first.label)<=first.score+.35);
- const uniqueAgent=!agents.length||matchPhotoName(first.label.text||'',agents).length===1;
- return {name:first.label.text||'',certain:!otherLabel&&!otherPhoto&&uniqueAgent};
+ const matched=agents.length?matchPhotoName(first.label.text||'',agents):[];
+ const uniqueAgent=!agents.length||matched.length===1;
+ // Save the catalogue spelling for a uniquely identified name so the API can
+ // associate it even when a role prefix (RA, AM, RP, TM, PA) precedes the name.
+ return {name:matched.length===1?matched[0].name:first.label.text||'',certain:!otherLabel&&!otherPhoto&&uniqueAgent};
 }
