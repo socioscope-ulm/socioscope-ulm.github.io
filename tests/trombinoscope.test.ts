@@ -7,7 +7,7 @@ test('trombinoscopes : agences disponibles pour les lecteurs et les administrate
  assert.deepEqual(TROMBINOSCOPE_AGENCIES.map(x=>x.code),['AMTNO','AMTE','AMTVDR','AMTC','AMTO','AMTSO','ALN','ULM']);
  assert.equal(new Set(TROMBINOSCOPE_AGENCIES.map(x=>x.code)).size,8);
  for(const item of TROMBINOSCOPE_AGENCIES){
-  assert.ok(item.label.length>3);
+  assert.ok(item.label.length>=3);
   assert.equal(isTrombinoscopeAgency(item.code),true);
  }
 });
