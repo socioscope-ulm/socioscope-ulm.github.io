@@ -25,6 +25,7 @@ const agencyOf=(e:NRReportEvent)=>String(e.recordedBefore?.agency||e.recordedAft
 export function calculateNRReport(documents:NRReportDocument[],year:number):{year:number;rows:NRReportRow[];totalCsp:number;totalManual:number;total:number;toVerify:number;agents:number}{
  const rows:NRReportRow[]=[];
  const signatures=new Set<string>();
+ // Reconciliation uses immutable, validated source data only.
  // Historical ODJ records can contain the *final* recorded situation
  // (after several simultaneous decisions), rather than the before/after
  // of the specific reclassement. If the same validated meeting contains
