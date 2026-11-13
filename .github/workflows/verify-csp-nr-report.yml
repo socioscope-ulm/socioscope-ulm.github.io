@@ -23,7 +23,8 @@ jobs:
       - name: Install dependencies
         run: npm install --no-audit --no-fund
       - name: Check NR accounting regression cases
-        run: node --experimental-strip-types --test tests/csp-nr-report.test.ts
+        run: node --experimental-strip-types --test tests/csp-nr-report.test.ts tests/nr-allocation.test.ts'
+      - 'tests/nr-allocation.test.ts'
       - name: Verify existing CSP integration
         run: node --experimental-strip-types --test tests/csp.test.ts tests/csp-api.test.ts tests/csp-manual-nr.test.ts
       - name: Build front-end
