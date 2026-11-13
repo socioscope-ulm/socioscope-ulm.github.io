@@ -37,7 +37,7 @@ export async function extractPortraits(file:File,progress:(s:string)=>void,onPho
      const colour=pr&&first(pr,'srgbClr')?.getAttribute('val')?.toUpperCase();
      return colour==='FE5815';
     });
-    const coloured=runs.map(r=>nodes(r,'t').map(t=>t.textContent||'').join('')).join(' ').replace(/\\s+/g,' ').trim();
+    const coloured=runs.map(r=>nodes(r,'t').map(t=>t.textContent||'').join('')).join(' ').replace(/\s+/g,' ').trim();
     const fallback=nodes(el,'t').map(t=>t.textContent).join(' ').trim();
     return {...box(el),text:coloured||fallback,coloured:!!coloured};
    }).filter(t=>t.text&&t.w>0&&t.h>0);
@@ -112,7 +112,7 @@ export async function extractPortraits(file:File,progress:(s:string)=>void,onPho
    }
    // Media that is not a visible picture object can still be a portrait,
    // but without spatial evidence it must remain in the review queue.
-   const remaining=relationships.filter(r=>/\\/image$/.test(r.getAttribute('Type')||''));
+   const remaining=relationships.filter(r=>/\/image$/.test(r.getAttribute('Type')||''));
    for(const relation of remaining){
     const target=relation.getAttribute('Target');
     if(!target)continue;
