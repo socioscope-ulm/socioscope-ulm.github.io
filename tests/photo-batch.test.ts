@@ -33,3 +33,19 @@ test('archive invalide refusee avant upload',()=>{
  assert.throws(()=>planPhotoBatch({format:'socioscope-photo-batch-v1',source:'test',photos:[entry('Camille DUPONT','../private.jpg')]},agents,new Set()));
  assert.throws(()=>planPhotoBatch({format:'socioscope-photo-batch-v1',source:'test',photos:[{...entry('Camille DUPONT'),sha256:'invalid'}]},agents,new Set()));
 });
+
+test('les portraits non rattachés restent consultables avec la cause exacte sans créer de photo en base',()=>{
+ const manifest={format:'socioscope-photo-batch-v1',source:'Trombinoscope fictif.pdf',
+ photos:[
+  entry('Camille DUPONT','photos/1.jpg'),
+  entry('Inconnu FICTIF','photos/2.jpg'),
+  entry('Nolan EXEMPLE','photos/3.jpg'),
+  {...entry('Éloïse MARTIN','photos/4.jpg'),confidence:'verification_manuelle'}
+ ]};
+ const result=planPhotoBatch(manifest,agents,new Set(['fiction-1']));
+ assert.equal(result.uploads.length,0);
+ assert.equal(result.existing,1);
+ assert.deepEqual(result.review.map(item=>item.reason),['missing','homonym','uncertain']);
+ assert.deepEqual(result.review.map(item=>item.photo.path),['photos/2.jpg','photos/3.jpg','photos/4.jpg']);
+ assert.equal(result.review.length,result.missing+result.ambiguous);
+});
