@@ -127,7 +127,7 @@ export async function extractPortraits(file:File,progress:(s:string)=>void,onPho
     let im:ImageBitmap;
     try{im=await createImageBitmap(blob);}catch{continue;}
     const ratio=im.width/Math.max(1,im.height);
-    const plausible=im.width>=65&&im.height>=65&&ratio>=.30&&ratio<=1.5;
+    const plausible=im.width>=65&&im.height>=65&&ratio>=.30&&ratio<=1.5&&!(im.width===88&&im.height===116);
     im.close();
     if(!plausible)continue;
     await emit({blob,name:'',certain:false,page:i+1});
