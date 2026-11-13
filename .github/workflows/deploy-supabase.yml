@@ -20,6 +20,8 @@ on:
       - 'server/photos.ts'
       - 'server/guide.ts'
       - 'server/index.ts'
+      - 'server/trombinoscopes.ts'
+      - 'src/lib/trombinoscope.ts'
       - 'src/lib/guide-pdf.ts'
       - 'server/photo-catalog.ts'
       - 'src/lib/photo-directory.ts'
@@ -59,7 +61,7 @@ jobs:
       - name: Run CSP regression tests before any API deployment
         run: |
           npm install --no-audit --no-fund
-          node --experimental-strip-types --test tests/csp.test.ts tests/csp-cr-extract.test.ts tests/csp-mutation-arrival.test.ts tests/csp-manual-nr.test.ts tests/csp-nr-report.test.ts tests/nr-allocation.test.ts tests/bonus-tables.test.ts tests/payroll-filters.test.ts tests/individual-payroll.test.ts tests/individual-bonus-selection.test.ts tests/photo-match.test.ts tests/photo-assignment.test.ts tests/photo-directory.test.ts tests/guide-pdf.test.ts tests/excel-calendar-date.test.ts tests/rup-date-conflicts.test.ts
+          node --experimental-strip-types --test tests/csp.test.ts tests/csp-cr-extract.test.ts tests/csp-mutation-arrival.test.ts tests/csp-manual-nr.test.ts tests/csp-nr-report.test.ts tests/nr-allocation.test.ts tests/bonus-tables.test.ts tests/payroll-filters.test.ts tests/individual-payroll.test.ts tests/individual-bonus-selection.test.ts tests/photo-match.test.ts tests/photo-assignment.test.ts tests/trombinoscope.test.ts tests/photo-directory.test.ts tests/guide-pdf.test.ts tests/excel-calendar-date.test.ts tests/rup-date-conflicts.test.ts
       - name: Assemble the complete API source and import map
         run: sh .github/scripts/package-autonomous-api.sh
       - uses: denoland/setup-deno@v2
