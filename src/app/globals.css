@@ -225,3 +225,13 @@
  .trombi-intro{flex-direction:column}
  .trombi-grid{grid-template-columns:repeat(auto-fit,minmax(185px,1fr))}
 }
+
+
+/* Common admin workspace for PDF organigrams and individual agent portraits. */
+.trombi-combined-management{display:grid;gap:20px}
+.trombi-admin-organigrams,.trombi-admin-photos{display:flex;flex-direction:column;gap:12px;min-width:0}
+.trombi-admin-organigrams>h3,.trombi-admin-photos>h3{display:flex;align-items:center;gap:9px;color:var(--ink);font-size:15px}
+.trombi-admin-organigrams>div,.trombi-admin-photos>div{display:grid;gap:14px}
+.trombi-admin-photos{border-top:1px solid var(--border);padding-top:19px}
+.trombi-replace-option{display:flex;align-items:start;gap:10px;padding:11px 13px;border:1px solid var(--border);border-radius:8px;background:#f8f9f4;color:var(--ink);font-size:12px;line-height:1.55}
+.trombi-replace-option input{margin-top:3px;flex-shrink:0}
