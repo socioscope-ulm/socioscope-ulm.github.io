@@ -235,3 +235,12 @@
 .trombi-admin-photos{border-top:1px solid var(--border);padding-top:19px}
 .trombi-replace-option{display:flex;align-items:start;gap:10px;padding:11px 13px;border:1px solid var(--border);border-radius:8px;background:#f8f9f4;color:var(--ink);font-size:12px;line-height:1.55}
 .trombi-replace-option input{margin-top:3px;flex-shrink:0}
+
+
+/* Two independent, initially collapsed work areas inside Bilans et imports > Trombinoscopes. */
+.trombi-combined-management{gap:10px}
+.trombi-subfolder{margin:0;min-width:0;border-color:#dce5dc;background:#fff}
+.trombi-subfolder[open]>summary{background:#f4f8f2}
+.trombi-subfolder>.document-folder-content{padding:15px}
+.trombi-subfolder .trombi-admin-photos{border-top:0;padding-top:0}
+@media(max-width:760px){.trombi-subfolder>.document-folder-content{padding:10px}.trombi-subfolder>summary{gap:7px;padding:12px 10px;flex-wrap:wrap}}
