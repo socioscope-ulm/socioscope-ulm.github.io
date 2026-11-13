@@ -79,13 +79,42 @@ test('ODJ historiques sans lien stocké : rapprochement strict référence, GF e
  assert.equal(r.rows.length,0);
  assert.equal(JSON.stringify(documents),snapshot);
 });
-test('Sans GF constant explicite ou avec GF/NR contradictoire, garder un contrôle',()=>{
+test('Nomination RD historique avec variation GF absente : le ODJ/RD strictement concordant donne zéro NR',()=>{
+ const candidate=event({id:'candidate',name:'AGENT FICTIF',kind:'nomination',effective:'',candidacy:true,
+  reference:'REF',job:'POSTE',agency:'AMT FICTIF',gfBefore:10,nrBefore:165,
+  recordedBefore:undefined,recordedAfter:{gf:10,nr:165}});
+ const rdEvent=event({id:'decision',name:'AGENT FICTIF',kind:'nomination',effective:'2026-04-01',
+  reference:'REF',job:'POSTE',agency:'AMT FICTIF',gfDelta:undefined,nrSteps:undefined,
+  gfBefore:undefined,nrBefore:undefined,gfAfter:10,nrAfter:165,
+  recordedBefore:undefined,recordedAfter:{gf:10,nr:165}});
+ const odj=doc([candidate],{id:'odj',date:'2026-03-24'});
+ const rd=doc([rdEvent],{id:'rd',date:'2026-03-24'});
+ const original=JSON.stringify([odj,rd]);
+ const report=calculateNRReport([odj,rd],2026);
+ assert.equal(report.toVerify,0);
+ assert.equal(report.total,0);
+ assert.equal(report.rows.length,0);
+ assert.equal(JSON.stringify([odj,rd]),original);
+});
+test('Nomination sans variation GF : contradictions, GF delta explicite et ambiguïtés restent à vérifier',()=>{
  const candidate=event({id:'candidate',kind:'nomination',effective:'',candidacy:true,
   reference:'REF',job:'POSTE',gfBefore:10,nrBefore:165,recordedBefore:undefined,recordedAfter:undefined});
  const rdEvent=event({id:'decision',kind:'nomination',reference:'REF',job:'POSTE',gfDelta:undefined,
   nrSteps:undefined,recordedBefore:undefined,recordedAfter:{gf:10,nr:165}});
  const odj=doc([candidate],{id:'odj'});
  const rd=doc([rdEvent],{id:'rd'});
- assert.equal(calculateNRReport([odj,rd],2026).toVerify,1);
- assert.equal(calculateNRReport([odj,{...rd,events:[{...rdEvent,gfDelta:0,recordedAfter:{gf:10,nr:170}}]}],2026).toVerify,1);
+ for(const variant of [
+  {...rdEvent,gfDelta:1},
+  {...rdEvent,gfBefore:9},
+  {...rdEvent,recordedAfter:{gf:11,nr:165}},
+  {...rdEvent,recordedAfter:{gf:10,nr:170}},
+  {...rdEvent,reference:'REF DIFFERENTE'},
+  {...rdEvent,nrSteps:1}
+ ]) {
+  const result=calculateNRReport([odj,{...rd,events:[variant]}],2026);
+  assert.equal(result.toVerify,1);
+ }
+ assert.equal(calculateNRReport([odj,{...rd,date:'2026-06-15'}],2026).toVerify,1);
+ assert.equal(calculateNRReport([{...odj,events:[candidate,{...candidate,id:'duplicate'}]},rd],2026).toVerify,1);
+ assert.equal(calculateNRReport([{...odj,status:'review'},rd],2026).toVerify,1);
 });

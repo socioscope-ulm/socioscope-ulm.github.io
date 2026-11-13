@@ -52,12 +52,15 @@ export function calculateNRReport(documents:NRReportDocument[],year:number):{yea
    const afterNR=hasNR(e.recordedAfter?.nr)?e.recordedAfter.nr:hasNR(e.nrAfter)?e.nrAfter:null;
    const beforeGF=hasGF(e.recordedBefore?.gf)?e.recordedBefore.gf:hasGF(e.gfBefore)?e.gfBefore:null;
    const afterGF=hasGF(e.recordedAfter?.gf)?e.recordedAfter.gf:hasGF(e.gfAfter)?e.gfAfter:null;
-   // A GF-constant nomination with no declared NR gain keeps the same NR
-   // only if a uniquely linked, approved ODJ confirms the exact initial GF
-   // and NR, reference, assignment, and CSP meeting date. Otherwise keep
-   // "A verifier": do not infer a zero from a merely provisional NR.
-   if(!doc.manual&&e.kind==='nomination'&&e.gfDelta===0&&e.nrSteps===undefined&&
-      beforeNR===null&&afterNR!==null&&afterGF!==null){
+   // In historical RD nominations, gfDelta may be absent even when the
+   // approved ODJ gives GF/NR before and the approved RD gives identical
+   // GF/NR after. A unique, strictly matching ODJ/RD pair can establish a
+   // zero-NR nomination for this accounting report without rewriting either
+   // source or approving any decision. A declared GF or NR increase, an
+   // incompatible explicit GF, or any ambiguity must remain "A verifier".
+   if(!doc.manual&&e.kind==='nomination'&&(e.gfDelta===0||e.gfDelta===undefined)&&
+      e.nrSteps===undefined&&beforeNR===null&&afterNR!==null&&afterGF!==null&&
+      (beforeGF===null||beforeGF===afterGF)){
     const matches=approvedOdjCandidates.filter(({doc:odj,event:original})=>
      odj.id!==doc.id&&odj.date===doc.date&&normalized(original.name)===normalized(e.name)&&
      !!original.reference&&original.reference===e.reference&&
