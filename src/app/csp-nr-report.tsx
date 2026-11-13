@@ -89,7 +89,7 @@ export default function CspNRReport(){
    </div>
    {(unresolvedNR>0||externalNR>0)&&<p className="notice">{fmt(report.totalRecorded)} NR dans les parcours : {fmt(report.totalUlm)} distribués par l’ULM, {fmt(externalNR)} attribués hors ULM et {fmt(unresolvedNR)} à affectation à clarifier. Les deux dernières catégories ne sont pas imputées aux agences ULM.</p>}
     {unchecked>0&&<p className="notice">{fmt(unchecked)} décision(s) dont le gain de NR n’est pas établi avec certitude ne sont pas ajoutées au total. Elles sont consultables dans le détail.</p>}
-   {!agency&&<div className="table-scroll"><table><thead><tr><th>Agence</th><th>NR attribués</th><th>Agents</th><th>À vérifier</th></tr></thead><tbody>{agenciesTable.map(r=><tr key={r.name}><td>{r.name}</td><td>{fmt(r.total)}</td><td>{fmt(r.agents)}</td><td>{r.unchecked||'—'}</td></tr>)}<tr><th>Ensemble ULM</th><th>{fmt(report.totalUlm)}</th><th>{fmt(report.agents)}</th><th>{report.toVerify||'—'}</th></tr></tbody></table></div>}
+   {!agency&&<div className="table-scroll"><table><thead><tr><th>Agence</th><th>NR attribués</th><th>Agents</th><th>À vérifier</th></tr></thead><tbody>{agenciesTable.map(r=><tr key={r.name}><td>{r.name}</td><td>{fmt(r.total)}</td><td>{fmt(r.agents)}</td><td>{r.unchecked||'—'}</td></tr>)}<tr><th>Ensemble ULM</th><th>{fmt(report.totalUlm)}</th><th>{fmt(new Set(report.rows.filter(r=>r.allocationScope==='ulm'&&r.nr!==null).map(r=>r.agentId||r.name)).size)}</th><th>{report.toVerify||'—'}</th></tr></tbody></table></div>}
    <h3 style={{marginTop:20}}>Répartition par CSP</h3>
    <div className="table-scroll"><table><thead><tr><th>Date de séance</th><th>Document</th><th>NR attribués</th><th>Agents</th></tr></thead><tbody>{(showAllCsp?documents:documents.slice(0,3)).map(r=><tr key={r.id}><td>{dated(r.date)}</td><td>{r.name}</td><td>{fmt(r.total)}</td><td>{fmt(r.agents.size)}</td></tr>)}{!documents.length&&<tr><td colSpan={4}>Aucune attribution validée pour la sélection.</td></tr>}</tbody></table></div>
    {documents.length>3&&<div style={{marginTop:8}}><button className="btn" aria-expanded={showAllCsp} onClick={()=>setShowAllCsp(v=>!v)}>{showAllCsp?'Réduire la liste des CSP':'Afficher toutes les CSP ('+fmt(documents.length)+')'}</button></div>}
@@ -106,7 +106,7 @@ export default function CspNRReport(){
       <label>Agence de rattachement connue (information)<input value={relatedAgency} onChange={e=>setRelatedAgency(e.target.value)} placeholder="Facultatif" maxLength={180}/></label>
      </div>
      <label>Justification du classement<textarea rows={2} value={reason} onChange={e=>setReason(e.target.value)} maxLength={500} placeholder="Préciser l'unité attributaire et la source de confirmation" style={{display:'block',width:'100%'}}/></label>
-     <p style={{fontSize:13}}>Cette action modifie uniquement le bilan de répartition des NR, jamais le GF/NR, l’historique ou les CSP validées. « À clarifier » retire un classement précédent.</p>
+     <p style={{fontSize:13}}>Cette action modifie uniquement le bilan de répartition des NR, jamais le GF/NR, l’historique ou les CSP validées. « À clarifier » conserve le dossier en attente d’attribution fiable.</p>
      {saveError&&<p role="alert">{saveError}</p>}
      <div style={{display:'flex',gap:8,marginTop:10}}><button className="btn" disabled={saving||reason.trim().length<12||(scope==='ulm'&&!draftAgency.trim())} onClick={save}>{saving?'Enregistrement…':'Enregistrer le classement'}</button><button className="btn" disabled={saving} onClick={()=>setEditing(null)}>Annuler</button></div>
     </div>}
