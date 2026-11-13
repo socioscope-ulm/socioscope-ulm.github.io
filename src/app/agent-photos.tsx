@@ -26,7 +26,7 @@ export default function PhotoImport(){const [data,setData]=useState<any>(null),[
   // Keep every manual association from previous imports. A reimport enriches
   // the catalogue; it does not replace photos or ask to relink known portraits.
   const existing=await (await request('/api/photos')).json();
-  const nameKey=(source:string,page:number,name:string)=>source+'|'+page+'|'+photoNameKey(name).replace(/^(RA|AM|RP|TM|PA) /,'').split(' ').filter(Boolean).sort().join(' ');
+  const nameKey=(source:string,page:number,name:string)=>source+'|'+photoNameKey(name).replace(/^(RA|AM|RP|TM|PA) /,'').split(' ').filter(Boolean).sort().join(' ');
   const previous=existing.photos.filter((p:any)=>p.source_name===file.name);
   const known=new Set<string>(previous.filter((p:any)=>photoNameKey(p.detected_name||'')).map((p:any)=>nameKey(p.source_name,p.page,p.detected_name)));
   // For portraits without detected names, compare the actual image. This also
