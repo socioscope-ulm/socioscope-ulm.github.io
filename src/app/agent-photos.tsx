@@ -3,6 +3,7 @@ import {UserRound,ChevronRight,ImagePlus} from 'lucide-react';
 import {compressPhoto,extractPortraits,type ExtractedPhoto} from '../lib/photo-extract';
 import {photoNameKey,matchPhotoName,type PhotoAgent} from '../lib/photo-match';
 import {planPhotoBatch} from '../lib/photo-batch';
+import {UnassignedPhotoReview,type LocalPhotoReview} from './photo-unassigned';
 async function request(path:string,init?:RequestInit){const r=await fetch(path,init);if(!r.ok){const b=await r.json().catch(()=>({}));throw Object.assign(Error(b.error||'Opération impossible.'),{status:r.status});}return r;}
 function PhotoImage({agent,id,revision=0}:{agent?:string;id?:string;revision?:number}){const [url,setUrl]=useState('');useEffect(()=>{let active=true,object='';setUrl('');request('/api/photos/image?'+(agent?'agent='+encodeURIComponent(agent):'id='+id)).then(r=>r.blob()).then(b=>{if(active){object=URL.createObjectURL(b);setUrl(object);}}).catch(()=>{});return()=>{active=false;if(object)URL.revokeObjectURL(object);};},[agent,id,revision]);return url?<img src={url} alt="Photo de l’agent"/>:<UserRound aria-label="Photo non renseignée" size={42}/>;}
 async function uploadPhoto(photo:ExtractedPhoto,source:string,agent=''){const form=new FormData();form.set('photo',photo.blob,'portrait.jpg');form.set('name',photo.name);form.set('certain',String(photo.certain));form.set('source',source);form.set('page',String(photo.page));if(agent)form.set('agent',agent);return (await request('/api/photos',{method:'POST',body:form})).json();}
@@ -22,8 +23,8 @@ function ScannedPage({blob,page,onCrop}:{blob:Blob;page:number;onCrop:(photo:Ext
  const ocr=async()=>{setBusy(true);setError('');let worker:any;try{const {createWorker}=await import('tesseract.js');worker=await createWorker('fra',1,{workerPath:'https://cdn.jsdelivr.net/npm/tesseract.js@6.0.1/dist/worker.min.js'});const c=document.createElement('canvas');const s=selection;c.width=Math.min(canvas.current!.width-s.x,s.w*1.6);c.height=Math.min(canvas.current!.height-s.y-s.h,s.h*.65);if(c.height<5)throw Error('Sélectionner la photo en laissant le nom visible dessous.');c.getContext('2d')!.drawImage(canvas.current!,s.x,s.y+s.h,c.width,c.height,0,0,c.width,c.height);const result=await worker.recognize(c);setName(result.data.text.trim());}catch(e){setError('Lecture du nom indisponible : saisir le nom ou rattacher ensuite dans la liste.');}finally{await worker?.terminate();setBusy(false);}};
  return <section className="panel"><h3>Page {page} · sélectionner une photo</h3><p>Tracer un rectangle autour de la photo, puis l’ajouter. Répéter pour chaque agent de cette page.</p><div className="photo-crop"><canvas ref={canvas} onPointerDown={e=>{e.currentTarget.setPointerCapture(e.pointerId);start.current=point(e);setSelection(null);}} onPointerUp={e=>{if(!start.current)return;const end=point(e),s=start.current;setSelection({x:Math.min(s.x,end.x),y:Math.min(s.y,end.y),w:Math.abs(end.x-s.x),h:Math.abs(end.y-s.y)});start.current=null;}}/>{selection&&<div className="crop-outline" style={{left:selection.x/canvas.current!.width*100+'%',top:selection.y/canvas.current!.height*100+'%',width:selection.w/canvas.current!.width*100+'%',height:selection.h/canvas.current!.height*100+'%'}}/>}</div>{selection&&<><label>Nom associé<input value={name} onChange={e=>setName(e.target.value)}/></label><button className="btn" disabled={busy||selection.w<10||selection.h<10} onClick={()=>void ocr()}>Lire le nom sous la photo</button><button className="btn primary" disabled={busy||selection.w<10||selection.h<10} onClick={()=>void save()}>Ajouter la photo à rattacher</button></>}{error&&<p role="alert">{error}</p>}</section>;
 }
-export default function PhotoImport(){const [data,setData]=useState<any>(null),[busy,setBusy]=useState(''),[error,setError]=useState(''),[notice,setNotice]=useState(''),[scans,setScans]=useState<{blob:Blob;page:number;source:string}[]>([]),[opened,setOpened]=useState(false);const reload=async()=>{setData(await (await request('/api/photos')).json());window.dispatchEvent(new Event('socioscope-photos-changed'));};useEffect(()=>{if(opened)reload().catch(e=>setError(e.message));},[opened]);
- const readArchive=async(file?:File)=>{if(!file)return;setBusy('Vérification des correspondances…');setError('');setNotice('');
+export default function PhotoImport(){const [data,setData]=useState<any>(null),[busy,setBusy]=useState(''),[error,setError]=useState(''),[notice,setNotice]=useState(''),[scans,setScans]=useState<{blob:Blob;page:number;source:string}[]>([]),[review,setReview]=useState<LocalPhotoReview[]>([]),[opened,setOpened]=useState(false);const reload=async()=>{setData(await (await request('/api/photos')).json());window.dispatchEvent(new Event('socioscope-photos-changed'));};useEffect(()=>{if(opened)reload().catch(e=>setError(e.message));},[opened]);
+ const readArchive=async(file?:File,mode:'import'|'review'='import')=>{if(!file)return;setBusy('Vérification des correspondances…');setError('');setNotice('');setReview([]);
   let assigned=0,processed=0;
   try{
    if(file.size>40*1024*1024)throw Error('Archive limitée à 40 Mo.');
@@ -41,7 +42,7 @@ export default function PhotoImport(){const [data,setData]=useState<any>(null),[
    };
    // Validate every relevant file before writing the first photograph.
    const prepared:{photo:ExtractedPhoto;agent:string}[]=[];
-   for(const item of plan.uploads){
+   for(const item of (mode==='import'?plan.uploads:[])){
     const entry=archive.file(item.photo.path);
     if(!entry)throw Error('Image manquante dans l’archive.');
     const bytes=await entry.async('uint8array');
@@ -49,6 +50,21 @@ export default function PhotoImport(){const [data,setData]=useState<any>(null),[
      throw Error('Photo JPEG invalide.');
     await verify(bytes,item.photo.sha256);
     prepared.push({agent:item.agent.id,photo:{name:item.photo.name,page:item.photo.page,certain:true,blob:new Blob([bytes],{type:'image/jpeg'})}});
+   }
+   const candidates:LocalPhotoReview[]=[];
+   for(const item of plan.review){
+    const entry=archive.file(item.photo.path);
+    if(!entry)throw Error('Image à contrôler manquante dans l’archive.');
+    const bytes=await entry.async('uint8array');
+    if(bytes.length<4||bytes.length>200000||bytes[0]!==255||bytes[1]!==216||bytes[2]!==255)
+     throw Error('Photo à contrôler invalide.');
+    await verify(bytes,item.photo.sha256);
+    candidates.push({...item,id:item.photo.path,source:manifest.source,blob:new Blob([bytes],{type:'image/jpeg'})});
+   }
+   setReview(candidates);
+   if(mode==='review'){
+    setNotice(candidates.length+' photo(s) non attribuée(s) affichée(s) ci-dessous : '+plan.missing+' absente(s) du catalogue, '+plan.ambiguous+' correspondance(s) incertaine(s). Aucune modification dans la base.');
+    return;
    }
    for(const item of prepared){
     setBusy('Attribution des portraits : '+(++processed)+' / '+prepared.length);
@@ -60,7 +76,7 @@ export default function PhotoImport(){const [data,setData]=useState<any>(null),[
      plan.existing++;
     }
    }
-   setNotice(assigned+' photo(s) attribuée(s) aux fiches individuelles ; '+plan.existing+' déjà présente(s) conservée(s), '+plan.missing+' agent(s) absent(s) du catalogue, '+plan.ambiguous+' homonyme(s), '+plan.duplicate+' doublon(s). Aucun portrait en attente créé.');
+   setNotice(assigned+' photo(s) attribuée(s) aux fiches individuelles ; '+plan.existing+' déjà présente(s) conservée(s), '+plan.missing+' agent(s) absent(s) du catalogue, '+plan.ambiguous+' correspondance(s) à vérifier, '+plan.duplicate+' doublon(s). '+candidates.length+' portrait(s) à examiner ci-dessous, sans enregistrement en attente.');
   }catch(e){setError((e as Error).message+(assigned?' '+assigned+' photo(s) déjà enregistrée(s).':''));}
   finally{await reload().catch(e=>setError(e.message));setBusy('');}
  };
