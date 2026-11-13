@@ -95,6 +95,7 @@ export function calculateNRReport(documents:NRReportDocument[],year:number):{yea
  // carried forward in the NR before/after of a later GF repositioning.
  // Because it is the same interval on the same effective date, counting the
  // later reclassement's recorded NR delta would award the same NR twice.
+ // Repeated NR interval in a later GF reposition is not a second award.
  // The GF repositioning remains in the career history; only the duplicate
  // *accounting* award is excluded.
  const gfRepositionWithoutNewNr=new Set<string>();
