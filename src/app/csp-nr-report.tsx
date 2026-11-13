@@ -52,9 +52,9 @@ export default function CspNRReport(){
    .finally(()=>{if(!controller.signal.aborted)setBusy(false);});
   return ()=>controller.abort();
  },[hasOpened,year,revision]);
- const agencies=useMemo(()=>[...new Set(report?.rows.map(r=>r.agency)||[])].sort((a,b)=>a.localeCompare(b,'fr')),[report]);
- const rows=useMemo(()=>report?.rows.filter(r=>(!agency||r.agency===agency)&&(!kind||r.kind===kind))||[],[report,agency,kind]);
- const detailRows=(detailFilter==='unresolved'||detailFilter==='outside'?(report?.rows||[]):rows).filter(r=>detailFilter==='manual'?r.source==='manual'&&r.nr!==null:detailFilter==='unchecked'?r.nr===null:detailFilter==='unresolved'?r.allocationScope==='to_clarify'&&r.nr!==null:detailFilter==='outside'?r.allocationScope==='outside_ulm':true);
+ const agencies=useMemo(()=>[...new Set(report?.rows.filter(r=>r.allocationScope==='ulm').map(r=>r.accountingAgency).filter(Boolean)||[])].sort((a,b)=>a.localeCompare(b,'fr')),[report]);
+ const rows=useMemo(()=>report?.rows.filter(r=>(!agency||r.allocationScope==='ulm'&&r.accountingAgency===agency)&&(!kind||r.kind===kind))||[],[report,agency,kind]);
+ const detailRows=(detailFilter==='unresolved'||detailFilter==='outside'?(report?.rows||[]):rows).filter(r=>detailFilter==='manual'?r.source==='manual'&&r.nr!==null&&r.allocationScope==='ulm':detailFilter==='unchecked'?r.nr===null:detailFilter==='unresolved'?r.allocationScope==='to_clarify'&&r.nr!==null:detailFilter==='outside'?r.allocationScope==='outside_ulm':true);
  const valid=rows.filter(r=>r.nr!==null&&r.allocationScope==='ulm');
  const csp=valid.filter(r=>r.source==='csp').reduce((sum,r)=>sum+r.nr!,0);
  const manual=valid.filter(r=>r.source==='manual').reduce((sum,r)=>sum+r.nr!,0);
