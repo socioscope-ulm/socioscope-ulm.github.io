@@ -27,12 +27,28 @@ export default function PhotoImport(){const [data,setData]=useState<any>(null),[
   // the catalogue; it does not replace photos or ask to relink known portraits.
   const existing=await (await request('/api/photos')).json();
   const nameKey=(source:string,page:number,name:string)=>source+'|'+page+'|'+photoNameKey(name).replace(/^(RA|AM|RP|TM|PA) /,'').split(' ').filter(Boolean).sort().join(' ');
-  const known=new Set<string>(existing.photos.filter((p:any)=>p.source_name===file.name&&photoNameKey(p.detected_name||'')).map((p:any)=>nameKey(p.source_name,p.page,p.detected_name)));
+  const previous=existing.photos.filter((p:any)=>p.source_name===file.name);
+  const known=new Set<string>(previous.filter((p:any)=>photoNameKey(p.detected_name||'')).map((p:any)=>nameKey(p.source_name,p.page,p.detected_name)));
+  // For portraits without detected names, compare the actual image. This also
+  // preserves manual relinking when OCR results change between two imports.
+  const digest=async(blob:Blob)=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',await blob.arrayBuffer()))).map(b=>b.toString(16).padStart(2,'0')).join('');
+  const priorFingerprints=new Map<number,Promise<Set<string>>>();
+  const pageFingerprints=(page:number)=>{
+   let existingHashes=priorFingerprints.get(page);
+   if(!existingHashes){
+    existingHashes=Promise.all(previous.filter((p:any)=>p.page===page).map(async(p:any)=>{try{return await digest(await (await request('/api/photos/image?id='+encodeURIComponent(p.id))).blob());}catch{return '';}})).then(hashes=>new Set(hashes.filter(Boolean)));
+    priorFingerprints.set(page,existingHashes);
+   }
+   return existingHashes;
+  };
   await extractPortraits(file,setBusy,async photo=>{
    const key=photoNameKey(photo.name)?nameKey(file.name,photo.page,photo.name):'';
    if(key&&known.has(key)){reused++;return;}
+   const fingerprint=await digest(photo.blob),fingerprints=await pageFingerprints(photo.page);
+   if(fingerprints.has(fingerprint)){reused++;return;}
    const saved=await uploadPhoto(photo,file.name);
-   total++;if(saved.agent_id)assigned++;if(key)known.add(key);
+   total++;if(saved.agent_id)assigned++;
+   fingerprints.add(fingerprint);if(key)known.add(key);
   },async(blob,page)=>{setScans(s=>[...s,{blob,page,source:file.name}]);},existing.agents||[]);
   setNotice(`${total} nouvelle(s) photo(s) enregistrée(s), ${assigned} attribuée(s) automatiquement, ${reused} déjà présente(s) conservée(s) avec leurs rattachements. Les autres images sont à rattacher ci-dessous.`);
  }catch(e){setError((e as Error).message+(total?` ${total} nouvelle(s) photo(s) déjà enregistrée(s).`:''));}finally{await reload().catch(e=>setError(e.message));setBusy('');}};
