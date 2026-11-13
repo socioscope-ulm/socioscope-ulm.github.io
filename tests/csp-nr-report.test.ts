@@ -222,5 +222,6 @@ test('Un avancement ODJ/RD ne doit etre fusionne que si les NR directs concorden
   doc([rd],{id:'RD',date:'2026-09-11',documentType:'rd'})];
  assert.equal(calculateNRReport(docs,2026).total,1);
  const conflicting={...rd,recordedBefore:{gf:13,nr:215},recordedAfter:{gf:13,nr:220}};
- assert.equal(calculateNRReport([docs[0],{...docs[1],events:[conflicting]}],2026).total,2);
+ assert.equal(calculateNRReport([docs[0],{...docs[1],events:[conflicting]}],2026).total,1);
+ assert.equal(calculateNRReport([docs[0],{...docs[1],events:[conflicting]}],2026).toVerify,1);
 });
