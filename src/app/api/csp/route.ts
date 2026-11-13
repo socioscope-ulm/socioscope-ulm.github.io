@@ -33,7 +33,9 @@ export async function GET(request:Request){try{
   const year=Number(p.get('year'));
   if(!Number.isInteger(year)||year<2020||year>2100)fail('Année de bilan NR invalide.');
   const docs=(await imports()).filter(row=>row.status==='validated').map(row=>({
-   id:row.id,name:row.name,date:row.date,status:row.status,events:row.detail.events||[]
+   id:row.id,name:row.name,date:row.date,status:row.status,
+   documentType:row.detail.documentType==='cr'?'cr':'rd',
+   events:row.detail.events||[]
   }));
   const manualRows=(await resources().db.prepare("SELECT id,agent,note,created FROM agent_decisions WHERE kind='manual_nr' ORDER BY created DESC").all<any>()).results;
   for(const row of manualRows){

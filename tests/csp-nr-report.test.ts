@@ -116,3 +116,59 @@ test('Nomination sans variation GF : contradictions, GF delta explicite et ambig
  assert.equal(calculateNRReport([{...odj,events:[candidate,{...candidate,id:'duplicate'}]},rd],2026).toVerify,1);
  assert.equal(calculateNRReport([{...odj,status:'review'},rd],2026).toVerify,1);
 });
+
+test('Reclassements ODJ incomplets rapprochés avec leur RD validé : aucun faux contrôle ni double comptage',()=>{
+ const date='2026-09-11',effective='2026-01-01';
+ const odjEvents=[
+  event({id:'p4r0',name:'AGENT FICTIF A',agentId:'FA',kind:'reclassement',effective,
+   gfDelta:1,gfBefore:17,gfAfter:18,nrBefore:330,nrAfter:undefined,nrSteps:undefined,
+   recordedBefore:{gf:18,nr:330,agency:'DIRECTION'},recordedAfter:undefined}),
+  event({id:'p4r1',name:'AGENT FICTIF B',agentId:'FB',kind:'reclassement',effective,
+   gfDelta:1,gfBefore:12,gfAfter:13,nrBefore:210,nrAfter:undefined,nrSteps:undefined,
+   recordedBefore:{gf:13,nr:220,agency:'DIRECTION'},recordedAfter:undefined}),
+  event({id:'odj-avancement',name:'AGENT FICTIF A',agentId:'FA',kind:'avancement',effective,
+   gfBefore:17,nrBefore:325,nrAfter:330,nrSteps:1,
+   recordedBefore:{gf:18,nr:330,agency:'DIRECTION'},recordedAfter:undefined})
+ ];
+ const rdEvents=[
+  event({id:'rd-reclassement-a',name:'AGENT FICTIF A',agentId:'FA',kind:'reclassement',effective,gfDelta:1,
+   recordedBefore:{gf:17,nr:315,agency:'DIRECTION'},recordedAfter:{gf:18,nr:325,agency:'DIRECTION'}}),
+  event({id:'rd-reclassement-b',name:'AGENT FICTIF B',agentId:'FB',kind:'reclassement',effective,gfDelta:1,
+   recordedBefore:{gf:12,nr:205,agency:'DIRECTION'},recordedAfter:{gf:13,nr:215,agency:'DIRECTION'}}),
+  event({id:'rd-avancement-a',name:'AGENT FICTIF A',agentId:'FA',kind:'avancement',effective,nrSteps:1,
+   recordedBefore:{gf:18,nr:325,agency:'DIRECTION'},recordedAfter:{gf:18,nr:330,agency:'DIRECTION'}}),
+  event({id:'rd-avancement-b',name:'AGENT FICTIF B',agentId:'FB',kind:'avancement',effective,nrSteps:1,
+   recordedBefore:{gf:13,nr:215,agency:'DIRECTION'},recordedAfter:{gf:13,nr:220,agency:'DIRECTION'}})
+ ];
+ const docs=[doc(odjEvents,{id:'odj-septembre',date,documentType:'cr'}),
+  doc(rdEvents,{id:'rd-septembre',date,documentType:'rd'})];
+ const before=JSON.stringify(docs);
+ const result=calculateNRReport(docs,2026);
+ assert.equal(result.toVerify,0);
+ assert.equal(result.total,6);
+ assert.equal(result.totalCsp,6);
+ assert.equal(result.rows.length,4);
+ assert.deepEqual(result.rows.filter(r=>r.kind==='reclassement').map(r=>[r.name,r.beforeNR,r.afterNR,r.nr]),[
+  ['AGENT FICTIF A',315,325,2],['AGENT FICTIF B',205,215,2]
+ ]);
+ assert.ok(result.rows.filter(r=>r.kind==='reclassement').every(r=>r.supportingDocument==='CSP fictive'));
+ assert.equal(JSON.stringify(docs),before);
+});
+test('Un reclassement sans RD unique, non validé ou incohérent ne perd pas son alerte',()=>{
+ const odjEv=event({id:'odj',kind:'reclassement',effective:'2026-01-01',gfBefore:12,gfAfter:13,gfDelta:1,
+  nrSteps:undefined,nrBefore:210,nrAfter:undefined,
+  recordedBefore:{gf:13,nr:220},recordedAfter:undefined});
+ const rdEv=event({id:'rd',kind:'reclassement',effective:'2026-01-01',gfDelta:1,
+  recordedBefore:{gf:12,nr:205},recordedAfter:{gf:13,nr:215}});
+ const odj=doc([odjEv],{id:'odj',date:'2026-09-11',documentType:'cr'});
+ const rd=doc([rdEv],{id:'rd',date:'2026-09-11',documentType:'rd'});
+ assert.equal(calculateNRReport([odj],2026).toVerify,1);
+ assert.equal(calculateNRReport([odj,{...rd,status:'review'}],2026).toVerify,1);
+ assert.equal(calculateNRReport([odj,{...rd,date:'2026-07-11'}],2026).toVerify,1);
+ assert.equal(calculateNRReport([odj,{...rd,events:[{...rdEv,recordedAfter:{gf:13,nr:220}}]}],2026).toVerify,1);
+ assert.equal(calculateNRReport([odj,{...rd,events:[{...rdEv,recordedAfter:{gf:14,nr:215}}]}],2026).toVerify,1);
+ assert.equal(calculateNRReport([odj,{...rd,events:[{...rdEv,approved:false}]}],2026).toVerify,1);
+ assert.equal(calculateNRReport([odj,{...rd,events:[rdEv,{...rdEv,id:'another'}]}],2026).toVerify,1);
+ assert.equal(calculateNRReport([{...odj,events:[odjEv,{...odjEv,id:'another'}]},rd],2026).toVerify,2);
+ assert.equal(calculateNRReport([odj,{...rd,events:[rdEv]},doc([rdEv],{id:'another-rd',date:'2026-09-11',documentType:'rd'})],2026).toVerify,1);
+});

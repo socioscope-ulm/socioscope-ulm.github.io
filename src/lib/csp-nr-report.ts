@@ -8,12 +8,12 @@ export type NRReportEvent = {
   recordedBefore?:{gf?:number;nr?:number;agency?:string};
   recordedAfter?:{gf?:number;nr?:number;agency?:string;nrProvisional?:boolean};
 };
-export type NRReportDocument = {id:string;name:string;date:string;status:string;events:NRReportEvent[];manual?:boolean};
+export type NRReportDocument = {id:string;name:string;date:string;status:string;documentType?:'cr'|'rd';events:NRReportEvent[];manual?:boolean};
 export type NRReportRow = {
  id:string;agentId:string;name:string;effective:string;agency:string;
  kind:string;motif:string;beforeNR:number|null;afterNR:number|null;
  beforeGF:number|null;afterGF:number|null;nr:number|null;source:'csp'|'manual';
- documentId:string;document:string;meetingDate:string;justification:'écart NR'|'nombre de NR déclaré'|'à vérifier';
+ documentId:string;document:string;meetingDate:string;supportingDocument?:string;justification:'écart NR'|'nombre de NR déclaré'|'à vérifier';
 };
 const labels:Record<string,string>={avancement:'Avancement au choix',reclassement:'Reclassement',nomination:'Nomination',mesure:'Mesure salariale',posthume:'Avancement à titre posthume'};
 const hasNR=(x:unknown):x is number=>typeof x==='number'&&Number.isInteger(x)&&x>=0&&x<=1000&&x%5===0;
@@ -25,6 +25,50 @@ const agencyOf=(e:NRReportEvent)=>String(e.recordedBefore?.agency||e.recordedAft
 export function calculateNRReport(documents:NRReportDocument[],year:number):{year:number;rows:NRReportRow[];totalCsp:number;totalManual:number;total:number;toVerify:number;agents:number}{
  const rows:NRReportRow[]=[];
  const signatures=new Set<string>();
+ // Historical ODJ records can contain the *final* recorded situation
+ // (after several simultaneous decisions), rather than the before/after
+ // of the specific reclassement. If the same validated meeting contains
+ // exactly one matching approved RD reclassement with complete GF/NR,
+ // count the RD once and treat the incomplete ODJ line as its source.
+ // This reconciliation is read-only and does not change validated events.
+ const alreadyReportedOdj=new Set<string>();
+ const odjProofForRd=new Map<string,string>();
+ const approved=(e:NRReportEvent)=>e.selected===true&&e.approved===true&&
+  !e.candidacy&&!e.nonRetained&&!e.nonRetainedByRD&&
+  !e.acknowledgedByDocument&&!e.acknowledgedByRD;
+ const odjDocs=documents.filter(d=>d.status==='validated'&&d.documentType==='cr');
+ const rdDocs=documents.filter(d=>d.status==='validated'&&d.documentType==='rd');
+ const matchIdentity=(a:NRReportEvent,b:NRReportEvent)=>
+  normalized(a.name)===normalized(b.name)&&
+  (!a.agentId||!b.agentId||a.agentId===b.agentId)&&
+  a.kind===b.kind&&a.effective===b.effective;
+ for(const odj of odjDocs)for(const e of odj.events||[]){
+  if(!approved(e)||e.kind!=='reclassement'||!/^\d{4}-\d{2}-\d{2}$/.test(e.effective)||
+     hasNR(e.nrAfter)||hasNR(e.recordedAfter?.nr)||!hasGF(e.gfBefore)||
+     !hasGF(e.gfAfter)||e.gfAfter!==e.gfBefore+1||e.gfDelta!==1)continue;
+  const beforeGF=e.gfBefore,afterGF=e.gfAfter;
+  // Exactly one ODJ decision may describe this GF transition.
+  const competing=odjDocs.flatMap(d=>d.date===odj.date?
+   (d.events||[]).filter(v=>approved(v)&&matchIdentity(e,v)&&
+    v.gfBefore===beforeGF&&v.gfAfter===afterGF):[]);
+  if(competing.length!==1)continue;
+  const evidence=rdDocs.flatMap(rd=>rd.date===odj.date?
+   (rd.events||[]).filter(v=>approved(v)&&matchIdentity(e,v)&&
+    v.gfDelta===1&&v.recordedBefore?.gf===beforeGF&&
+    v.recordedAfter?.gf===afterGF&&
+    hasNR(v.recordedBefore?.nr)&&hasNR(v.recordedAfter?.nr)&&
+    v.recordedAfter.nr===v.recordedBefore.nr+10)
+    .map(v=>({rd,e:v})):[]);
+  if(evidence.length!==1)continue;
+  const {rd,e:source}=evidence[0];
+  // The RD must be the unique approved occurrence of this movement.
+  const allRdMatches=rdDocs.flatMap(d=>d.date===odj.date?
+   (d.events||[]).filter(v=>approved(v)&&matchIdentity(e,v)&&
+    v.recordedBefore?.gf===beforeGF&&v.recordedAfter?.gf===afterGF):[]);
+  if(allRdMatches.length!==1)continue;
+  alreadyReportedOdj.add(odj.id+':'+e.id);
+  odjProofForRd.set(rd.id+':'+source.id,odj.name);
+ }
  // An approved ODJ candidacy may establish the starting NR of its *exact*
  // approved RD decision. This is an accounting-only reconciliation: the
  // source events and their provisional fields are never modified.
@@ -47,6 +91,7 @@ export function calculateNRReport(documents:NRReportDocument[],year:number):{yea
  for(const doc of [...documents.filter(d=>!d.manual),...documents.filter(d=>d.manual)]){
   if(doc.status!=='validated')continue;
   for(const e of doc.events||[]){
+   if(alreadyReportedOdj.has(doc.id+':'+e.id))continue;
    if(e.selected!==true||e.approved!==true||e.candidacy||e.nonRetained||e.nonRetainedByRD||e.acknowledgedByDocument||e.acknowledgedByRD||!Object.hasOwn(labels,e.kind)||!/^\d{4}-\d{2}-\d{2}$/.test(e.effective)||Number(e.effective.slice(0,4))!==year)continue;
    let beforeNR:number|null=hasNR(e.recordedBefore?.nr)?e.recordedBefore.nr:hasNR(e.nrBefore)?e.nrBefore:null;
    const afterNR=hasNR(e.recordedAfter?.nr)?e.recordedAfter.nr:hasNR(e.nrAfter)?e.nrAfter:null;
@@ -96,7 +141,8 @@ export function calculateNRReport(documents:NRReportDocument[],year:number):{yea
    if(signatures.has(signature))continue;
    signatures.add(signature);
    rows.push({id:doc.id+':'+e.id,agentId,name:e.name,effective:e.effective,agency:agencyOf(e),kind:e.kind,motif:labels[e.kind],beforeNR,afterNR,beforeGF,afterGF,nr,
-    source:doc.manual?'manual':'csp',documentId:doc.id,document:doc.name,meetingDate:doc.date,justification});
+    source:doc.manual?'manual':'csp',documentId:doc.id,document:doc.name,meetingDate:doc.date,
+    supportingDocument:odjProofForRd.get(doc.id+':'+e.id),justification});
   }
  }
  rows.sort((a,b)=>a.effective.localeCompare(b.effective)||a.agency.localeCompare(b.agency,'fr')||a.name.localeCompare(b.name,'fr'));
