@@ -13,6 +13,7 @@ import {resources} from '../../../lib/store';
 import {cspKinds,cspKey,cspNonRetained,cspResolvedEvent,validateCspEvent,deduplicateCsp,validDate,latestAnnual,parisToday,projectCsp,CSP_SOURCE} from '../../../lib/csp';
 import {manualNRImport,validateManualNR,manualNRReasons} from '../../../lib/csp-manual-nr';
 import {calculateNRReport} from '../../../lib/csp-nr-report';
+import {applyNRScopes,type NRScopeOverride} from '../../../lib/nr-allocation';
 import {snapshot} from '../../../lib/agents';
 import type {CspEvent} from '../../../lib/csp';
 function fail(message:string,status=400):never{throw Object.assign(Error(message),{status});}
@@ -46,7 +47,8 @@ export async function GET(request:Request){try{
     docs.push({...manual,manual:true} as any);
    }catch{/* Une saisie historique illisible ne bloque pas le bilan. */}
   }
-  return Response.json(calculateNRReport(docs,year),{headers:{'Cache-Control':'no-store'}});
+  const overrides=(await resources().db.prepare("SELECT id,agent,note,created FROM agent_decisions WHERE kind='nr_allocation' ORDER BY created,id").all<any>()).results.flatMap(row=>{try{const entry=JSON.parse(row.note||'{}');return typeof entry.rowId==='string'&&entry.agentId===row.agent&&['ulm','outside_ulm'].includes(entry.scope)?[entry as NRScopeOverride]:[];}catch{return [];}});
+  return Response.json(applyNRScopes(calculateNRReport(docs,year),overrides),{headers:{'Cache-Control':'no-store'}});
  }
 
  if(p.get('manual')==='1'){
@@ -90,6 +92,26 @@ export async function POST(request:Request){try{
 }catch(e){return agentError(e);}}
 export async function PATCH(request:Request){try{
  await agentAuth(request,true);const b=await request.json();
+ if(b.action==='set-nr-allocation'){
+  if(typeof b.rowId!=='string'||b.rowId.length>250||typeof b.agentId!=='string'||b.agentId.length>100||!['ulm','outside_ulm','to_clarify'].includes(b.scope)||typeof b.reason!=='string'||b.reason.trim().length<12||b.reason.length>500||typeof b.agency!=='string'||b.agency.length>180||typeof b.relatedAgency!=='string'||b.relatedAgency.length>180)fail('Classement NR invalide. Indiquer une origine, une agence et un motif explicite.');
+  const year=Number(b.year);
+  if(!Number.isInteger(year)||year<2020||year>2100)fail('Année invalide.');
+  const docs=(await imports()).filter(row=>row.status==='validated').map(row=>({id:row.id,name:row.name,date:row.date,status:row.status,documentType:row.detail.documentType==='cr'?'cr':'rd',events:row.detail.events||[]}));
+  const manualRows=(await resources().db.prepare("SELECT id,agent,note,created FROM agent_decisions WHERE kind='manual_nr'").all<any>()).results;
+  for(const row of manualRows){try{const entry=JSON.parse(row.note||'{}');if(!validateManualNR(entry)||entry.agentId!==row.agent)continue;docs.push({...manualNRImport({...entry,id:row.id,created:row.created,actor:String(entry.actor||'administrateur')}),manual:true} as any);}catch{}}
+  const source=calculateNRReport(docs,year).rows.find(r=>r.id===b.rowId&&r.agentId===b.agentId&&r.nr!==null&&r.nr>0);
+  if(!source)fail('Mouvement introuvable dans le bilan validé. Actualiser.',409);
+  const scope=b.scope as 'ulm'|'outside_ulm'|'to_clarify';
+  if(scope==='ulm'&&(!b.agency.trim()||['AGENCE NON RENSEIGNÉE','NON RENSEIGNÉE','SANS AGENCE'].includes(b.agency.trim().toUpperCase())))fail('Indiquer une agence fiable pour imputer ces NR à l’ULM.');
+  const {db}=resources();const id='nr-allocation:'+encodeURIComponent(source.id);const existing=await db.prepare("SELECT id FROM agent_decisions WHERE id=? AND kind='nr_allocation'").bind(id).first<any>();
+  if(scope==='to_clarify'){
+   if(existing)await db.prepare("DELETE FROM agent_decisions WHERE id=? AND kind='nr_allocation'").bind(id).run();
+   return Response.json({ok:true,scope:'to_clarify'});
+  }
+  const note=JSON.stringify({rowId:source.id,agentId:source.agentId,scope,agency:scope==='ulm'?b.agency.trim():'',relatedAgency:b.relatedAgency.trim(),reason:b.reason.trim(),updatedAt:new Date().toISOString(),updatedBy:String(request.headers.get('oai-authenticated-user-email')||'administrateur').slice(0,200)});
+  await db.prepare("INSERT INTO agent_decisions (id,agent,kind,target,source,note,created) VALUES (?,?,'nr_allocation',NULL,'bilan-nr',?,?) ON CONFLICT(id) DO UPDATE SET note=excluded.note,created=excluded.created WHERE agent_decisions.kind='nr_allocation' AND agent_decisions.agent=excluded.agent").bind(id,source.agentId,note,new Date().toISOString()).run();
+  return Response.json({ok:true,scope});
+ }
  if(b.action==='manual-nr'){
   if(!validateManualNR(b.entry))fail('Renseigner un NNI, un GF, le NR avant, la date d’effet, un motif et une observation de 20 caractères minimum.');
   if(b.confirmed!==true)fail('Confirmer explicitement cet avancement manuel.');
