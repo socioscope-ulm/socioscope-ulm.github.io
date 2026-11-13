@@ -87,7 +87,7 @@ export function TrombinoscopeViewer(){
 
 export function TrombinoscopeAdministration(){
  const [docs,setDocs]=useState<TrombinoscopeDocument[]>([]);
- const [opening,setOpening]=useState(false),[busy,setBusy]=useState<TrombinoscopeAgencyCode|null>(null);
+ const [opening,setOpening]=useState(true),[busy,setBusy]=useState<TrombinoscopeAgencyCode|null>(null);
  const [error,setError]=useState(''),[notice,setNotice]=useState('');
  const [periods,setPeriods]=useState<Record<string,string>>({});
  const reload=async()=>{
@@ -120,9 +120,9 @@ export function TrombinoscopeAdministration(){
   catch(e){setError((e as Error).message);}
   finally{setBusy(null);}
  };
- return <details className="document-folder" onToggle={e=>setOpening(e.currentTarget.open)}>
-  <summary><ChevronRight size={16} className="folder-chevron"/><FolderOpen size={20}/><strong>Gestion des trombinoscopes par agence</strong><span className="badge">PDF · Administration</span></summary>
-  <div className="document-folder-content"><p>Déposer ou remplacer le PDF d’une agence. La rubrique « Trombinoscope » du menu public aux utilisateurs connectés est mise à jour automatiquement. Ces documents sont distincts des photos des fiches individuelles.</p>
+ return <section className="trombi-admin-organigrams" aria-label="Organigrammes PDF des agences">
+  <h3><FolderOpen size={18}/> Organigrammes PDF consultables par agence</h3>
+  <div><p>Déposer ou remplacer le PDF d’une agence. La rubrique « Trombinoscope » du menu public aux utilisateurs connectés est mise à jour automatiquement. Ces documents sont distincts des photos des fiches individuelles.</p>
    {error&&<p role="alert" className="notice">{error}</p>}
    {notice&&<p role="status" className="notice">{notice}</p>}
    <div className="trombi-admin-grid">
@@ -137,5 +137,5 @@ export function TrombinoscopeAdministration(){
     })}
    </div>
   </div>
- </details>;
+ </section>;
 }
