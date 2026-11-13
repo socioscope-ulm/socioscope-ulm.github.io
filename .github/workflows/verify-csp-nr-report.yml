@@ -1,14 +1,16 @@
 name: Verify annual NR report in isolation
 on:
   push:
-    branches: [feature/bilan-annuel-nr-csp-20261106]
+    branches: [feature/bilan-annuel-nr-csp-20261106, feature/nr-origine-hors-ulm-20261113]
   pull_request:
     paths:
       - 'src/app/csp-nr-report.tsx'
       - 'src/lib/csp-nr-report.ts'
+      - 'src/lib/nr-allocation.ts'
       - 'src/app/dashboard.tsx'
       - 'src/app/api/csp/route.ts'
       - 'tests/csp-nr-report.test.ts'
+      - 'tests/nr-allocation.test.ts'
 permissions:
   contents: read
 jobs:
@@ -23,7 +25,7 @@ jobs:
       - name: Install dependencies
         run: npm install --no-audit --no-fund
       - name: Check NR accounting regression cases
-        run: node --experimental-strip-types --test tests/csp-nr-report.test.ts
+        run: node --experimental-strip-types --test tests/csp-nr-report.test.ts tests/nr-allocation.test.ts
       - name: Verify existing CSP integration
         run: node --experimental-strip-types --test tests/csp.test.ts tests/csp-api.test.ts tests/csp-manual-nr.test.ts
       - name: Build front-end
