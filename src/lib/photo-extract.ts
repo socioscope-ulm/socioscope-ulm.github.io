@@ -12,11 +12,70 @@ export async function extractPortraits(file:File,progress:(s:string)=>void,onPho
  if(/\.ppt$/i.test(file.name))throw Error('Enregistrer ce PowerPoint au format PPTX ou PDF avant l’import.');
  let count=0;const emit=async(p:ExtractedPhoto)=>{if(++count>1000)throw Error('1000 photos maximum par import.');await onPhoto({...p,blob:await compressPhoto(p.blob)});};
  if(/\.pptx$/i.test(file.name)){
-  const {default:JSZip}=await import('jszip');const zip=await JSZip.loadAsync(await file.arrayBuffer());const slides=Object.keys(zip.files).filter(n=>/^ppt\/slides\/slide\d+\.xml$/.test(n)).sort((a,b)=>Number(a.match(/slide(\d+)/)?.[1])-Number(b.match(/slide(\d+)/)?.[1]));if(slides.length>200)throw Error('200 diapositives maximum.');
+  const {default:JSZip}=await import('jszip');
+  const zip=await JSZip.loadAsync(await file.arrayBuffer());
+  const slides=Object.keys(zip.files).filter(n=>/^ppt\/slides\/slide\d+\.xml$/.test(n)).sort((a,b)=>Number(a.match(/slide(\d+)/)?.[1])-Number(b.match(/slide(\d+)/)?.[1]));
+  if(slides.length>200)throw Error('200 diapositives maximum.');
+  const supported=/\.(png|jpe?g|webp|gif|bmp)$/i;
+  const mediaPath=(target:string)=>decodeURIComponent(new URL(target,'https://local/ppt/slides/').pathname.slice(1));
   for(let i=0;i<slides.length;i++){
-   progress(`Lecture de la diapositive ${i+1} / ${slides.length}`);const path=slides[i],doc=xml(await zip.file(path)!.async('string'));const relFile=zip.file(path.replace('slides/','slides/_rels/')+'.rels');if(!relFile)continue;const rel=xml(await relFile.async('string'));const targets=new Map(nodes(rel,'Relationship').filter(r=>r.getAttribute('TargetMode')!=='External').map(r=>[r.getAttribute('Id'),r.getAttribute('Target')!]));
-   const pics=nodes(doc,'pic').map(el=>({el,...box(el)})).filter(p=>p.w>0&&p.h>0);const labels=nodes(doc,'sp').map(el=>({...box(el),text:nodes(el,'t').map(t=>t.textContent).join(' ').trim()})).filter(t=>t.text&&t.w>0);
-   for(const pic of pics){const embed=first(pic.el,'blip')?.getAttributeNS('http://schemas.openxmlformats.org/officeDocument/2006/relationships','embed');const target=targets.get(embed||'');if(!target)continue;const resolved=new URL(target,'https://local/ppt/slides/').pathname.slice(1);const entry=zip.file(resolved);if(!entry||!/\.(png|jpe?g|webp)$/i.test(resolved))continue;let blob=await entry.async('blob');const crop=first(pic.el,'srcRect');if(crop){const im=await createImageBitmap(blob);const l=Number(crop.getAttribute('l')||0)/100000,t=Number(crop.getAttribute('t')||0)/100000,r=Number(crop.getAttribute('r')||0)/100000,b=Number(crop.getAttribute('b')||0)/100000;const c=document.createElement('canvas');c.width=Math.max(1,Math.round(im.width*(1-l-r)));c.height=Math.max(1,Math.round(im.height*(1-t-b)));c.getContext('2d')!.drawImage(im,im.width*l,im.height*t,c.width,c.height,0,0,c.width,c.height);im.close();blob=await new Promise<Blob>(ok=>c.toBlob(b=>ok(b!),'image/jpeg',.9));}const match=nearbyPhotoName(pic,pics,labels);if(pic.el.parentElement?.localName==='grpSp')match.certain=false;await emit({blob,...match,page:i+1});}
+   progress('Lecture de la diapositive '+(i+1)+' / '+slides.length);
+   const path=slides[i],doc=xml(await zip.file(path)!.async('string'));
+   const relFile=zip.file(path.replace('slides/','slides/_rels/')+'.rels');
+   if(!relFile)continue;
+   const rel=xml(await relFile.async('string'));
+   const relationships=nodes(rel,'Relationship').filter(r=>r.getAttribute('TargetMode')!=='External');
+   const targets=new Map(relationships.map(r=>[r.getAttribute('Id'),r.getAttribute('Target')!]));
+   // Photos can be ordinary pictures, grouped pictures, or an image filling a
+   // PowerPoint shape. The previous extractor only handled the first category.
+   const pictureShapes=[...nodes(doc,'pic'),...nodes(doc,'sp').filter(el=>nodes(el,'blip').length>0)];
+   const pictures=pictureShapes.map(el=>({el,...box(el)})).filter(p=>p.w>0&&p.h>0);
+   const labels=nodes(doc,'sp').map(el=>({...box(el),text:nodes(el,'t').map(t=>t.textContent).join(' ').trim()})).filter(t=>t.text&&t.w>0);
+   const exported=new Set<string>();
+   for(const picture of pictures){
+    const blip=first(picture.el,'blip');
+    const embed=blip?.getAttributeNS('http://schemas.openxmlformats.org/officeDocument/2006/relationships','embed')||blip?.getAttribute('r:embed');
+    const target=targets.get(embed||'');
+    if(!target)continue;
+    const resolved=mediaPath(target),entry=zip.file(resolved);
+    if(!entry||!supported.test(resolved))continue;
+    exported.add(resolved);
+    let blob=await entry.async('blob');
+    const crop=first(picture.el,'srcRect');
+    if(crop){
+     const im=await createImageBitmap(blob);
+     const l=Number(crop.getAttribute('l')||0)/100000,t=Number(crop.getAttribute('t')||0)/100000;
+     const r=Number(crop.getAttribute('r')||0)/100000,b=Number(crop.getAttribute('b')||0)/100000;
+     const c=document.createElement('canvas');
+     c.width=Math.max(1,Math.round(im.width*(1-l-r)));
+     c.height=Math.max(1,Math.round(im.height*(1-t-b)));
+     c.getContext('2d')!.drawImage(im,im.width*l,im.height*t,im.width*(1-l-r),im.height*(1-t-b),0,0,c.width,c.height);
+     im.close();
+     blob=await new Promise<Blob>((ok,fail)=>c.toBlob(v=>v?ok(v):fail(Error('Image illisible.')),'image/jpeg',.9));
+    }
+    const match=nearbyPhotoName(picture,pictures,labels,agents);
+    if(picture.el.parentElement?.localName==='grpSp')match.certain=false;
+    await emit({blob,...match,page:i+1});
+   }
+   // Some exported PPTX place an embedded portrait in an unsupported/flattened
+   // shape. Recover the slide's remaining portrait-like media for manual review,
+   // without guessing the identity or overriding a previously attached portrait.
+   const remaining=relationships.filter(r=>/\/image$/.test(r.getAttribute('Type')||''));
+   for(const relation of remaining){
+    const target=relation.getAttribute('Target');
+    if(!target)continue;
+    const resolved=mediaPath(target),entry=zip.file(resolved);
+    if(exported.has(resolved)||!entry||!supported.test(resolved))continue;
+    exported.add(resolved);
+    const blob=await entry.async('blob');
+    let im:ImageBitmap;
+    try{im=await createImageBitmap(blob);}catch{continue;}
+    const ratio=im.width/Math.max(1,im.height);
+    const plausible=im.width>=65&&im.height>=65&&ratio>=.30&&ratio<=1.5;
+    im.close();
+    if(!plausible)continue;
+    await emit({blob,name:'',certain:false,page:i+1});
+   }
   }
  }else if(/\.pdf$/i.test(file.name)){
   const pdfjs=await import('pdfjs-dist');pdfjs.GlobalWorkerOptions.workerSrc=import.meta.env.BASE_URL+'pdf.worker.min.mjs';const pdf=await pdfjs.getDocument({data:new Uint8Array(await file.arrayBuffer()),isEvalSupported:false}).promise;
