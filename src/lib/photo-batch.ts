@@ -32,6 +32,7 @@ export function planPhotoBatch(manifest:any,agents:PhotoAgent[],assigned:Readonl
      !Number.isSafeInteger(item.page)||item.page<1||item.page>200||
      typeof item.sha256!=='string'||!digest.test(item.sha256))
    throw Error('Archive de photos invalide : fichier ou correspondance incorrecte.');
+  if(item.confidence && item.confidence!=='spatial_exact'){ambiguous++;continue;}
   if(usedPaths.has(item.path)){duplicate++;continue;}
   usedPaths.add(item.path);
   const matches=matchPhotoName(item.name,agents);
