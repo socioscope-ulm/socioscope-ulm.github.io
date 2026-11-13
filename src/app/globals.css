@@ -185,3 +185,43 @@
 .guide-admin-folder .guide-current small{color:var(--muted)}
 .guide-admin-folder .filter-note{display:block}
 @media(max-width:700px){.account-bar .guide-download-error{left:auto;right:0;max-width:min(232px,90vw)}}
+
+
+/* Trombinoscopes : consultation authentifiée et gestion par agence */
+.trombi-section{display:flex;flex-direction:column;gap:17px}
+.trombi-intro{display:flex;justify-content:space-between;align-items:start;gap:16px}
+.trombi-intro p{margin-top:7px;max-width:740px}
+.trombi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(225px,1fr));gap:12px}
+.trombi-card{display:flex;align-items:center;gap:13px;padding:19px 17px;border:1px solid var(--border);border-radius:11px;background:#fff;text-align:left;min-height:101px;color:var(--ink);width:100%;box-shadow:0 2px 9px rgba(30,60,45,.03)}
+.trombi-card:hover:not(:disabled){border-color:#b2c6af;background:#f9fbf7}
+.trombi-card .trombi-card-icon{width:42px;height:42px;display:grid;place-items:center;flex-shrink:0;border-radius:9px;background:#edf3ea}
+.trombi-card-body{display:flex;flex:1;flex-direction:column;align-items:start;gap:5px;min-width:0}
+.trombi-card-body strong{font-weight:750;font-size:13px;line-height:1.3}
+.trombi-card-body span,.trombi-card-body small{color:var(--muted);font-size:11px;line-height:1.4}
+.trombi-card-empty{opacity:.62;background:#fafbf8}
+.trombi-card:disabled{cursor:default}
+.trombi-overlay{position:fixed;inset:0;z-index:1000;background:rgba(9,26,22,.69);display:flex;align-items:center;justify-content:center;padding:19px}
+.trombi-dialog{width:min(1180px,100%);height:min(92vh,1100px);display:flex;flex-direction:column;overflow:hidden;background:white;border-radius:13px;box-shadow:0 20px 70px rgba(0,0,0,.3)}
+.trombi-dialog-header{padding:14px 19px;display:flex;align-items:center;justify-content:space-between;gap:16px;border-bottom:1px solid var(--border)}
+.trombi-dialog-header h2{font-size:17px}
+.trombi-dialog-header p{font-size:11px;margin-top:4px;overflow-wrap:anywhere}
+.trombi-dialog-actions{display:flex;gap:7px;align-items:center;flex-wrap:wrap}
+.trombi-dialog-message{padding:20px}
+.trombi-pdf{border:0;width:100%;flex:1;min-height:0;background:#edf0ed}
+.trombi-admin-grid{display:grid;gap:12px;margin-top:15px}
+.trombi-admin-row{display:flex;align-items:center;gap:16px;border:1px solid var(--border);border-radius:8px;padding:13px 15px;background:white}
+.trombi-admin-details{flex:1;min-width:160px;display:flex;flex-direction:column;gap:4px}
+.trombi-admin-details strong{font-size:13px}
+.trombi-admin-details small{color:var(--muted);overflow-wrap:anywhere}
+.trombi-period{display:flex;flex-direction:column;gap:5px;min-width:180px;font-size:10px;color:var(--muted)}
+.trombi-period input{padding:8px 10px;border:1px solid var(--border);border-radius:7px;color:var(--ink);width:100%;background:white}
+.trombi-admin-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+@media(max-width:850px){
+ .trombi-admin-row{align-items:stretch;flex-direction:column}
+ .trombi-period{min-width:0}
+ .trombi-dialog-header{align-items:flex-start;flex-direction:column}
+ .trombi-dialog{height:96vh}
+ .trombi-dialog-actions .btn{padding:9px 10px}
+ .trombi-intro{flex-direction:column}
+ .trombi-grid{grid-template-columns:repeat(auto-fit,minmax(185px,1fr))}
+}
