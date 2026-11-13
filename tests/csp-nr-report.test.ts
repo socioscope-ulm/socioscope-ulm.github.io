@@ -108,12 +108,12 @@ test('Nomination sans variation GF : contradictions, GF delta explicite et ambig
   {...rdEvent,gfBefore:9},
   {...rdEvent,recordedAfter:{gf:11,nr:165}},
   {...rdEvent,recordedAfter:{gf:10,nr:170}},
-  {...rdEvent,reference:'REF DIFFERENTE'},
-  {...rdEvent,nrSteps:1}
+  {...rdEvent,reference:'REF DIFFERENTE'}
  ]) {
   const result=calculateNRReport([odj,{...rd,events:[variant]}],2026);
   assert.equal(result.toVerify,1);
  }
+ assert.equal(calculateNRReport([odj,{...rd,events:[{...rdEvent,nrSteps:1}]}],2026).total,1);
  assert.equal(calculateNRReport([odj,{...rd,date:'2026-06-15'}],2026).toVerify,1);
  assert.equal(calculateNRReport([{...odj,events:[candidate,{...candidate,id:'duplicate'}]},rd],2026).toVerify,1);
  assert.equal(calculateNRReport([{...odj,status:'review'},rd],2026).toVerify,1);
