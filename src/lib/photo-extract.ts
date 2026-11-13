@@ -1,4 +1,4 @@
-import {nearbyPhotoName,portraitImageBoxes,matchPhotoName,photoNameKey,type PhotoAgent,type Box} from './photo-match';
+import {nearbyPhotoName,portraitImageBoxes,matchPhotoName,photoNameKey,matchPptxPortraits,type PhotoAgent,type Box} from './photo-match';
 export type ExtractedPhoto={blob:Blob;name:string;certain:boolean;page:number};
 export async function compressPhoto(blob:Blob){
  const image=await createImageBitmap(blob);const scale=Math.min(1,360/image.width,480/image.height);const c=document.createElement('canvas');c.width=Math.max(1,Math.round(image.width*scale));c.height=Math.max(1,Math.round(image.height*scale));const ctx=c.getContext('2d')!;ctx.fillStyle='white';ctx.fillRect(0,0,c.width,c.height);ctx.drawImage(image,0,0,c.width,c.height);image.close();return new Promise<Blob>((ok,fail)=>c.toBlob(b=>b?ok(b):fail(Error('Image illisible.')),'image/jpeg',.82));
@@ -28,11 +28,49 @@ export async function extractPortraits(file:File,progress:(s:string)=>void,onPho
    const targets=new Map(relationships.map(r=>[r.getAttribute('Id'),r.getAttribute('Target')!]));
    // Photos can be ordinary pictures, grouped pictures, or an image filling a
    // PowerPoint shape. The previous extractor only handled the first category.
+
+   // Names in many EDF trombinoscopes are orange text runs, while the same
+   // textbox also contains a role. Extract the actual coloured name only.
+   const names=nodes(doc,'sp').map(el=>{
+    const runs=nodes(el,'r').filter(r=>{
+     const pr=first(r,'rPr');
+     const colour=pr&&first(pr,'srgbClr')?.getAttribute('val')?.toUpperCase();
+     return colour==='FE5815';
+    });
+    const coloured=runs.map(r=>nodes(r,'t').map(t=>t.textContent||'').join('')).join(' ').replace(/\\s+/g,' ').trim();
+    const fallback=nodes(el,'t').map(t=>t.textContent).join(' ').trim();
+    return {...box(el),text:coloured||fallback,coloured:!!coloured};
+   }).filter(t=>t.text&&t.w>0&&t.h>0);
+   // Slide-size is stored in ppt/presentation.xml; shape coordinates alone are
+   // sufficient to reject off-slide objects when a slide size is not present.
+   const width=12192000,height=6858000;
    const pictureShapes=[...nodes(doc,'pic'),...nodes(doc,'sp').filter(el=>nodes(el,'blip').length>0)];
-   const pictures=pictureShapes.map(el=>({el,...box(el)})).filter(p=>p.w>0&&p.h>0);
-   const labels=nodes(doc,'sp').map(el=>({...box(el),text:nodes(el,'t').map(t=>t.textContent).join(' ').trim()})).filter(t=>t.text&&t.w>0);
+   const rawPictures=pictureShapes.map(el=>{
+    const source=box(el),xfrm=first(el,'xfrm');
+    const rotation=Number(xfrm?.getAttribute('rot')||'0')/60000;
+    const radians=rotation*Math.PI/180;
+    const vw=Math.abs(Math.cos(radians))*source.w+Math.abs(Math.sin(radians))*source.h;
+    const vh=Math.abs(Math.sin(radians))*source.w+Math.abs(Math.cos(radians))*source.h;
+    return {el,source,rotation,x:source.x+(source.w-vw)/2,y:source.y+(source.h-vh)/2,w:vw,h:vh};
+   }).filter(p=>p.w>0&&p.h>0&&p.x+p.w/2>=0&&p.x+p.w/2<=width&&p.y+p.h/2>height*.07&&p.y+p.h/2<=height);
+   // Older PPTs contain several copies of the same photo in one position.
+   // Only the final, visible layer must be assigned to the corresponding name.
+   const overlap=(a:Box,b:Box)=>{
+    const w=Math.max(0,Math.min(a.x+a.w,b.x+b.w)-Math.max(a.x,b.x));
+    const h=Math.max(0,Math.min(a.y+a.h,b.y+b.h)-Math.max(a.y,b.y));
+    return w*h/Math.max(1,Math.min(a.w*a.h,b.w*b.h));
+   };
+   const pictures:typeof rawPictures=[];
+   for(const p of rawPictures){
+    for(let k=pictures.length-1;k>=0;k--)if(overlap(p,pictures[k])>.88)pictures.splice(k,1);
+    pictures.push(p);
+   }
    const exported=new Set<string>();
-   for(const picture of pictures){
+   const colouredLabels=names.filter(t=>t.coloured&&t.x+t.w/2>=0&&t.x+t.w/2<=width&&t.y+t.h/2>=0&&t.y+t.h/2<=height);
+   const labels=colouredLabels.length?colouredLabels:names.filter(t=>t.x+t.w/2>=0&&t.x+t.w/2<=width&&t.y+t.h/2>=0&&t.y+t.h/2<=height);
+   const associations=matchPptxPortraits(pictures,labels,agents);
+   for(let pIndex=0;pIndex<pictures.length;pIndex++){
+    const picture=pictures[pIndex];
     const blip=first(picture.el,'blip');
     const embed=blip?.getAttributeNS('http://schemas.openxmlformats.org/officeDocument/2006/relationships','embed')||blip?.getAttribute('r:embed');
     const target=targets.get(embed||'');
@@ -41,26 +79,40 @@ export async function extractPortraits(file:File,progress:(s:string)=>void,onPho
     if(!entry||!supported.test(resolved))continue;
     exported.add(resolved);
     let blob=await entry.async('blob');
-    const crop=first(picture.el,'srcRect');
-    if(crop){
-     const im=await createImageBitmap(blob);
-     const l=Number(crop.getAttribute('l')||0)/100000,t=Number(crop.getAttribute('t')||0)/100000;
-     const r=Number(crop.getAttribute('r')||0)/100000,b=Number(crop.getAttribute('b')||0)/100000;
-     const c=document.createElement('canvas');
-     c.width=Math.max(1,Math.round(im.width*(1-l-r)));
-     c.height=Math.max(1,Math.round(im.height*(1-t-b)));
-     c.getContext('2d')!.drawImage(im,im.width*l,im.height*t,im.width*(1-l-r),im.height*(1-t-b),0,0,c.width,c.height);
-     im.close();
-     blob=await new Promise<Blob>((ok,fail)=>c.toBlob(v=>v?ok(v):fail(Error('Image illisible.')),'image/jpeg',.9));
-    }
-    const match=nearbyPhotoName(picture,pictures,labels,agents);
+    let im:ImageBitmap;
+    try{im=await createImageBitmap(blob);}catch{continue;}
+    try{
+     // The shared transparent avatar placeholder is not a real headshot.
+     // Do not upload it, but retain other labelled or unmatched images.
+     const silhouette=im.width===88&&im.height===116&&resolved.toLowerCase().includes('image');
+     if(silhouette)continue;
+     const crop=first(picture.el,'srcRect');
+     const l=Math.min(.95,Math.max(0,Number(crop?.getAttribute('l')||0)/100000));
+     const t=Math.min(.95,Math.max(0,Number(crop?.getAttribute('t')||0)/100000));
+     const r=Math.min(.95,Math.max(0,Number(crop?.getAttribute('r')||0)/100000));
+     const b=Math.min(.95,Math.max(0,Number(crop?.getAttribute('b')||0)/100000));
+     const left=im.width*l,top=im.height*t;
+     const w=im.width*(1-l-r),h=im.height*(1-t-b);
+     if(w<=0||h<=0)continue;
+     const angle=picture.rotation*Math.PI/180;
+     const rotatedW=Math.abs(w*Math.cos(angle))+Math.abs(h*Math.sin(angle));
+     const rotatedH=Math.abs(w*Math.sin(angle))+Math.abs(h*Math.cos(angle));
+     const canvas=document.createElement('canvas');
+     canvas.width=Math.max(1,Math.round(rotatedW));canvas.height=Math.max(1,Math.round(rotatedH));
+     const ctx=canvas.getContext('2d')!;
+     ctx.translate(canvas.width/2,canvas.height/2);
+     ctx.rotate(angle);
+     ctx.drawImage(im,left,top,w,h,-w/2,-h/2,w,h);
+     blob=await new Promise<Blob>((ok,fail)=>canvas.toBlob(v=>v?ok(v):fail(Error('Image illisible.')),'image/jpeg',.9));
+    }finally{im.close();}
+    // Never assign a scanned/ambiguous caption just because it is nearby.
+    const match=associations[pIndex]||{name:'',certain:false};
     if(picture.el.parentElement?.localName==='grpSp')match.certain=false;
     await emit({blob,...match,page:i+1});
    }
-   // Some exported PPTX place an embedded portrait in an unsupported/flattened
-   // shape. Recover the slide's remaining portrait-like media for manual review,
-   // without guessing the identity or overriding a previously attached portrait.
-   const remaining=relationships.filter(r=>/\/image$/.test(r.getAttribute('Type')||''));
+   // Media that is not a visible picture object can still be a portrait,
+   // but without spatial evidence it must remain in the review queue.
+   const remaining=relationships.filter(r=>/\\/image$/.test(r.getAttribute('Type')||''));
    for(const relation of remaining){
     const target=relation.getAttribute('Target');
     if(!target)continue;
