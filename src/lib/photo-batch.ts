@@ -1,4 +1,4 @@
-import {matchPhotoName,type PhotoAgent} from './photo-match';
+import {matchPhotoName,type PhotoAgent} from './photo-match.ts';
 
 export type PhotoBatchEntry={
  path:string;
