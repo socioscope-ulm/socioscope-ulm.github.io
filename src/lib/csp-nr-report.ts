@@ -21,6 +21,10 @@ const hasGF=(x:unknown):x is number=>typeof x==='number'&&Number.isInteger(x)&&x
 const normalized=(s:string)=>s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().replace(/\s+/g,' ').trim();
 const agencyOf=(e:NRReportEvent)=>String(e.recordedBefore?.agency||e.recordedAfter?.agency||e.agency||'').trim()||'Agence non renseignée';
 
+/** Repère les NR déjà attribués qui ne peuvent pas être ventilés par agence. */
+export const isNRWithoutAgency=(row:Pick<NRReportRow,'agency'|'nr'>):boolean=>
+ row.nr!==null&&row.nr>0&&['','AGENCE NON RENSEIGNEE','NON RENSEIGNEE','NON RENSEIGNE','AGENCE INCONNUE','INCONNUE','INCONNU','SANS AGENCE'].includes(normalized(row.agency||''));
+
 /** Les pièces ODJ/RD reconnues ne sont jamais réattribuées. */
 export function calculateNRReport(documents:NRReportDocument[],year:number):{year:number;rows:NRReportRow[];totalCsp:number;totalManual:number;total:number;toVerify:number;agents:number}{
  const rows:NRReportRow[]=[];
