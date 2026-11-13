@@ -80,6 +80,28 @@ export default function PhotoImport(){const [data,setData]=useState<any>(null),[
   }catch(e){setError((e as Error).message+(assigned?' '+assigned+' photo(s) déjà enregistrée(s).':''));}
   finally{await reload().catch(e=>setError(e.message));setBusy('');}
  };
+ const linkReviewedPhoto=async(item:LocalPhotoReview,agent:string,replace:boolean)=>{
+  let stagedId='',linked=false;
+  try{
+   const record=await uploadPhoto({blob:item.blob,name:item.photo.name,certain:false,page:item.photo.page},item.source,agent);
+   stagedId=record.id;
+   if(record.agent_id!==agent){
+    // A concurrent/existing assignment is not replaced unless it was explicitly confirmed.
+    await request('/api/photos',{method:'PATCH',headers:{'Content-Type':'application/json'},
+     body:JSON.stringify({id:stagedId,agent,replace})});
+   }
+   linked=true;
+   setReview(current=>current.filter(entry=>entry.id!==item.id));
+   await reload().catch(e=>setError('Photo rattachée, mais actualisation de la liste indisponible : '+e.message));
+  }catch(e){
+   if(stagedId&&!linked){
+    // Do not leave a pending database photo if the attachment was rejected.
+    try{await request('/api/photos',{method:'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:stagedId})});}
+    catch{setError('Vérifier la photo temporaire après cet échec de rattachement.');}
+   }
+   throw e;
+  }
+ };
  const read=async(file?:File)=>{if(!file)return;setBusy('Préparation…');setError('');setNotice('');setScans([]);
   let assigned=0,already=0,ignored=0;
   try{
@@ -106,5 +128,5 @@ export default function PhotoImport(){const [data,setData]=useState<any>(null),[
   }catch(e){setError((e as Error).message+(assigned?' '+assigned+' photo(s) enregistrée(s) avant cette erreur.':''));}
   finally{await reload().catch(e=>setError(e.message));setBusy('');}
  };
- return <details className="document-folder" onToggle={e=>setOpened(e.currentTarget.open)}><summary><ChevronRight size={16} className="folder-chevron"/><ImagePlus size={20}/><strong>Photos des agents · trombinoscopes</strong><span className="badge">PDF · PowerPoint</span></summary><div className="document-folder-content"><section className="panel"><h2>Importer un trombinoscope</h2><p>PDF ou PPTX · 40 Mo maximum. Seules les photos avec nom complet identifié de façon unique sont enregistrées directement sur la fiche correspondante. Images non reconnues et doublons : ignorés sans création de fiche. Les photos déjà rattachées sont conservées.</p><label className="btn file-input">Importer une archive de portraits vérifiés (.zip)<input type="file" accept=".zip,application/zip" disabled={!!busy||!data} onChange={e=>{void readArchive(e.target.files?.[0]);e.target.value='';}}/></label><p className="filter-note">Archive préparée à partir du PDF : les photos originales sont rattachées directement aux agents identifiés de façon unique, sans recadrage ni remplacement automatique des photos existantes.</p><label className="btn primary file-input">Choisir un trombinoscope<input type="file" accept=".pdf,.pptx,.ppt" disabled={!!busy||!data} onChange={e=>{void read(e.target.files?.[0]);e.target.value='';}}/></label><p className="filter-note">Ancien format PPT : enregistrer en PPTX ou PDF. Les pages scannées ou les identités ambiguës ne sont pas enregistrées.</p>{busy&&<p role="status">{busy}</p>}{notice&&<p role="status">{notice}</p>}{error&&<p className="notice" role="alert">{error}</p>}{data&&<p>{data.photos.filter((p:any)=>p.agent_id).length} photo(s) attribuée(s)</p>}</section></div></details>;
+ return <details className="document-folder" onToggle={e=>setOpened(e.currentTarget.open)}><summary><ChevronRight size={16} className="folder-chevron"/><ImagePlus size={20}/><strong>Photos des agents · trombinoscopes</strong><span className="badge">PDF · PowerPoint</span></summary><div className="document-folder-content"><section className="panel"><h2>Importer un trombinoscope</h2><p>PDF ou PPTX · 40 Mo maximum. Seules les photos avec nom complet identifié de façon unique sont enregistrées directement sur la fiche correspondante. Images non reconnues et doublons : ignorés sans création de fiche. Les photos déjà rattachées sont conservées.</p><label className="btn file-input">Consulter les photos non attribuées (.zip)<input type="file" accept=".zip,application/zip" disabled={!!busy||!data} onChange={e=>{void readArchive(e.target.files?.[0],'review');e.target.value='';}}/></label><p className="filter-note">Sélectionner à nouveau l’archive déjà utilisée : les portraits ignorés s’affichent pour contrôle, sans nouvel import et sans enregistrer de photos en attente.</p><label className="btn file-input">Importer une archive de portraits vérifiés (.zip)<input type="file" accept=".zip,application/zip" disabled={!!busy||!data} onChange={e=>{void readArchive(e.target.files?.[0]);e.target.value='';}}/></label><p className="filter-note">Archive préparée à partir du PDF : les photos originales sont rattachées directement aux agents identifiés de façon unique, sans recadrage ni remplacement automatique des photos existantes.</p><label className="btn primary file-input">Choisir un trombinoscope<input type="file" accept=".pdf,.pptx,.ppt" disabled={!!busy||!data} onChange={e=>{void read(e.target.files?.[0]);e.target.value='';}}/></label><p className="filter-note">Ancien format PPT : enregistrer en PPTX ou PDF. Les pages scannées ou les identités ambiguës ne sont pas enregistrées.</p>{busy&&<p role="status">{busy}</p>}{notice&&<p role="status">{notice}</p>}{error&&<p className="notice" role="alert">{error}</p>}{data&&<p>{data.photos.filter((p:any)=>p.agent_id).length} photo(s) attribuée(s)</p>}</section>{review.length>0&&<section className="panel"><h3>Photos non attribuées à vérifier ({review.length})</h3><p>Ces images restent uniquement dans cette session de consultation. Pour les revoir après avoir quitté la page, sélectionner à nouveau l’archive ZIP. Aucune fiche ni photo en attente n’est créée automatiquement.</p>{review.map(item=><UnassignedPhotoReview key={item.id} item={item} agents={data?.agents||[]} occupied={new Set<string>((data?.photos||[]).filter((p:any)=>p.agent_id).map((p:any)=>String(p.agent_id)))} onLink={(agent,replace)=>linkReviewedPhoto(item,agent,replace)} onIgnore={()=>setReview(current=>current.filter(entry=>entry.id!==item.id))}/>)}</section>}</div></details>;
 }
