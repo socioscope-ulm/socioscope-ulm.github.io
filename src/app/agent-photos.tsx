@@ -2,6 +2,7 @@ import {useEffect,useRef,useState} from 'react';
 import {UserRound,ChevronRight,ImagePlus} from 'lucide-react';
 import {compressPhoto,extractPortraits,type ExtractedPhoto} from '../lib/photo-extract';
 import {photoNameKey,matchPhotoName,type PhotoAgent} from '../lib/photo-match';
+import {planPhotoBatch} from '../lib/photo-batch';
 async function request(path:string,init?:RequestInit){const r=await fetch(path,init);if(!r.ok){const b=await r.json().catch(()=>({}));throw Object.assign(Error(b.error||'Opération impossible.'),{status:r.status});}return r;}
 function PhotoImage({agent,id,revision=0}:{agent?:string;id?:string;revision?:number}){const [url,setUrl]=useState('');useEffect(()=>{let active=true,object='';setUrl('');request('/api/photos/image?'+(agent?'agent='+encodeURIComponent(agent):'id='+id)).then(r=>r.blob()).then(b=>{if(active){object=URL.createObjectURL(b);setUrl(object);}}).catch(()=>{});return()=>{active=false;if(object)URL.revokeObjectURL(object);};},[agent,id,revision]);return url?<img src={url} alt="Photo de l’agent"/>:<UserRound aria-label="Photo non renseignée" size={42}/>;}
 async function uploadPhoto(photo:ExtractedPhoto,source:string,agent=''){const form=new FormData();form.set('photo',photo.blob,'portrait.jpg');form.set('name',photo.name);form.set('certain',String(photo.certain));form.set('source',source);form.set('page',String(photo.page));if(agent)form.set('agent',agent);return (await request('/api/photos',{method:'POST',body:form})).json();}
@@ -22,6 +23,47 @@ function ScannedPage({blob,page,onCrop}:{blob:Blob;page:number;onCrop:(photo:Ext
  return <section className="panel"><h3>Page {page} · sélectionner une photo</h3><p>Tracer un rectangle autour de la photo, puis l’ajouter. Répéter pour chaque agent de cette page.</p><div className="photo-crop"><canvas ref={canvas} onPointerDown={e=>{e.currentTarget.setPointerCapture(e.pointerId);start.current=point(e);setSelection(null);}} onPointerUp={e=>{if(!start.current)return;const end=point(e),s=start.current;setSelection({x:Math.min(s.x,end.x),y:Math.min(s.y,end.y),w:Math.abs(end.x-s.x),h:Math.abs(end.y-s.y)});start.current=null;}}/>{selection&&<div className="crop-outline" style={{left:selection.x/canvas.current!.width*100+'%',top:selection.y/canvas.current!.height*100+'%',width:selection.w/canvas.current!.width*100+'%',height:selection.h/canvas.current!.height*100+'%'}}/>}</div>{selection&&<><label>Nom associé<input value={name} onChange={e=>setName(e.target.value)}/></label><button className="btn" disabled={busy||selection.w<10||selection.h<10} onClick={()=>void ocr()}>Lire le nom sous la photo</button><button className="btn primary" disabled={busy||selection.w<10||selection.h<10} onClick={()=>void save()}>Ajouter la photo à rattacher</button></>}{error&&<p role="alert">{error}</p>}</section>;
 }
 export default function PhotoImport(){const [data,setData]=useState<any>(null),[busy,setBusy]=useState(''),[error,setError]=useState(''),[notice,setNotice]=useState(''),[scans,setScans]=useState<{blob:Blob;page:number;source:string}[]>([]),[opened,setOpened]=useState(false);const reload=async()=>{setData(await (await request('/api/photos')).json());window.dispatchEvent(new Event('socioscope-photos-changed'));};useEffect(()=>{if(opened)reload().catch(e=>setError(e.message));},[opened]);
+ const readArchive=async(file?:File)=>{if(!file)return;setBusy('Vérification des correspondances…');setError('');setNotice('');
+  let assigned=0,processed=0;
+  try{
+   if(file.size>40*1024*1024)throw Error('Archive limitée à 40 Mo.');
+   const {default:JSZip}=await import('jszip');
+   const archive=await JSZip.loadAsync(await file.arrayBuffer(),{checkCRC32:true});
+   const manifestFile=archive.file('manifest.json');
+   if(!manifestFile)throw Error('Archive non reconnue : manifest.json absent.');
+   const manifest=JSON.parse(await manifestFile.async('string'));
+   const existing=await (await request('/api/photos')).json();
+   const occupied=new Set<string>((existing.photos||[]).filter((p:any)=>p.agent_id).map((p:any)=>String(p.agent_id)));
+   const plan=planPhotoBatch(manifest,existing.agents||[],occupied);
+   const verify=async(bytes:Uint8Array,expected:string)=>{
+    const hash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes))).map(b=>b.toString(16).padStart(2,'0')).join('');
+    if(hash.toLowerCase()!==expected.toLowerCase())throw Error('Empreinte photographique incorrecte. Import annulé.');
+   };
+   // Validate every relevant file before writing the first photograph.
+   const prepared:{photo:ExtractedPhoto;agent:string}[]=[];
+   for(const item of plan.uploads){
+    const entry=archive.file(item.photo.path);
+    if(!entry)throw Error('Image manquante dans l’archive.');
+    const bytes=await entry.async('uint8array');
+    if(bytes.length<4||bytes.length>200000||bytes[0]!==255||bytes[1]!==216||bytes[2]!==255)
+     throw Error('Photo JPEG invalide.');
+    await verify(bytes,item.photo.sha256);
+    prepared.push({agent:item.agent.id,photo:{name:item.photo.name,page:item.photo.page,certain:true,blob:new Blob([bytes],{type:'image/jpeg'})}});
+   }
+   for(const item of prepared){
+    setBusy('Attribution des portraits : '+(++processed)+' / '+prepared.length);
+    const saved=await uploadPhoto(item.photo,manifest.source,item.agent);
+    if(saved.agent_id===item.agent){assigned++;occupied.add(item.agent);}
+    else{
+     // Another session attached a photo; never keep a pending duplicate.
+     await request('/api/photos',{method:'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:saved.id})});
+     plan.existing++;
+    }
+   }
+   setNotice(assigned+' photo(s) attribuée(s) aux fiches individuelles ; '+plan.existing+' déjà présente(s) conservée(s), '+plan.missing+' agent(s) absent(s) du catalogue, '+plan.ambiguous+' homonyme(s), '+plan.duplicate+' doublon(s). Aucun portrait en attente créé.');
+  }catch(e){setError((e as Error).message+(assigned?' '+assigned+' photo(s) déjà enregistrée(s).':''));}
+  finally{await reload().catch(e=>setError(e.message));setBusy('');}
+ };
  const read=async(file?:File)=>{if(!file)return;setBusy('Préparation…');setError('');setNotice('');setScans([]);
   let assigned=0,already=0,ignored=0;
   try{
@@ -48,5 +90,5 @@ export default function PhotoImport(){const [data,setData]=useState<any>(null),[
   }catch(e){setError((e as Error).message+(assigned?' '+assigned+' photo(s) enregistrée(s) avant cette erreur.':''));}
   finally{await reload().catch(e=>setError(e.message));setBusy('');}
  };
- return <details className="document-folder" onToggle={e=>setOpened(e.currentTarget.open)}><summary><ChevronRight size={16} className="folder-chevron"/><ImagePlus size={20}/><strong>Photos des agents · trombinoscopes</strong><span className="badge">PDF · PowerPoint</span></summary><div className="document-folder-content"><section className="panel"><h2>Importer un trombinoscope</h2><p>PDF ou PPTX · 40 Mo maximum. Seules les photos avec nom complet identifié de façon unique sont enregistrées directement sur la fiche correspondante. Images non reconnues et doublons : ignorés sans création de fiche. Les photos déjà rattachées sont conservées.</p><label className="btn primary file-input">Choisir un trombinoscope<input type="file" accept=".pdf,.pptx,.ppt" disabled={!!busy||!data} onChange={e=>{void read(e.target.files?.[0]);e.target.value='';}}/></label><p className="filter-note">Ancien format PPT : enregistrer en PPTX ou PDF. Les pages scannées ou les identités ambiguës ne sont pas enregistrées.</p>{busy&&<p role="status">{busy}</p>}{notice&&<p role="status">{notice}</p>}{error&&<p className="notice" role="alert">{error}</p>}{data&&<p>{data.photos.filter((p:any)=>p.agent_id).length} photo(s) attribuée(s)</p>}</section></div></details>;
+ return <details className="document-folder" onToggle={e=>setOpened(e.currentTarget.open)}><summary><ChevronRight size={16} className="folder-chevron"/><ImagePlus size={20}/><strong>Photos des agents · trombinoscopes</strong><span className="badge">PDF · PowerPoint</span></summary><div className="document-folder-content"><section className="panel"><h2>Importer un trombinoscope</h2><p>PDF ou PPTX · 40 Mo maximum. Seules les photos avec nom complet identifié de façon unique sont enregistrées directement sur la fiche correspondante. Images non reconnues et doublons : ignorés sans création de fiche. Les photos déjà rattachées sont conservées.</p><label className="btn file-input">Importer une archive de portraits vérifiés (.zip)<input type="file" accept=".zip,application/zip" disabled={!!busy||!data} onChange={e=>{void readArchive(e.target.files?.[0]);e.target.value='';}}/></label><p className="filter-note">Archive préparée à partir du PDF : les photos originales sont rattachées directement aux agents identifiés de façon unique, sans recadrage ni remplacement automatique des photos existantes.</p><label className="btn primary file-input">Choisir un trombinoscope<input type="file" accept=".pdf,.pptx,.ppt" disabled={!!busy||!data} onChange={e=>{void read(e.target.files?.[0]);e.target.value='';}}/></label><p className="filter-note">Ancien format PPT : enregistrer en PPTX ou PDF. Les pages scannées ou les identités ambiguës ne sont pas enregistrées.</p>{busy&&<p role="status">{busy}</p>}{notice&&<p role="status">{notice}</p>}{error&&<p className="notice" role="alert">{error}</p>}{data&&<p>{data.photos.filter((p:any)=>p.agent_id).length} photo(s) attribuée(s)</p>}</section></div></details>;
 }
