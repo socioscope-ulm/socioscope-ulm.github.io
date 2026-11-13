@@ -1,4 +1,4 @@
-import {isNRWithoutAgency,type NRReportRow} from './csp-nr-report';
+import {isNRWithoutAgency,type NRReportRow} from './csp-nr-report.ts';
 
 export type NRAllocationScope='ulm'|'outside_ulm'|'to_clarify';
 export type NRScopeOverride={
