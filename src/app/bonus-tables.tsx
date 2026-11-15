@@ -1,5 +1,5 @@
 'use client';
-import {ChevronRight,BookOpen} from 'lucide-react';
+import {ChevronRight,BookOpen,Table2} from 'lucide-react';
 import {useEffect,useMemo,useState} from 'react';
 import {readAgentWorkbook} from '../lib/agents-import';
 import {ANNUAL_BONUS_GFS,annualBonusLabel,bonusApplicable,validateAnnualBonusDetails,type AnnualBonusRow} from '../lib/bonus-tables';
@@ -84,8 +84,8 @@ export default function BonusTables({onChanged}:{onChanged?:()=>void}){
     {current.status==='review'&&<><label className="archive-toggle"><input type="checkbox" checked={checked} onChange={e=>setChecked(e.target.checked)}/>J’ai vérifié les montants, les années et les GF.</label><button className="btn primary" onClick={validate} disabled={busy||!checked}>Valider ce tableau</button></>}
    </>}
    <details className="document-folder analysis-fold analysis-method"><summary><ChevronRight size={16} className="folder-chevron" aria-hidden="true"/><BookOpen size={20} aria-hidden="true"/><strong>Lecture des montants de primes</strong></summary><div className="method-note-content"><p className="filter-note">« — » : prime non applicable ; « Non renseigné » : montant absent ; « 0 € » : zéro explicitement publié. GF 2 à 11 : RPEM. GF 12 à 19 : RPC et PVPA. La JDD n’est pas ajoutée.</p></div></details>
-   <details><summary>Ajouter un tableau (fichier ou saisie manuelle)</summary>
-    <div style={{display:'grid',gap:12,paddingTop:12}}>
+   <details className="document-folder analysis-fold"><summary><ChevronRight size={16} className="folder-chevron" aria-hidden="true"/><Table2 size={20} aria-hidden="true"/><strong>Ajouter un tableau de primes</strong></summary>
+    <div className="document-folder-content" style={{display:'grid',gap:12,paddingTop:12}}>
      <div className="analysis-options"><label>Année de versement<input type="number" min="2000" max="2100" value={paymentYear} onChange={e=>setPaymentYear(e.target.value)}/></label><label>Année des objectifs<input type="number" min="2000" max="2100" value={objectiveYear} onChange={e=>setObjectiveYear(e.target.value)}/></label><label>Document source facultatif<input type="file" accept=".csv,.xls,.xlsx,.xlsm,.pdf,.png,.jpg,.jpeg" onChange={e=>{void pick(e.target.files?.[0]||null);}}/></label></div>
      <details className="document-folder analysis-fold analysis-method"><summary><ChevronRight size={16} className="folder-chevron" aria-hidden="true"/><BookOpen size={20} aria-hidden="true"/><strong>Aide à l’import des primes</strong></summary><div className="method-note-content"><p>Excel ou CSV : les colonnes GF, RPC, RPEM et PVPA sont lues automatiquement. Pour une image ou un PDF, compléter les montants ci-dessous. Le document original est conservé en privé lorsqu’il est joint.</p></div></details>
      <div className="table-scroll"><table style={{minWidth:490,width:'100%'}}><thead><tr><th>GF</th><th>RPC (€)</th><th>RPEM (€)</th><th>PVPA (€)</th></tr></thead><tbody>{ANNUAL_BONUS_GFS.map(gf=><tr key={gf}><th>{gf}</th>{(['rpc','rpem','pvpa'] as const).map(key=><td key={key}>{bonusApplicable(gf,key)?<input type="number" step="0.01" min="0" aria-label={key.toUpperCase()+' GF '+gf} placeholder="Non renseigné" value={values[String(gf)][key]} onChange={e=>setValues(previous=>({...previous,[gf]:{...previous[gf],[key]:e.target.value}}))} style={{minWidth:105,width:'100%'}}/>:'—'}</td>)}</tr>)}</tbody></table></div>
