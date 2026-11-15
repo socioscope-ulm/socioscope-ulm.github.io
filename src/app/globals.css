@@ -255,3 +255,21 @@
 .data-table-fold>summary:focus-visible{outline:2px solid var(--ink);outline-offset:-3px}
 .data-table-fold>.table-scroll{border-top:1px solid var(--border)}
 @media print{.data-table-fold{break-inside:auto}}
+
+
+/* Notes methodologiques : texte accessible a la demande, jamais ouvert par defaut. */
+.method-note{margin:10px 0 14px;min-width:0;max-width:100%;border:1px solid #dce6dd;border-radius:9px;background:#fff;overflow:hidden}
+.method-note>summary{list-style:none;display:flex;align-items:center;gap:8px;padding:11px 14px;cursor:pointer;background:#f8faf6;color:var(--ink);font-size:12px;font-weight:700;line-height:1.35}
+.method-note>summary::-webkit-details-marker{display:none}
+.method-note>summary:hover{background:#edf4ec}
+.method-note>summary:focus-visible{outline:2px solid var(--ink);outline-offset:-3px}
+.method-note>summary::before{content:"ⓘ";display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;width:20px;height:20px;border:1px solid #cbdccc;border-radius:50%;font-size:12px;font-weight:700;color:#537e61}
+.method-note>summary::after{content:"⌄";margin-left:auto;color:var(--muted);font-size:18px;line-height:1}
+.method-note[open]>summary::after{content:"⌃"}
+.method-note-content{padding:14px 16px;border-top:1px solid var(--border);display:grid;gap:10px;min-width:0}
+.method-note-content>p{margin:0;font-size:12px;line-height:1.65}
+.method-note-content>h3{margin:8px 0 0;font-size:13px}
+.method-note-content>ul{margin:0;padding-left:22px;font-size:12px;line-height:1.65}
+.method-note-content>details{max-width:100%}
+.method-note-content .table-scroll{max-width:100%}
+@media(max-width:760px){.method-note>summary{padding:11px 12px}.method-note-content{padding:12px}}
