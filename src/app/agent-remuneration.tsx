@@ -1,5 +1,4 @@
 'use client';
-import {ChevronRight,BookOpen} from 'lucide-react';
 import {useEffect,useState} from 'react';
 import {hourlyRates} from '../lib/agent-hourly';
 
@@ -129,7 +128,7 @@ export default function AgentRemuneration({agentId,source,grid,bonus,residence,a
   <div><h3>Détail des primes</h3><div className="agent-detail-grid">{primeItems.map(([label,value])=><div key={label}><small>{label}</small><b>{money(value)}</b></div>)}</div></div>
   <div><h3>Compléments du calcul</h3><div className="agent-detail-grid"><div><small>Taux horaire hors primes</small><b>{rate(hourly?.withoutBonuses)}</b></div><div><small>Équivalent horaire avec primes</small><b>{rate(hourly?.withBonuses)}</b></div></div></div>
   <p>GF {row.gf??'non renseigné'} · NR {row.nr??'non renseigné'} · échelon estimé {row.level??'non calculable'} · ancienneté retenue : {typeof row.years==='number'?new Intl.NumberFormat('fr-FR',{maximumFractionDigits:2}).format(row.years)+' ans':'non calculable'} · majoration résidentielle : {pct((Number(row.residence)-1)*100)} %.</p>
-  <details className="document-folder analysis-fold analysis-method"><summary><ChevronRight size={16} className="folder-chevron" aria-hidden="true"/><BookOpen size={20} aria-hidden="true"/><strong>Hypothèses des primes</strong></summary><div className="method-note-content"><p className="gap-method">RPC / RPEM et PVPA selon le tableau versé en {data.bonusPaymentYear} pour les objectifs {data.bonusObjectiveYear}, selon le GF. Les primes fixes cadres engagement ({data?.engagementRate??3.5} %) et autonomie ({data?.autonomieRate??4} %) sont calculées sur le brut mensuel de base, pour 12 versements. Les remboursements de frais ne sont pas ajoutés. Les hypothèses sont des simulations et non des bulletins de paie.</p></div></details>
+  <details className="method-note"><summary>En savoir + · Hypothèses des primes</summary><div className="method-note-content"><p className="gap-method">RPC / RPEM et PVPA selon le tableau versé en {data.bonusPaymentYear} pour les objectifs {data.bonusObjectiveYear}, selon le GF. Les primes fixes cadres engagement ({data?.engagementRate??3.5} %) et autonomie ({data?.autonomieRate??4} %) sont calculées sur le brut mensuel de base, pour 12 versements. Les remboursements de frais ne sont pas ajoutés. Les hypothèses sont des simulations et non des bulletins de paie.</p></div></details>
  </section>;
 }
 
