@@ -1,5 +1,4 @@
 'use client';
-import {ChevronRight,BookOpen,Table2} from 'lucide-react';
 import {useEffect,useMemo,useState} from 'react';
 import {LineChart,Line,CartesianGrid,XAxis,YAxis,Tooltip,Legend,ResponsiveContainer} from 'recharts';
 import {bonusApplicable,type AnnualBonusRow,annualBonusLabel} from '../lib/bonus-tables';
@@ -20,8 +19,8 @@ export default function AnnualBonusesChart(){
   {error&&<p role="alert">{error}</p>}
   {!rows.length?<p>Pas encore de référence annuelle validée.</p>:<>
    <div style={{width:'100%',height:320}}><ResponsiveContainer width="100%" height="100%"><LineChart data={rows} margin={{top:16,right:24,bottom:60,left:15}}><CartesianGrid stroke="#e4e9e5" vertical={false}/><XAxis dataKey="reference" interval={0} angle={-20} height={86} textAnchor="end" tick={{fontSize:10}}/><YAxis tickFormatter={v=>v+' €'} width={85}/><Tooltip formatter={(v:any,n:any)=>[v===null?'Non renseigné':Number(v).toLocaleString('fr-FR',{style:'currency',currency:'EUR'}),n]} labelFormatter={(value)=>String(value)}/><Legend verticalAlign="top" height={30}/>{visible.map(key=><Line key={key} dataKey={key} name={key.toUpperCase()} type="linear" stroke={colors[key]} strokeWidth={2.5} dot={{r:5}} connectNulls={false}/>)}</LineChart></ResponsiveContainer></div>
-   <details className="document-folder analysis-fold analysis-table"><summary><ChevronRight size={16} className="folder-chevron" aria-hidden="true"/><Table2 size={20} aria-hidden="true"/><strong>Montants des primes par année</strong></summary><div className="table-scroll"><table><thead><tr><th>Objectifs</th><th>Versement</th><th>RPC</th><th>RPEM</th><th>PVPA</th></tr></thead><tbody>{rows.map((r,i)=><tr key={i}><td>{r.objectiveYear}</td><td>{r.paymentYear}</td>{(['rpc','rpem','pvpa'] as const).map(key=><td key={key}>{!bonusApplicable(Number(gf),key)?'—':r[key]===null?'Non renseigné':money(Math.round(r[key]!*100))}</td>)}</tr>)}</tbody></table></div></details>
-   <details className="document-folder analysis-fold analysis-method"><summary><ChevronRight size={16} className="folder-chevron" aria-hidden="true"/><BookOpen size={20} aria-hidden="true"/><strong>Lecture des primes annuelles</strong></summary><div className="method-note-content"><p className="filter-note">Les montants sont des primes moyennes annuelles par GF, pas des totaux réellement versés aux agents de l'unité. Les deux références 2025 sont distinguées par leur année d'objectifs.</p></div></details>
+   <details className="data-table-fold"><summary>Afficher les montants par année</summary><div className="table-scroll"><table><thead><tr><th>Objectifs</th><th>Versement</th><th>RPC</th><th>RPEM</th><th>PVPA</th></tr></thead><tbody>{rows.map((r,i)=><tr key={i}><td>{r.objectiveYear}</td><td>{r.paymentYear}</td>{(['rpc','rpem','pvpa'] as const).map(key=><td key={key}>{!bonusApplicable(Number(gf),key)?'—':r[key]===null?'Non renseigné':money(Math.round(r[key]!*100))}</td>)}</tr>)}</tbody></table></div></details>
+   <details className="method-note"><summary>En savoir + · Lecture des primes</summary><div className="method-note-content"><p className="filter-note">Les montants sont des primes moyennes annuelles par GF, pas des totaux réellement versés aux agents de l'unité. Les deux références 2025 sont distinguées par leur année d'objectifs.</p></div></details>
   </>}
  </section>;
 }
