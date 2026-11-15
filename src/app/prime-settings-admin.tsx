@@ -1,6 +1,6 @@
 'use client';
 import {useEffect,useState} from 'react';
-import {ChevronRight,SlidersHorizontal,BookOpen} from 'lucide-react';
+import {ChevronRight,SlidersHorizontal} from 'lucide-react';
 
 type Settings={engagementRate:number;autonomieRate:number;asctMonthly:number;afeMonthly:number;familialMonthly:number};
 const initial:Settings={engagementRate:3.5,autonomieRate:4,asctMonthly:54.67,afeMonthly:113.63,familialMonthly:116.56};
@@ -28,9 +28,9 @@ export default function PrimeSettingsAdmin({onSaved}:{onSaved?:()=>void}){
   }catch(e){setNotice('Erreur : '+(e as Error).message);}finally{setBusy(false);}
  };
  return <details className="document-folder" aria-label="Paramètres des primes">
-  <summary><ChevronRight size={16} className="folder-chevron"/><SlidersHorizontal size={20}/><strong>Paramètres des primes</strong></summary>
+  <summary><ChevronRight size={16} className="folder-chevron"/><SlidersHorizontal size={20}/><strong>Paramètres des primes</strong><span className="badge">Afficher les paramètres</span></summary>
   <div className="document-folder-content" style={{display:'grid',gap:14}}>
-  <details className="document-folder analysis-fold analysis-method"><summary><ChevronRight size={16} className="folder-chevron" aria-hidden="true"/><BookOpen size={20} aria-hidden="true"/><strong>Utilisation des paramètres</strong></summary><div className="method-note-content"><p>Modifier les valeurs par défaut sans intervention technique. Les taux d’engagement et d’autonomie servent aux calculs des cadres ; ASCT, AFE et sursalaire familial sont réservés au simulateur de paie, sans incidence sur les fiches individuelles et la masse salariale.</p></div></details>
+  <details className="method-note"><summary>En savoir + · Utilisation des paramètres</summary><div className="method-note-content"><p>Modifier les valeurs par défaut sans intervention technique. Les taux d’engagement et d’autonomie servent aux calculs des cadres ; ASCT, AFE et sursalaire familial sont réservés au simulateur de paie, sans incidence sur les fiches individuelles et la masse salariale.</p></div></details>
   <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(210px,1fr))',gap:14}}>
    {fields.map(f=><label key={f.key} style={{display:'grid',gap:6,fontWeight:600}}>{f.name}<input type="number" min={0} max={f.key.endsWith('Rate')?100:100000} step={0.01} disabled={loading||busy} value={values[f.key]} onChange={e=>setValues(v=>({...v,[f.key]:e.target.value===''?NaN:Number(e.target.value)}))}/><small style={{fontWeight:400}}>{f.unit} · 12 mois</small></label>)}
   </div>
