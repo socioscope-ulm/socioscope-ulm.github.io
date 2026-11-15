@@ -265,3 +265,12 @@
 .family-info-disclosure>summary:focus-visible{outline:2px solid var(--ink);outline-offset:3px}
 .family-info-disclosure-content{padding:12px 0 0}
 .family-info-disclosure-content>p{margin:0 0 10px;color:var(--muted);line-height:1.65}
+
+
+/* Familles métiers : une rubrique commune avec deux tableaux et leurs informations. */
+.family-distribution-subsections{display:grid;gap:14px;padding:10px 22px 22px}
+.family-distribution-subsection{min-width:0;border:1px solid var(--border);background:#fafbf8;border-radius:9px;padding:14px 16px 8px}
+.family-distribution-subsection>h3{font-size:14px;line-height:1.45;color:var(--ink);margin:0 0 9px}
+.family-distribution-subsection>.data-table-fold{margin:8px 0 10px;background:white}
+.family-distribution-subsection>.family-info-disclosure{margin:8px 0}
+@media(max-width:760px){.family-distribution-subsections{gap:10px;padding:8px 12px 14px}.family-distribution-subsection{padding:12px 11px 6px}.family-distribution-subsection>h3{font-size:13px}}
