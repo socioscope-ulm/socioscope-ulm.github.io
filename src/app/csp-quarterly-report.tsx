@@ -184,7 +184,7 @@ export default function CspQuarterlyReport({revision=0}:{revision?:number}){
   </div>
   <fieldset disabled={busy} style={{margin:'16px 0',padding:16,border:'1px solid #ddd',borderRadius:8}}>
    <legend>Options de présentation du compte rendu</legend>
-   <p className="filter-note">Toujours présentes : Nom / prénom, Agence / poste et CSP / effet. La colonne NR + apparaît automatiquement sur les mouvements concernés, sauf admission au stage et titularisation. Les quatre options ci-dessous sont décochées par défaut.</p>
+   
    <div className="analysis-options csp-column-options">{optionalMovementColumns.map(c=><label key={c.id} className="check-label">
     <input type="checkbox" checked={selectedColumns.includes(c.id)} onChange={e=>{
      const checked=e.target.checked;
@@ -196,7 +196,7 @@ export default function CspQuarterlyReport({revision=0}:{revision?:number}){
      Inclure les candidatures non retenues
     </label>
    </div>
-   <p className="filter-note">Colonnes documentaires automatiques, avant la date : <b>Motif</b> pour reclassement et mesures salariales ; <b>Observations / commentaires</b> pour admission, titularisation, mutation d’office et avancement. Les textes proviennent des ODJ, y compris lorsque les décisions sont confirmées par le RD validé ; ces PDF sont relus sans nouvelle validation. Trois colonnes restent facultatives (GF avant/après, NR avant/après, Source), ainsi que l’affichage des candidatures non retenues ; aucune n’est cochée par défaut. Les tableaux partagent les mêmes repères de colonnes sur une même page PowerPoint, même si NR + est absent en admission/titularisation.</p>
+   <details className="method-note"><summary>En savoir + · Colonnes du compte rendu</summary><div className="method-note-content"><p className="filter-note">Toujours présentes : Nom / prénom, Agence / poste et CSP / effet. La colonne NR + apparaît automatiquement sur les mouvements concernés, sauf admission au stage et titularisation. Les quatre options ci-dessous sont décochées par défaut.</p><p className="filter-note">Colonnes documentaires automatiques, avant la date : <b>Motif</b> pour reclassement et mesures salariales ; <b>Observations / commentaires</b> pour admission, titularisation, mutation d’office et avancement. Les textes proviennent des ODJ, y compris lorsque les décisions sont confirmées par le RD validé ; ces PDF sont relus sans nouvelle validation. Trois colonnes restent facultatives (GF avant/après, NR avant/après, Source), ainsi que l’affichage des candidatures non retenues ; aucune n’est cochée par défaut. Les tableaux partagent les mêmes repères de colonnes sur une même page PowerPoint, même si NR + est absent en admission/titularisation.</p></div></details>
   </fieldset>
   <section className="panel" aria-label="Contrôles documentaires du compte rendu" style={{margin:'16px 0',padding:14}}>
    <div className="panel-heading" style={{marginBottom:10}}>
@@ -276,7 +276,7 @@ export default function CspQuarterlyReport({revision=0}:{revision?:number}){
     <span className="filter-note"><FileText size={15}/> Une ligne par mouvement, tableaux éditables, sources ODJ/RD et alertes.</span>
    </div>
   </>}
-  <p className="filter-note">Périmètre : CSP cadres uniquement. Les mouvements déjà présentés lors d’une CSP antérieure ne sont pas répétés. Les décisions non validées ne créent aucun mouvement définitif. Aucun import ni mise à jour de données lors de cet export.</p>
+  <details className="method-note"><summary>En savoir + · Périmètre et exclusions</summary><div className="method-note-content"><p className="filter-note">Périmètre : CSP cadres uniquement. Les mouvements déjà présentés lors d’une CSP antérieure ne sont pas répétés. Les décisions non validées ne créent aucun mouvement définitif. Aucun import ni mise à jour de données lors de cet export.</p></div></details>
   </div>
  </details>;
 }
