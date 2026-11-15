@@ -262,3 +262,20 @@
 .analysis-fold-panel{border:0;background:transparent;overflow:visible}
 @media(max-width:760px){.analysis-method>.method-note-content{padding:12px}}
 @media print{.analysis-fold{break-inside:auto}}
+
+
+/* Les vues historiques et les sélecteurs repliables utilisent aussi les cartes communes. */
+.panel>details.profile-fold{margin:0;border:0;border-radius:0;overflow:hidden}
+.panel>details.profile-fold>summary{padding:18px 21px}
+.panel>details.profile-fold>summary strong{font-size:14px}
+.panel>details.profile-fold>p{margin:12px 21px}
+.panel>details.profile-fold>.table-scroll{border-top:1px solid var(--border)}
+.analysis-method>p{margin:12px 16px;font-size:12px;line-height:1.65}
+.analysis-table>a{display:inline-flex;margin:10px 14px}
+.family-series-picker>summary::after{content:none}
+.family-series-picker>summary{justify-content:flex-start;max-width:100%;padding:14px 16px;font-size:12px}
+.family-series-picker>summary strong{flex:1;min-width:0}
+.family-series-picker[open]>summary .folder-chevron{transform:rotate(90deg)}
+.quarterly-fold>p{padding:10px 16px}
+.quarterly-fold>div{padding:12px 16px}
+@media(max-width:760px){.panel>details.profile-fold>summary{padding:13px 15px}.panel>details.profile-fold>summary strong{font-size:12px}}
