@@ -112,7 +112,7 @@ export default function CspNRReport(){
     </div>}
     <div style={{display:'flex',gap:10,alignItems:'center',marginTop:10}}><button className="btn" disabled={page===0} onClick={()=>setPage(p=>Math.max(0,p-1))}>Précédent</button><span>Page {page+1} / {Math.max(1,Math.ceil(detailRows.length/50))}</span><button className="btn" disabled={(page+1)*50>=detailRows.length} onClick={()=>setPage(p=>p+1)}>Suivant</button></div>
    </div>}
-   <details className="method-note"><summary>En savoir + · Règles de comptabilisation</summary><div className="method-note-content"><p className="filter-note" style={{marginTop:12}}>Une décision déjà reconnue par un autre ODJ/RD n’est comptée qu’une fois. Nominations à NR constant, candidatures non retenues et mouvements non approuvés sont exclus. Les corrections manuelles sont présentées séparément.</p></div></details>
+   <p className="filter-note" style={{marginTop:12}}>Une décision déjà reconnue par un autre ODJ/RD n’est comptée qu’une fois. Nominations à NR constant, candidatures non retenues et mouvements non approuvés sont exclus. Les corrections manuelles sont présentées séparément.</p>
   </>}
   </div>
  </details>;

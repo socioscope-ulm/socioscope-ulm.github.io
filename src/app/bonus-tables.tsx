@@ -69,7 +69,7 @@ export default function BonusTables({onChanged}:{onChanged?:()=>void}){
  return <ImportSubsection title="Primes annuelles par GF : consulter, saisir et valider" badge={docs.length+' tableau(x)'} defaultOpen>
   <section className="panel" style={{display:'grid',gap:14}}>
    <h2>Référentiel unique des primes annuelles</h2>
-   <details className="method-note"><summary>En savoir + · Choix des références</summary><div className="method-note-content"><p>Une référence contient les années de versement et d’objectifs, la RPC, la RPEM et la PVPA par GF. La dernière année validée est proposée dans le simulateur, tandis que les situations individuelles et la masse salariale utilisent les primes versées l’année de la photographie, ou le tableau validé le plus proche. Le choix manuel reste disponible dans chaque outil.</p></div></details>
+   <p>Une référence contient les années de versement et d’objectifs, la RPC, la RPEM et la PVPA par GF. La dernière année validée est proposée dans le simulateur, tandis que les situations individuelles et la masse salariale utilisent les primes versées l’année de la photographie, ou le tableau validé le plus proche. Le choix manuel reste disponible dans chaque outil.</p>
    {current&&<>
     <label>Tableau enregistré
      <select value={current.id} onChange={e=>{setSelectedId(e.target.value);setChecked(false);}}>
@@ -82,11 +82,11 @@ export default function BonusTables({onChanged}:{onChanged?:()=>void}){
     {!current.payload.originalPath&&current.payload.hasOriginal&&<a className="btn" href={'/api/payroll/files/'+current.id}>Télécharger le document d’origine</a>}
     {current.status==='review'&&<><label className="archive-toggle"><input type="checkbox" checked={checked} onChange={e=>setChecked(e.target.checked)}/>J’ai vérifié les montants, les années et les GF.</label><button className="btn primary" onClick={validate} disabled={busy||!checked}>Valider ce tableau</button></>}
    </>}
-   <details className="method-note"><summary>En savoir + · Lecture des montants</summary><div className="method-note-content"><p className="filter-note">« — » : prime non applicable ; « Non renseigné » : montant absent ; « 0 € » : zéro explicitement publié. GF 2 à 11 : RPEM. GF 12 à 19 : RPC et PVPA. La JDD n’est pas ajoutée.</p></div></details>
+   <p className="filter-note">« — » : prime non applicable ; « Non renseigné » : montant absent ; « 0 € » : zéro explicitement publié. GF 2 à 11 : RPEM. GF 12 à 19 : RPC et PVPA. La JDD n’est pas ajoutée.</p>
    <details><summary>Ajouter un tableau (fichier ou saisie manuelle)</summary>
     <div style={{display:'grid',gap:12,paddingTop:12}}>
      <div className="analysis-options"><label>Année de versement<input type="number" min="2000" max="2100" value={paymentYear} onChange={e=>setPaymentYear(e.target.value)}/></label><label>Année des objectifs<input type="number" min="2000" max="2100" value={objectiveYear} onChange={e=>setObjectiveYear(e.target.value)}/></label><label>Document source facultatif<input type="file" accept=".csv,.xls,.xlsx,.xlsm,.pdf,.png,.jpg,.jpeg" onChange={e=>{void pick(e.target.files?.[0]||null);}}/></label></div>
-     <details className="method-note"><summary>En savoir + · Aide à l’import</summary><div className="method-note-content"><p>Excel ou CSV : les colonnes GF, RPC, RPEM et PVPA sont lues automatiquement. Pour une image ou un PDF, compléter les montants ci-dessous. Le document original est conservé en privé lorsqu’il est joint.</p></div></details>
+     <p>Excel ou CSV : les colonnes GF, RPC, RPEM et PVPA sont lues automatiquement. Pour une image ou un PDF, compléter les montants ci-dessous. Le document original est conservé en privé lorsqu’il est joint.</p>
      <div className="table-scroll"><table style={{minWidth:490,width:'100%'}}><thead><tr><th>GF</th><th>RPC (€)</th><th>RPEM (€)</th><th>PVPA (€)</th></tr></thead><tbody>{ANNUAL_BONUS_GFS.map(gf=><tr key={gf}><th>{gf}</th>{(['rpc','rpem','pvpa'] as const).map(key=><td key={key}>{bonusApplicable(gf,key)?<input type="number" step="0.01" min="0" aria-label={key.toUpperCase()+' GF '+gf} placeholder="Non renseigné" value={values[String(gf)][key]} onChange={e=>setValues(previous=>({...previous,[gf]:{...previous[gf],[key]:e.target.value}}))} style={{minWidth:105,width:'100%'}}/>:'—'}</td>)}</tr>)}</tbody></table></div>
      <button className="btn primary" disabled={busy} onClick={save}>{busy?'Enregistrement…':'Enregistrer pour vérification'}</button>
     </div>
