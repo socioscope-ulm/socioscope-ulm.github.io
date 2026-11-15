@@ -245,37 +245,31 @@
 .trombi-subfolder .trombi-admin-photos{border-top:0;padding-top:0}
 @media(max-width:760px){.trombi-subfolder>.document-folder-content{padding:10px}.trombi-subfolder>summary{gap:7px;padding:12px 10px;flex-wrap:wrap}}
 
-
-/* Encarts repliables : style commun aux dossiers de Bilans & imports. */
-.analysis-fold{max-width:100%;min-width:0}
-.analysis-fold>summary{font-size:12px;font-weight:700;line-height:1.45}
-.analysis-fold>summary strong{font-family:Manrope,'DM Sans',Arial,sans-serif;font-size:12px;font-weight:700}
-.analysis-fold>summary:focus-visible{outline:2px solid var(--ink);outline-offset:-3px}
-.analysis-fold[open]>summary{background:#f7faf5}
-.analysis-fold>.table-scroll{border-top:1px solid var(--border)}
-.analysis-method>.method-note-content{padding:12px 16px;border-top:1px solid var(--border);display:grid;gap:10px;min-width:0}
-.analysis-method>.method-note-content>p{margin:0;font-size:12px;line-height:1.65}
-.analysis-method>.method-note-content>h3{margin:8px 0 0;font-size:13px}
-.analysis-method>.method-note-content>ul{margin:0;padding-left:22px;font-size:12px;line-height:1.65}
-.analysis-method>.method-note-content>details{max-width:100%}
-.analysis-method>.method-note-content .table-scroll{max-width:100%}
-.analysis-fold-panel{border:0;background:transparent;overflow:visible}
-@media(max-width:760px){.analysis-method>.method-note-content{padding:12px}}
-@media print{.analysis-fold{break-inside:auto}}
+/* Tableaux d'analyse : priorité aux graphiques et aux indicateurs, détail sur demande. */
+.data-table-fold{margin:12px 0 16px;max-width:100%;border:1px solid var(--border);border-radius:9px;background:#fff;overflow:hidden}
+.data-table-fold>summary{list-style:none;display:flex;align-items:center;justify-content:space-between;gap:12px;cursor:pointer;padding:13px 16px;font-size:12px;font-weight:700;color:var(--ink);background:#f8faf6}
+.data-table-fold>summary::-webkit-details-marker{display:none}
+.data-table-fold>summary::after{content:"⌄";font-size:19px;line-height:1;color:var(--muted)}
+.data-table-fold[open]>summary::after{content:"⌃"}
+.data-table-fold>summary:hover{background:#edf3ec}
+.data-table-fold>summary:focus-visible{outline:2px solid var(--ink);outline-offset:-3px}
+.data-table-fold>.table-scroll{border-top:1px solid var(--border)}
+@media print{.data-table-fold{break-inside:auto}}
 
 
-/* Les vues historiques et les sélecteurs repliables utilisent aussi les cartes communes. */
-.panel>details.profile-fold{margin:0;border:0;border-radius:0;overflow:hidden}
-.panel>details.profile-fold>summary{padding:18px 21px}
-.panel>details.profile-fold>summary strong{font-size:14px}
-.panel>details.profile-fold>p{margin:12px 21px}
-.panel>details.profile-fold>.table-scroll{border-top:1px solid var(--border)}
-.analysis-method>p{margin:12px 16px;font-size:12px;line-height:1.65}
-.analysis-table>a{display:inline-flex;margin:10px 14px}
-.family-series-picker>summary::after{content:none}
-.family-series-picker>summary{justify-content:flex-start;max-width:100%;padding:14px 16px;font-size:12px}
-.family-series-picker>summary strong{flex:1;min-width:0}
-.family-series-picker[open]>summary .folder-chevron{transform:rotate(90deg)}
-.quarterly-fold>p{padding:10px 16px}
-.quarterly-fold>div{padding:12px 16px}
-@media(max-width:760px){.panel>details.profile-fold>summary{padding:13px 15px}.panel>details.profile-fold>summary strong{font-size:12px}}
+/* Notes methodologiques : texte accessible a la demande, jamais ouvert par defaut. */
+.method-note{margin:10px 0 14px;min-width:0;max-width:100%;border:1px solid #dce6dd;border-radius:9px;background:#fff;overflow:hidden}
+.method-note>summary{list-style:none;display:flex;align-items:center;gap:8px;padding:11px 14px;cursor:pointer;background:#f8faf6;color:var(--ink);font-size:12px;font-weight:700;line-height:1.35}
+.method-note>summary::-webkit-details-marker{display:none}
+.method-note>summary:hover{background:#edf4ec}
+.method-note>summary:focus-visible{outline:2px solid var(--ink);outline-offset:-3px}
+.method-note>summary::before{content:"ⓘ";display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;width:20px;height:20px;border:1px solid #cbdccc;border-radius:50%;font-size:12px;font-weight:700;color:#537e61}
+.method-note>summary::after{content:"⌄";margin-left:auto;color:var(--muted);font-size:18px;line-height:1}
+.method-note[open]>summary::after{content:"⌃"}
+.method-note-content{padding:14px 16px;border-top:1px solid var(--border);display:grid;gap:10px;min-width:0}
+.method-note-content>p{margin:0;font-size:12px;line-height:1.65}
+.method-note-content>h3{margin:8px 0 0;font-size:13px}
+.method-note-content>ul{margin:0;padding-left:22px;font-size:12px;line-height:1.65}
+.method-note-content>details{max-width:100%}
+.method-note-content .table-scroll{max-width:100%}
+@media(max-width:760px){.method-note>summary{padding:11px 12px}.method-note-content{padding:12px}}
