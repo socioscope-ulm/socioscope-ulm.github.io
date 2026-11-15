@@ -15,9 +15,11 @@ permissions:
   contents: read
   pages: write
   id-token: write
+# Ne pas interrompre un déploiement GitHub Pages déjà démarré.
+# Les mises à jour en attente sont regroupées pour éviter une file de publications.
 concurrency:
   group: socioscope-pages
-  cancel-in-progress: true
+  cancel-in-progress: false
 jobs:
   deploy:
     runs-on: ubuntu-latest
