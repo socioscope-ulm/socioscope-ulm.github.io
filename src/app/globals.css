@@ -274,3 +274,9 @@
 .family-distribution-subsection>.data-table-fold{margin:8px 0 10px;background:white}
 .family-distribution-subsection>.family-info-disclosure{margin:8px 0}
 @media(max-width:760px){.family-distribution-subsections{gap:10px;padding:8px 12px 14px}.family-distribution-subsection{padding:12px 11px 6px}.family-distribution-subsection>h3{font-size:13px}}
+
+
+/* Analyses GF / NR : titres et exports des sous-rubriques de tableaux. */
+.family-distribution-subsection>.analysis-subsection-heading{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin:0 0 9px}
+.family-distribution-subsection>.analysis-subsection-heading h3{font-size:14px;line-height:1.45;color:var(--ink);margin:0}
+@media(max-width:760px){.family-distribution-subsection>.analysis-subsection-heading h3{font-size:13px}}
