@@ -244,3 +244,14 @@
 .trombi-subfolder>.document-folder-content{padding:15px}
 .trombi-subfolder .trombi-admin-photos{border-top:0;padding-top:0}
 @media(max-width:760px){.trombi-subfolder>.document-folder-content{padding:10px}.trombi-subfolder>summary{gap:7px;padding:12px 10px;flex-wrap:wrap}}
+
+/* Tableaux d'analyse : priorité aux graphiques et aux indicateurs, détail sur demande. */
+.data-table-fold{margin:12px 0 16px;max-width:100%;border:1px solid var(--border);border-radius:9px;background:#fff;overflow:hidden}
+.data-table-fold>summary{list-style:none;display:flex;align-items:center;justify-content:space-between;gap:12px;cursor:pointer;padding:13px 16px;font-size:12px;font-weight:700;color:var(--ink);background:#f8faf6}
+.data-table-fold>summary::-webkit-details-marker{display:none}
+.data-table-fold>summary::after{content:"⌄";font-size:19px;line-height:1;color:var(--muted)}
+.data-table-fold[open]>summary::after{content:"⌃"}
+.data-table-fold>summary:hover{background:#edf3ec}
+.data-table-fold>summary:focus-visible{outline:2px solid var(--ink);outline-offset:-3px}
+.data-table-fold>.table-scroll{border-top:1px solid var(--border)}
+@media print{.data-table-fold{break-inside:auto}}
