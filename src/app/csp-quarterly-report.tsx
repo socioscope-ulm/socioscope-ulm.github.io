@@ -1,7 +1,7 @@
 'use client';
 import {useEffect,useMemo,useRef,useState} from 'react';
 import {defaultMovementColumns,getMovementColumns,optionalMovementColumns,type OptionalMovementColumn} from '../lib/csp-quarterly-columns';
-import {ChevronRight,Download,RefreshCw,FileText,BookOpen} from 'lucide-react';
+import {ChevronRight,Download,RefreshCw,FileText} from 'lucide-react';
 import {calculateQuarterlyReport,isCadresDocument,kindLabels} from '../lib/csp-quarterly-report';
 import {enrichQuarterlyAnnotations,recoverQuarterlyAnnotationsFromPages} from '../lib/csp-quarterly-annotations';
 import {annotationForCspKind} from '../lib/csp-annotation-rules.ts';
@@ -150,11 +150,11 @@ export default function CspQuarterlyReport({revision=0}:{revision?:number}){
   finally{setBusy(false);}
  }
  return <details className="document-folder" aria-label="Comptes rendus trimestriels CSP cadres">
-  <summary><ChevronRight size={16} className="folder-chevron"/><FileText size={20}/><strong>Comptes rendus trimestriels CSP cadres</strong></summary>
+  <summary><ChevronRight size={16} className="folder-chevron"/><FileText size={20}/><strong>Comptes rendus trimestriels CSP cadres</strong><span className="badge">Afficher le générateur</span></summary>
   <div className="document-folder-content">
    <p style={{marginBottom:14}}>Générer un PowerPoint de la CSP cadres (Métiers de la PI et de la DOAAT), avec une ligne par mouvement et de vrais tableaux modifiables. Aucune incidence sur les validations CSP.</p>
    <details className="document-folder" style={{margin:'0 0 14px'}}>
-    <summary><ChevronRight size={16} className="folder-chevron"/><FileText size={18}/><strong>Règles de création du compte rendu</strong></summary>
+    <summary><ChevronRight size={16} className="folder-chevron"/><FileText size={18}/><strong>Règles de création du compte rendu</strong><span className="badge">En savoir plus</span></summary>
     <div className="document-folder-content">
      <ul style={{paddingLeft:20,display:'grid',gap:8}}>
       <li><b>Périmètre :</b> seules les séances CSP cadres du trimestre choisi apparaissent ; la date d’effet est affichée séparément, même si elle appartient à un autre trimestre.</li>
@@ -196,7 +196,7 @@ export default function CspQuarterlyReport({revision=0}:{revision?:number}){
      Inclure les candidatures non retenues
     </label>
    </div>
-   <details className="document-folder analysis-fold analysis-method"><summary><ChevronRight size={16} className="folder-chevron" aria-hidden="true"/><BookOpen size={20} aria-hidden="true"/><strong>Colonnes du compte rendu</strong></summary><div className="method-note-content"><p className="filter-note">Toujours présentes : Nom / prénom, Agence / poste et CSP / effet. La colonne NR + apparaît automatiquement sur les mouvements concernés, sauf admission au stage et titularisation. Les quatre options ci-dessous sont décochées par défaut.</p><p className="filter-note">Colonnes documentaires automatiques, avant la date : <b>Motif</b> pour reclassement et mesures salariales ; <b>Observations / commentaires</b> pour admission, titularisation, mutation d’office et avancement. Les textes proviennent des ODJ, y compris lorsque les décisions sont confirmées par le RD validé ; ces PDF sont relus sans nouvelle validation. Trois colonnes restent facultatives (GF avant/après, NR avant/après, Source), ainsi que l’affichage des candidatures non retenues ; aucune n’est cochée par défaut. Les tableaux partagent les mêmes repères de colonnes sur une même page PowerPoint, même si NR + est absent en admission/titularisation.</p></div></details>
+   <details className="method-note"><summary>En savoir + · Colonnes du compte rendu</summary><div className="method-note-content"><p className="filter-note">Toujours présentes : Nom / prénom, Agence / poste et CSP / effet. La colonne NR + apparaît automatiquement sur les mouvements concernés, sauf admission au stage et titularisation. Les quatre options ci-dessous sont décochées par défaut.</p><p className="filter-note">Colonnes documentaires automatiques, avant la date : <b>Motif</b> pour reclassement et mesures salariales ; <b>Observations / commentaires</b> pour admission, titularisation, mutation d’office et avancement. Les textes proviennent des ODJ, y compris lorsque les décisions sont confirmées par le RD validé ; ces PDF sont relus sans nouvelle validation. Trois colonnes restent facultatives (GF avant/après, NR avant/après, Source), ainsi que l’affichage des candidatures non retenues ; aucune n’est cochée par défaut. Les tableaux partagent les mêmes repères de colonnes sur une même page PowerPoint, même si NR + est absent en admission/titularisation.</p></div></details>
   </fieldset>
   <section className="panel" aria-label="Contrôles documentaires du compte rendu" style={{margin:'16px 0',padding:14}}>
    <div className="panel-heading" style={{marginBottom:10}}>
@@ -250,14 +250,14 @@ export default function CspQuarterlyReport({revision=0}:{revision?:number}){
    </div>
    {report.alerts.length>0&&<div className="notice"><b>Points de vigilance</b>
     <ul>{report.alerts.map((msg,i)=><li key={i}>{msg}</li>)}</ul></div>}
-   {!!report.rows.filter(r=>r.resolvedNotes).length&&<details className="document-folder analysis-fold quarterly-fold">
-    <summary><ChevronRight size={16} className="folder-chevron" aria-hidden="true"/><FileText size={20} aria-hidden="true"/><strong>Anciennes notes résolues ({report.rows.filter(r=>r.resolvedNotes).length} mouvement(s))</strong></summary>
+   {!!report.rows.filter(r=>r.resolvedNotes).length&&<details>
+    <summary>Anciennes notes résolues ({report.rows.filter(r=>r.resolvedNotes).length} mouvement(s))</summary>
     <p className="filter-note">Ces anciennes demandes de renseignement ne sont plus comptées comme motifs de contrôle. Un mouvement peut conserver une autre réserve, détaillée ci-dessus.</p>
     {report.rows.filter(r=>r.resolvedNotes).map((r,i)=><p key={r.id+i} style={{whiteSpace:'pre-line'}}><b>{r.name} · {kindLabels[r.kind]} · {r.meeting}</b><br/>{r.resolvedNotes}</p>)}
    </details>}
    {!!grouped.length&&<div className="table-scroll"><table><thead><tr><th>Rubrique</th><th>Mouvements</th></tr></thead>
     <tbody>{grouped.map(x=><tr key={x.kind}><td>{x.label}</td><td>{x.count}</td></tr>)}</tbody></table></div>}
-   {!!report.rows.length&&<details className="document-folder analysis-fold quarterly-fold"><summary><ChevronRight size={16} className="folder-chevron" aria-hidden="true"/><FileText size={20} aria-hidden="true"/><strong>Aperçu des mouvements ({report.rows.length})</strong></summary>
+   {!!report.rows.length&&<details><summary>Aperçu des mouvements ({report.rows.length})</summary>
     {grouped.map(group=>{
      const cols=getMovementColumns(selectedColumns,group.kind);
      const movements=report.rows.filter(r=>r.kind===group.kind);
@@ -276,7 +276,7 @@ export default function CspQuarterlyReport({revision=0}:{revision?:number}){
     <span className="filter-note"><FileText size={15}/> Une ligne par mouvement, tableaux éditables, sources ODJ/RD et alertes.</span>
    </div>
   </>}
-  <details className="document-folder analysis-fold analysis-method"><summary><ChevronRight size={16} className="folder-chevron" aria-hidden="true"/><BookOpen size={20} aria-hidden="true"/><strong>Périmètre et exclusions</strong></summary><div className="method-note-content"><p className="filter-note">Périmètre : CSP cadres uniquement. Les mouvements déjà présentés lors d’une CSP antérieure ne sont pas répétés. Les décisions non validées ne créent aucun mouvement définitif. Aucun import ni mise à jour de données lors de cet export.</p></div></details>
+  <details className="method-note"><summary>En savoir + · Périmètre et exclusions</summary><div className="method-note-content"><p className="filter-note">Périmètre : CSP cadres uniquement. Les mouvements déjà présentés lors d’une CSP antérieure ne sont pas répétés. Les décisions non validées ne créent aucun mouvement définitif. Aucun import ni mise à jour de données lors de cet export.</p></div></details>
   </div>
  </details>;
 }
