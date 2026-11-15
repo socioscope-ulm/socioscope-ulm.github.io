@@ -250,14 +250,14 @@ export default function CspQuarterlyReport({revision=0}:{revision?:number}){
    </div>
    {report.alerts.length>0&&<div className="notice"><b>Points de vigilance</b>
     <ul>{report.alerts.map((msg,i)=><li key={i}>{msg}</li>)}</ul></div>}
-   {!!report.rows.filter(r=>r.resolvedNotes).length&&<details>
-    <summary>Anciennes notes résolues ({report.rows.filter(r=>r.resolvedNotes).length} mouvement(s))</summary>
+   {!!report.rows.filter(r=>r.resolvedNotes).length&&<details className="document-folder analysis-fold quarterly-fold">
+    <summary><ChevronRight size={16} className="folder-chevron" aria-hidden="true"/><FileText size={20} aria-hidden="true"/><strong>Anciennes notes résolues ({report.rows.filter(r=>r.resolvedNotes).length} mouvement(s))</strong></summary>
     <p className="filter-note">Ces anciennes demandes de renseignement ne sont plus comptées comme motifs de contrôle. Un mouvement peut conserver une autre réserve, détaillée ci-dessus.</p>
     {report.rows.filter(r=>r.resolvedNotes).map((r,i)=><p key={r.id+i} style={{whiteSpace:'pre-line'}}><b>{r.name} · {kindLabels[r.kind]} · {r.meeting}</b><br/>{r.resolvedNotes}</p>)}
    </details>}
    {!!grouped.length&&<div className="table-scroll"><table><thead><tr><th>Rubrique</th><th>Mouvements</th></tr></thead>
     <tbody>{grouped.map(x=><tr key={x.kind}><td>{x.label}</td><td>{x.count}</td></tr>)}</tbody></table></div>}
-   {!!report.rows.length&&<details><summary>Aperçu des mouvements ({report.rows.length})</summary>
+   {!!report.rows.length&&<details className="document-folder analysis-fold quarterly-fold"><summary><ChevronRight size={16} className="folder-chevron" aria-hidden="true"/><FileText size={20} aria-hidden="true"/><strong>Aperçu des mouvements ({report.rows.length})</strong></summary>
     {grouped.map(group=>{
      const cols=getMovementColumns(selectedColumns,group.kind);
      const movements=report.rows.filter(r=>r.kind===group.kind);
