@@ -2,7 +2,7 @@
 import {useState} from 'react';
 import {Download} from 'lucide-react';
 const rate=(v:number|null)=>v===null?'Non disponible':new Intl.NumberFormat('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2}).format(v)+' €/h';
-const choices=[['families','Famille métier / rattachement'],['colleges','Collège'],['gfs','GF'],['m3eGroups','Plage M3E'],['agencies','Agence']];
+const choices=[['families','Famille métier / rattachement'],['colleges','Collège'],['gfs','GF'],['nrs','NR'],['m3eGroups','Plage M3E'],['agencies','Agence']];
 export default function HourlySummary({data,months}:{data:any;months:number}){
  const [group,setGroup]=useState('families');
  const overall=data['hourly'+months];if(!overall)return null;
