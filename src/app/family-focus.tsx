@@ -18,9 +18,16 @@ export default function FamilyFocus({data,agency,setAgency}:{data:any;agency:str
     <section className="panel"><div className="panel-heading"><div><div className="eyebrow">SITUATIONS INDIVIDUELLES</div><h2>Familles métiers</h2><p>Photographie du {data.reference.date.split('-').reverse().join('/')} · {data.reference.name}</p></div><button className="btn" onClick={()=>exportCSV(data)}><Download size={15}/>Exporter le focus</button></div>
       <div className="analysis-options"><label>Agence<select value={agency} onChange={e=>setAgency(e.target.value)}><option value="">Toutes les agences</option>{data.agencies.map((a:string)=><option key={a}>{a}</option>)}</select></label></div>
       <p className="filter-note"><b>Genre dans la photographie :</b> {data.sexCounts?.hommes??'—'} hommes · {data.sexCounts?.femmes??'—'} femmes · {data.sexCounts?.inconnus??'—'} non renseignés. Le filtre « Ensemble » inclut les personnes sans genre connu ; les filtres « Hommes » et « Femmes » ne retiennent que les genres documentés dans les RUP.</p>
-      <p>Tous les services, pôles et missions explicitement indiqués dans le fichier sont repris. Les nouveaux rattachements sont ajoutés automatiquement après validation d’un import. Les fonctions d’encadrement et d’appui de ces services sont incluses. Chaque agent identifié est compté une seule fois.</p>
+
       {data.sex&&data.sexTotal>data.sexKnown&&<p className="filter-note">{data.sexTotal-data.sexKnown} identité(s) sans genre renseigné dans cette photographie sont exclues du filtre hommes/femmes, sans déduction à partir du prénom.</p>}
-      <p>{data.classified} agents identifiés répartis dans {groups.length} catégories · {data.pending} identités à rapprocher sur {data.total} fiches distinctes. Les catégories « Non renseigné » et « Rattachement divergent » conservent les agents sans rattachement exploitable. Les effectifs sont ceux du fichier, pas des effectifs annuels moyens du bilan social.</p>
+
+      <details className="family-info-disclosure">
+        <summary>Informations</summary>
+        <div className="family-info-disclosure-content">
+          <p>Tous les services, pôles et missions explicitement indiqués dans le fichier sont repris. Les nouveaux rattachements sont ajoutés automatiquement après validation d’un import. Les fonctions d’encadrement et d’appui de ces services sont incluses. Chaque agent identifié est compté une seule fois.</p>
+          <p>{data.classified} agents identifiés répartis dans {groups.length} catégories · {data.pending} identités à rapprocher sur {data.total} fiches distinctes. Les catégories « Non renseigné » et « Rattachement divergent » conservent les agents sans rattachement exploitable. Les effectifs sont ceux du fichier, pas des effectifs annuels moyens du bilan social.</p>
+        </div>
+      </details>
     </section>
     {!data.classified?<section className="panel"><h2>Rattachement métier non disponible pour cette sélection</h2><p>Choisir une photographie contenant les libellés explicites des services ou missions suivis, notamment celles de 2023 à 2025. Un emploi ou une agence ne suffit pas à attribuer automatiquement une famille métier.</p></section>:<>
     <div className="kpi-grid">{groups.map((r:any)=><section key={r.id} className="kpi"><div className="kpi-title">{r.label}</div><div className="kpi-value">{r.available?r.agents:'Non disponible'}</div><small>{r.available?'Agents identifiés dans le fichier':'Rattachement absent du fichier'}{r.pending>0?` · ${r.pending} identités à rapprocher`:''}{r.manual>0?` · ${r.manual} présences manuelles`:''}</small></section>)}</div>

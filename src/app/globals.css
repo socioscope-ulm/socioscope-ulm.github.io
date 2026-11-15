@@ -255,3 +255,13 @@
 .data-table-fold>summary:focus-visible{outline:2px solid var(--ink);outline-offset:-3px}
 .data-table-fold>.table-scroll{border-top:1px solid var(--border)}
 @media print{.data-table-fold{break-inside:auto}}
+
+
+/* Familles métiers : petit bouton d'information, distinct des tableaux dépliables. */
+.family-info-disclosure{margin:12px 0 16px}
+.family-info-disclosure>summary{display:inline-flex;align-items:center;min-height:38px;max-width:100%;padding:9px 15px;border-radius:8px;background:#eff1ec;color:#667368;font-size:12px;font-weight:700;line-height:1.3;list-style:none;cursor:pointer}
+.family-info-disclosure>summary::-webkit-details-marker{display:none}
+.family-info-disclosure>summary:hover{background:#e7ebe4}
+.family-info-disclosure>summary:focus-visible{outline:2px solid var(--ink);outline-offset:3px}
+.family-info-disclosure-content{padding:12px 0 0}
+.family-info-disclosure-content>p{margin:0 0 10px;color:var(--muted);line-height:1.65}
