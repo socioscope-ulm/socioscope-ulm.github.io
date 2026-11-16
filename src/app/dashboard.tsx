@@ -66,7 +66,11 @@ useEffect(()=>{if(tab!=='overview'||!averageSources.length)return;const controll
  const cohortKey=(year:number)=>year+'|'+college+'|'+sex;
  // Both years must use precisely the same filters; the 2024 formatted
  // photograph wins a same-date tie for the previous-year comparison.
- void Promise.all([...new Set([to,to-1])].map(async year=>{
+ // Large historical agent calculations must not start concurrently. On a cold
+ // Supabase Edge worker, two simultaneous requests can exhaust its resources (546).
+ void (async()=>{
+ for(const year of [...new Set([to,to-1])]){
+  if(controller.signal.aborted)break;
   const eligible=averageSources.filter((source:any)=>!source.kind?.startsWith('csp')&&source.status!=='review'&&String(source.date||'').startsWith(String(year)+'-'));
   const ranked=[...eligible].sort((a:any,b:any)=>String(b.date).localeCompare(String(a.date))||
    (year===to?Number(!!b.primary)-Number(!!a.primary):
@@ -77,7 +81,20 @@ useEffect(()=>{if(tab!=='overview'||!averageSources.length)return;const controll
   const params=new URLSearchParams({source:selected.id,view:'averages',archive:'0',
    college:college==='ensemble'?'':college,sex:sex==='ensemble'?'':sex});
   try{
-   const result=await api('/api/agents?'+params,{signal:controller.signal});
+   let result:any=null;
+   for(let attempt=0;attempt<2;attempt++){
+    const response=await fetch('/api/agents?'+params,{signal:controller.signal,cache:'no-store'});
+    if((response.status===546||response.status===503)&&attempt===0){
+     await new Promise(resolve=>setTimeout(resolve,1000));
+     if(controller.signal.aborted)break;
+     continue;
+    }
+    const payload=await response.json().catch(()=>null);
+    if(!response.ok)throw Error(payload?.error||'Moyennes indisponibles (code '+response.status+').');
+    result=payload;
+    break;
+   }
+   if(!result||controller.signal.aborted)continue;
    if(!controller.signal.aborted)setAgentAverages(all=>({...all,[cohortKey(year)]:{
     nr:typeof result.stats?.nrMean==='number'?result.stats.nrMean:null,
     gf:typeof result.stats?.gfMean==='number'?result.stats.gfMean:null,
@@ -87,7 +104,8 @@ useEffect(()=>{if(tab!=='overview'||!averageSources.length)return;const controll
     source:selected.label||selected.name||String(year)
    }}));
   }catch(e){if(!controller.signal.aborted)console.error('Moyennes GF/NR non disponibles '+year,e);}
- }));
+ }
+ })();
  return()=>controller.abort();
 },[to,college,sex,averageSources,tab]);
 const currentAverage=agentAverages[to+'|'+college+'|'+sex];
