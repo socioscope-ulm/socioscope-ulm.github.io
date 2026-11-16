@@ -77,7 +77,7 @@ useEffect(()=>{if(tab!=='overview'||!averageSources.length)return;const controll
     Number(/onglets?\s+mis\s+en\s+forme/i.test(String(b.name)+' '+String(b.label)))-
     Number(/onglets?\s+mis\s+en\s+forme/i.test(String(a.name)+' '+String(a.label)))||
     Number(!!b.primary)-Number(!!a.primary)));
-  const selected=ranked[0];if(!selected)return;
+  const selected=ranked[0];if(!selected)continue;
   const params=new URLSearchParams({source:selected.id,view:'averages',archive:'0',
    college:college==='ensemble'?'':college,sex:sex==='ensemble'?'':sex});
   try{
