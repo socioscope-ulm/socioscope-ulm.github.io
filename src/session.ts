@@ -5,11 +5,30 @@ const originalFetch=window.fetch.bind(window);const key='socioscopeSession';
 export let session:any;let refreshing:Promise<any>|undefined;
 try{session=JSON.parse(sessionStorage.getItem(key)||localStorage.getItem(key)||'null');}catch{}
 function save(value:any,remember=false){session=value;sessionStorage.removeItem(key);localStorage.removeItem(key);if(value)(remember?localStorage:sessionStorage).setItem(key,JSON.stringify(value));}
-export async function auth(path:string,body?:any,method='POST',token?:string){const r=await originalFetch(SUPABASE_URL+'/auth/v1/'+path,{method,headers:{apikey:PUBLISHABLE_KEY,'Content-Type':'application/json',...(token?{authorization:'Bearer '+token}:{})},...(body?{body:JSON.stringify(body)}:{})});const b=await r.json().catch(()=>({}));if(!r.ok)throw Error(b.msg||b.error_description||b.message||'Connexion impossible.');return b;}
+async function requestWithNetworkMessage(url:string,options:RequestInit,label:string){
+ try{return await originalFetch(url,options);}
+ catch(error){
+  if(error instanceof TypeError)throw Error('Impossible de joindre le '+label+' depuis ce navigateur. Vérifiez que vous utilisez https://socioscope-ulm.github.io/, puis essayez une fenêtre privée ou un autre réseau.');
+  throw error;
+ }
+}
+// This read-only check sends no password, token or personal information.
+// HTTP 401 on the API is expected here: it confirms the server can be reached.
+export async function diagnoseConnection(){
+ const probe=async(url:string,options:RequestInit={})=>{
+  try{return (await originalFetch(url,{...options,cache:'no-store'})).status;}catch{return 0;}
+ };
+ const [auth,api]=await Promise.all([
+  probe(SUPABASE_URL+'/auth/v1/health'),
+  probe(API_URL+'/api/session',{headers:{apikey:PUBLISHABLE_KEY}})
+ ]);
+ return {auth,api};
+}
+export async function auth(path:string,body?:any,method='POST',token?:string){const r=await requestWithNetworkMessage(SUPABASE_URL+'/auth/v1/'+path,{method,headers:{apikey:PUBLISHABLE_KEY,'Content-Type':'application/json',...(token?{authorization:'Bearer '+token}:{})},...(body?{body:JSON.stringify(body)}:{})},'serveur de connexion');const b=await r.json().catch(()=>({}));if(!r.ok)throw Error(b.msg||b.error_description||b.message||'Connexion impossible.');return b;}
 export async function login(email:string,password:string,remember:boolean){const s=await auth('token?grant_type=password',{email,password});save({...s,expires_at:Math.floor(Date.now()/1000)+s.expires_in},remember);}
 export async function logout(){if(session)await auth('logout',undefined,'POST',session.access_token).catch(()=>{});save(null);window.location.replace(import.meta.env.BASE_URL);}
 async function token(){if(!session)return '';if(session.expires_at<Date.now()/1000+60){if(!refreshing)refreshing=auth('token?grant_type=refresh_token',{refresh_token:session.refresh_token}).then(s=>{save({...s,expires_at:Math.floor(Date.now()/1000)+s.expires_in},!!localStorage.getItem(key));return s;}).finally(()=>refreshing=undefined);await refreshing;}return session?.access_token||'';}
-export async function apiFetch(path:string,options:RequestInit={}){const access=await token();const headers=new Headers(options.headers);headers.set('apikey',PUBLISHABLE_KEY);if(access)headers.set('authorization','Bearer '+access);const r=await originalFetch(API_URL+path,{...options,headers,cache:'no-store'});if(r.status===423){const body=await r.clone().json().catch(()=>null);if(body?.code==='CONSULTATION_SUSPENDED')window.dispatchEvent(new Event('socioscope-suspended'));}if(r.status===401){save(null);window.dispatchEvent(new Event('socioscope-expired'));}return r;}
+export async function apiFetch(path:string,options:RequestInit={}){const access=await token();const headers=new Headers(options.headers);headers.set('apikey',PUBLISHABLE_KEY);if(access)headers.set('authorization','Bearer '+access);const r=await requestWithNetworkMessage(API_URL+path,{...options,headers,cache:'no-store'},'serveur de données');if(r.status===423){const body=await r.clone().json().catch(()=>null);if(body?.code==='CONSULTATION_SUSPENDED')window.dispatchEvent(new Event('socioscope-suspended'));}if(r.status===401){save(null);window.dispatchEvent(new Event('socioscope-expired'));}return r;}
 window.fetch=async(input:RequestInfo|URL,options?:RequestInit)=>{if(typeof input==='string'&&(input.startsWith('/api/')||input.startsWith('/sources/')))return apiFetch(input,options);return originalFetch(input,options);};
 export async function importAuthCallback(){const hash=new URLSearchParams(window.location.hash.slice(1));if(hash.has('error_description')){const message=hash.get('error_description')!;history.replaceState(null,'',location.pathname);throw Error(message);}const access=hash.get('access_token'),refresh=hash.get('refresh_token');if(access&&refresh){save({access_token:access,refresh_token:refresh,expires_at:Math.floor(Date.now()/1000)+Number(hash.get('expires_in')||3600)});const recovery=hash.get('type')==='recovery'||hash.get('type')==='invite';history.replaceState(null,'',location.pathname);return recovery;}return false;}
 // Preserve the original filename when serving protected source documents.
